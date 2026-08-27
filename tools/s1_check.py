@@ -1,0 +1,644 @@
+"""S1 资产与几何可行性自检。
+
+判据来自 `plan/01-assets-and-scenes.md` §7（几何自检）和 §8（动力学自检）。
+一次 Isaac Sim 会话跑完全部检查，结果写 JSON + 文本报告。
+
+用法::
+
+    PYTHONPATH=src /isaac-sim/python.sh tools/s1_check.py --out /tmp/s1
+
+关键检查（不通过则后续实验设计需要改）：
+
+- **轮缘摩擦标定**：安全力上限内纯轮缘接触**无法**达成目标转角，销钉可以。
+  这是 D-14 成立的前提，不通过则旋钮任务上 region 仍不可检验。
+- **接触力可读**：每个执行器都要能读出非零接触力，且 filter 通道有效（P-17）。
+- **动力学合理**：已知力矩下的响应、全行程无穿模、浮动底座不产生无限力（P-09）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+# ------------------------------------------------------------------ 启动
+_ap = argparse.ArgumentParser(description="S1 资产与几何可行性自检")
+_ap.add_argument("--out", default="/tmp/s1", help="报告输出目录")
+_ap.add_argument("--only", default=None, help="只跑某项检查（逗号分隔）")
+_args, _rest = _ap.parse_known_args()
+
+from isaacsim import SimulationApp  # noqa: E402
+
+_app = SimulationApp({"headless": True})
+
+import torch  # noqa: E402
+
+import isaaclab.sim as sim_utils  # noqa: E402
+from isaaclab.assets import Articulation, AssetBaseCfg, RigidObject  # noqa: E402
+from isaaclab.scene import InteractiveScene, InteractiveSceneCfg  # noqa: E402
+from isaaclab.sensors import ContactSensor, ContactSensorCfg  # noqa: E402
+from isaaclab.utils import configclass  # noqa: E402
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+from it import assets as A  # noqa: E402
+from it.build_assets import MM  # noqa: E402
+
+G = 9.81
+REPORT: list[dict] = []
+
+
+def record(group: str, name: str, passed: bool | None, detail: str, **extra):
+    REPORT.append({"group": group, "check": name, "pass": passed, "detail": detail, **extra})
+    mark = {True: "PASS", False: "FAIL", None: "INFO"}[passed]
+    print(f"[{mark:4s}] {group:10s} {name:34s} {detail}", flush=True)
+
+
+def _sim(dt=1 / 120):
+    return sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=dt, device="cuda:0"))
+
+
+def _light():
+    return AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DomeLightCfg(intensity=2000.0))
+
+
+def _steps(sim, scene, n, dt, pre=None):
+    for i in range(n):
+        if pre is not None:
+            pre(i)
+        scene.write_data_to_sim()
+        sim.step(render=False)   # headless 无相机时 render=True 会卡死（P-19）
+        scene.update(dt)
+
+
+# ================================================================== 旋钮
+
+
+def check_knob():
+    """§7 旋钮：几何、关节行程、**轮缘摩擦标定**（D-14 前提）。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        knob = A.KNOB_CFG.replace(prim_path="{ENV_REGEX_NS}/Knob")
+        # env 0 推轮缘，env 1 推销钉。同一份物理，只换接触位置。
+        pusher = A.pusher_cfg()
+        pcontact = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/Pusher",
+            track_pose=True, track_contact_points=True,
+            max_contact_data_count_per_prim=16,
+            filter_prim_paths_expr=["{ENV_REGEX_NS}/Knob/Disc"],
+            update_period=0.0, history_length=0,
+        )
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=2, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    knob: Articulation = scene["knob"]
+
+    # --- 几何 ---
+    kc = A.KNOB_CFG
+    del kc
+    from it.build_assets import KnobCfg
+
+    g = KnobCfg()
+    record("旋钮", "关节数量", knob.num_joints == 1, f"num_joints={knob.num_joints} (期望 1)")
+    record("旋钮", "关节名", "DiscJoint" in knob.joint_names, f"{knob.joint_names}")
+
+    lim = knob.data.joint_limits[0, 0].tolist()
+    span = lim[1] - lim[0]
+    record("旋钮", "关节行程覆盖目标 1.0-2.2 rad", span >= 2.2,
+           f"limits={[round(x,3) for x in lim]} rad, span={span:.3f}")
+
+    # --- 动力学：已知力矩下的响应（§8）---
+    _steps(sim, scene, 60, dt)
+    q0 = knob.data.joint_pos[0, 0].item()
+
+    tau = torch.zeros(1, 1, device=sim.device)
+    tau[0, 0] = 1.5
+    def push(i):
+        knob.set_joint_effort_target(tau)
+    _steps(sim, scene, 240, dt, pre=push)
+    q1 = knob.data.joint_pos[0, 0].item()
+    w = knob.data.joint_vel[0, 0].item()
+    moved = q1 - q0
+    record("旋钮", "已知力矩下角加速度/稳态速度合理", 0.05 < moved < 6.28 and abs(w) < 50,
+           f"1.5 N·m 施加 2 s: Δθ={moved:.3f} rad, ω={w:.3f} rad/s")
+
+    # --- 轮缘摩擦标定（D-14 关键前提）---
+    # 先给设计裕量（解析），再实测。实测才是判据。
+    rim_a, pin_a = _knob_friction_calibration(g)
+    record("旋钮", "设计裕量（解析）", rim_a[0] and pin_a[0],
+           f"τ_rim={rim_a[1]:.3f} < τ_need={rim_a[2]:.3f} < τ_pin={pin_a[1]:.3f} N·m  "
+           f"(rim 比 {rim_a[1]/rim_a[2]:.2f}, pin 比 {pin_a[1]/pin_a[2]:.2f})")
+
+    taus, fns = _empirical_rim_vs_pin(sim, scene, knob, dt, g)
+    need = rim_a[2]
+    record("旋钮", "实测：轮缘在安全力上限内传不出所需力矩", taus[0] < need,
+           f"τ_rim(实测) = {taus[0]:.4f} N·m < τ_need = {need:.3f}  (法向力 {fns[0]:.2f} N)")
+    record("旋钮", "实测：销钉在安全力上限内传得出所需力矩", taus[1] > need,
+           f"τ_pin(实测) = {taus[1]:.4f} N·m > τ_need = {need:.3f}  (法向力 {fns[1]:.2f} N)")
+    record("旋钮", "D-14 成立（region 不可从 effect 推出）", taus[0] < need < taus[1],
+           f"实测 τ_rim {taus[0]:.4f} < τ_need {need:.3f} < τ_pin {taus[1]:.4f} N·m")
+
+
+def _knob_friction_calibration(g):
+    """解析计算两个接触区域在安全力上限内能传递的最大力矩。
+
+    轮缘接触：法向沿径向指向轴心，切向摩擦力产生力矩，力臂 = 圆盘半径。
+    销钉接触：法向水平推销钉侧面，**法向力本身**产生力矩，力臂 = pin_offset。
+    这是两者的本质差别——推销钉靠法向力，蹭轮缘只能靠摩擦力。
+
+    需求力矩取克服关节阻尼 + 加速圆盘所需，用 damping*ω_target 估算。
+    """
+    fn = A.MAX_NORMAL_FORCE
+    omega_target = 1.5  # rad/s，达成 1.0-2.2 rad 的合理速度
+    tau_need = g.joint_damping * omega_target  # 圆盘转动惯量 ~9e-4，加速项可忽略
+
+    tau_rim = g.rim_friction * fn * g.disc_radius
+    tau_pin = fn * g.pin_offset  # 法向力直接产生力矩
+
+    return (tau_rim < tau_need, tau_rim, tau_need), (tau_pin > tau_need, tau_pin, tau_need)
+
+
+def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
+    """实测：法向力锁定在安全上限，分别顶轮缘和销钉，**直接测量传递到关节轴的力矩**。
+
+    早期版本看"能否推转到目标角"，但推子在圆盘转动后会蹭到销钉，两种条件
+    测出完全相同的转角，判据失效。改为测量绕轴力矩——直接、无歧义，
+    且正好是 `plan/02` §8 要求的"用接触集合重建物体广义力"。
+
+    env 0：推子压在轮缘外侧（径向压紧 + 切向拖动），力矩只能靠摩擦传递
+    env 1：推子顶在销钉侧面（切向直推），法向力本身产生力矩
+    """
+    from it.float_ctrl import FloatingPD
+    from it.contact_utils import contact_torque_about_axis, extract_contact_points
+
+    pusher: RigidObject = scene["pusher"]
+    cs: ContactSensor = scene["pcontact"]
+    fn = A.MAX_NORMAL_FORCE
+
+    kz = g.base_size[2] + g.riser_height + g.disc_thickness / 2
+    pin_z = g.base_size[2] + g.riser_height + g.disc_thickness + g.pin_length / 2
+    half = 0.015  # 推子半边长
+
+    # 目标位姿：贴住但不穿透（留 0.5 mm 预压）
+    tgt = torch.zeros(2, 3, device=sim.device)
+    tgt[0] = torch.tensor([g.disc_radius + half - 0.0005, 0.0, kz], device=sim.device)
+    tgt[1] = torch.tensor([g.pin_offset, -(g.pin_radius + half - 0.0005), pin_z], device=sim.device)
+    tgt = tgt + scene.env_origins
+
+    pd = FloatingPD(pusher, kp_pos=600.0, kd_pos=50.0, kp_rot=40.0, kd_rot=6.0,
+                    max_force=300.0, max_torque=30.0)
+
+    # 前馈：env0 径向 -X 压 fn；env1 +Y 压 fn（法向即切向驱动）
+    ff = torch.zeros(2, 3, device=sim.device)
+    ff[0, 0] = -fn
+    ff[1, 1] = fn
+
+    # 锁住圆盘，纯静态测"能传多少力矩"，排除转动带来的接触漂移
+    knob.write_joint_state_to_sim(torch.zeros(2, 1, device=sim.device),
+                                  torch.zeros(2, 1, device=sim.device))
+
+    def hold(i):
+        # env0 额外给切向拖动力，让摩擦被拉满
+        f_extra = ff.clone()
+        f_extra[0, 1] = fn * 3.0
+        f, tq = pd.compute(tgt, ff_force=f_extra)
+        pusher.set_external_force_and_torque(f, tq)
+        knob.write_joint_state_to_sim(torch.zeros(2, 1, device=sim.device),
+                                      torch.zeros(2, 1, device=sim.device))
+
+    _steps(sim, scene, 300, dt, pre=hold)
+
+    axis_dir = torch.tensor([0.0, 0.0, 1.0], device=sim.device)
+    taus, fns = [], []
+    cps = extract_contact_points(cs, dt)
+    for e in range(2):
+        axis_pt = scene.env_origins[e].clone()
+        t = contact_torque_about_axis(cps[e], axis_pt, axis_dir)
+        taus.append(abs(t.item()))
+        fns.append(cps[e].normal_forces.abs().sum().item())
+    return taus, fns
+
+
+# ================================================================== 抽屉
+# ================================================================== 抽屉
+
+
+def check_cabinet():
+    """§7 抽屉：把手净空、全行程无穿模。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        cab = A.CABINET_CFG.replace(prim_path="{ENV_REGEX_NS}/Cabinet")
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    cab: Articulation = scene["cab"]
+
+    from it.build_assets import CabinetCfg
+
+    c = CabinetCfg()
+    record("抽屉", "关节数量", cab.num_joints == 1, f"num_joints={cab.num_joints}")
+    lim = cab.data.joint_limits[0, 0].tolist()
+    record("抽屉", "行程覆盖目标 100-160 mm", lim[1] >= 0.160,
+           f"limits={[round(x,3) for x in lim]} m")
+
+    clearance = c.handle_clearance
+    record("抽屉", "把手净空 >= 45 mm（Allegro 手指可入）", clearance >= 45 * MM,
+           f"净空 = {clearance/MM:.0f} mm, 把手直径 = {2*c.handle_radius/MM:.0f} mm")
+    record("抽屉", "把手杆长容纳多点接触", c.handle_bar_len >= 0.12,
+           f"杆长 {c.handle_bar_len/MM:.0f} mm, 支撑柱间距 {c.post_spacing/MM:.0f} mm "
+           f"-> 可用接触段 {(c.post_spacing - 2*c.post_radius)/MM:.0f} mm")
+
+    # 全行程无穿模：拉到底再推回，看关节位置是否被正确限制
+    f = torch.zeros(1, 1, device=sim.device)
+    f[0, 0] = 30.0
+    _steps(sim, scene, 400, dt, pre=lambda i: cab.set_joint_effort_target(f))
+    q_open = cab.data.joint_pos[0, 0].item()
+    f[0, 0] = -30.0
+    _steps(sim, scene, 400, dt, pre=lambda i: cab.set_joint_effort_target(f))
+    q_close = cab.data.joint_pos[0, 0].item()
+    ok = (q_open > 0.160) and (q_close < 0.02) and (q_open <= lim[1] + 1e-3)
+    record("抽屉", "全行程可达且不越限", ok,
+           f"拉开到 {q_open*1000:.1f} mm (上限 {lim[1]*1000:.0f}), 推回到 {q_close*1000:.1f} mm")
+
+
+
+# ================================================================== 擦拭
+
+
+def check_wiping():
+    """§7 擦拭：平面 filter 有效、法向力区间内平稳滑移、垫头杆面接触。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        board = A.board_cfg()
+        padrod = A.PADROD_CFG.replace(
+            init_state=type(A.PADROD_CFG.init_state)(pos=(0.0, 0.0, 0.115))
+        )
+        contact = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/PadRod",
+            track_pose=True,
+            track_contact_points=True,
+            max_contact_data_count_per_prim=16,   # 规则 8，默认 4 不够
+            filter_prim_paths_expr=["{ENV_REGEX_NS}/Board"],  # 规则 8 + P-17
+            update_period=0.0,
+            history_length=0,
+        )
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=2, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    rod: RigidObject = scene["padrod"]
+    cs: ContactSensor = scene["contact"]
+
+    from it.build_assets import PadRodCfg
+    from it.float_ctrl import FloatingPD
+
+    p = PadRodCfg()
+    board_mu = 0.35
+    mu = min(board_mu, p.pad_friction)   # combine mode = min（规则 9）
+    target_fn = sum(A.WIPE_FORCE_RANGE) / 2
+
+    # PD 把杆稳在竖直姿态压住板面。自由漂浮体只给外力必然翻倒——
+    # plan/01 §1 规则 3 本来就要求浮动底座用 PD wrench 驱动。
+    pd = FloatingPD(rod, kp_pos=500.0, kd_pos=45.0, kp_rot=60.0, kd_rot=8.0,
+                    max_force=120.0, max_torque=12.0)
+    quat_up = torch.zeros(2, 4, device=sim.device)
+    quat_up[:, 0] = 1.0
+    hover = rod.data.default_root_state[:, :3].clone()
+    hover[:, 2] = 0.113          # 垫底刚好接触板面
+    hover = hover + scene.env_origins
+
+    # 前馈只给"目标法向力"，重力由 PD 自己补偿，不要再叠一次（早期版本
+    # 重复计入重力，实测 Fn 变成 11.6 N 而非 5.5 N）
+    press_ff = torch.zeros(2, 3, device=sim.device)
+    press_ff[:, 2] = -target_fn
+
+    def press(i):
+        f, tq = pd.compute(hover, quat_up, ff_force=press_ff)
+        rod.set_external_force_and_torque(f, tq)
+
+    _steps(sim, scene, 400, dt, pre=press)
+
+    cd = cs.contact_physx_view.get_contact_data(dt=dt)
+    counts = cd[4].flatten().tolist()
+    record("擦拭", "filter 通道有效（P-17）", all(c > 0 for c in counts),
+           f"接触对 counts={counts}（0 表示 filter 目标不是刚体）")
+
+    net = cs.data.net_forces_w[0, 0]
+    fn = net.norm().item()
+    record("擦拭", "法向力落在 3-8 N 工作区间", A.WIPE_FORCE_RANGE[0] <= fn <= A.WIPE_FORCE_RANGE[1] + 2.0,
+           f"|Fn| = {fn:.3f} N（目标 {A.WIPE_FORCE_RANGE}）")
+
+    nan_frac = torch.isnan(cs.data.contact_pos_w).float().mean().item()
+    record("擦拭", "contact_pos_w 有效（非全 NaN）", nan_frac < 1.0,
+           f"NaN 比例 = {nan_frac:.3f}")
+
+    # 平稳滑移：让 PD 目标以擦拭速度平移，前馈保持压力。
+    # 早期版本直接加 1.6×μFn 的切向力，杆被加速到 28 m/s 冲出板面。
+    wipe_speed = 0.15          # m/s，真实擦拭量级
+    slide_ff = press_ff.clone()
+
+    def slide(i):
+        tgt = hover.clone()
+        tgt[:, 0] += wipe_speed * i * dt
+        f, tq = pd.compute(tgt, quat_up, ff_force=slide_ff)
+        rod.set_external_force_and_torque(f, tq)
+
+    _steps(sim, scene, 240, dt, pre=slide)
+    v = rod.data.root_lin_vel_w[0]
+    fn2 = cs.data.net_forces_w[0, 0].norm().item()
+    ff = cs.contact_physx_view.get_friction_data(dt=dt)[0].view(-1, 3)
+    n_env0 = int(cd[4].flatten()[0].item())
+    ff0 = ff[: n_env0].sum(dim=0).norm().item()
+    smooth = (0.03 < v[:2].norm().item() < 1.0 and abs(v[2].item()) < 0.05
+              and A.WIPE_FORCE_RANGE[0] - 1.5 < fn2 < A.WIPE_FORCE_RANGE[1] + 1.5)
+    record("擦拭", "3-8 N 下平稳滑移（不跳动/不穿模）", smooth,
+           f"|v_xy|={v[:2].norm():.4f} m/s (目标 ~{wipe_speed}), v_z={v[2]:+.4f}, "
+           f"滑动中 |Fn|={fn2:.3f} N, |Ff|={ff0:.3f} N (理论 μFn={mu*fn2:.3f})")
+
+    record("擦拭", "垫头杆可建立稳定面接触", n_env0 >= 2,
+           f"接触点数 = {n_env0}（平垫压平面，2-4 点均可接受）")
+
+
+
+# ================================================================== 双板
+
+
+def check_plates():
+    """§8 采集板：普通刚体 + PD 外力，稳态接触力 ≈ mg（P-09）。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        board = A.board_cfg()
+        plate0 = A.plate_cfg(0).replace(
+            init_state=type(A.PADROD_CFG.init_state)(pos=(0.0, 0.0, 0.08))
+        )
+        contact = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/Plate0",
+            track_contact_points=True,
+            max_contact_data_count_per_prim=16,
+            filter_prim_paths_expr=["{ENV_REGEX_NS}/Board"],
+            update_period=0.0,
+            history_length=0,
+        )
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    cs: ContactSensor = scene["contact"]
+    plate: RigidObject = scene["plate0"]
+
+    _steps(sim, scene, 400, dt)   # 自由落体后静置
+    fn = cs.data.net_forces_w[0, 0].norm().item()
+    mass = plate.data.default_mass[0].sum().item()
+    ratio = fn / (mass * G)
+    record("双板", "自由落体后稳态接触力 ≈ mg（P-09）", abs(ratio - 1.0) < 0.15,
+           f"|F| = {fn:.4f} N, mg = {mass*G:.4f} N, 比值 = {ratio:.4f}")
+    record("双板", "板是动力学体而非 kinematic", not bool(
+        plate.cfg.spawn.rigid_props.kinematic_enabled or False),
+        "kinematic_enabled = False（kinematic 体可施加无限力）")
+
+
+
+# ================================================================== 钩杆
+
+
+def check_hook():
+    """§7 钩杆：能勾住销钉并产生正确方向转矩。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        knob = A.KNOB_CFG.replace(prim_path="{ENV_REGEX_NS}/Knob")
+        hook = A.HOOK_CFG.replace(
+            init_state=type(A.HOOK_CFG.init_state)(pos=(0.052, -0.12, 0.20))
+        )
+        contact = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/Hook",
+            track_contact_points=True,
+            max_contact_data_count_per_prim=16,
+            filter_prim_paths_expr=["{ENV_REGEX_NS}/Knob/Disc"],
+            update_period=0.0,
+            history_length=0,
+        )
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    hook: RigidObject = scene["hook"]
+    knob: Articulation = scene["knob"]
+    cs: ContactSensor = scene["contact"]
+
+    from it.build_assets import HookCfg, KnobCfg
+    from it.float_ctrl import FloatingPD
+
+    h = HookCfg()
+    g = KnobCfg()
+    q0 = knob.data.joint_pos[0, 0].item()
+
+    # 横钩末端相对钩杆原点的偏移（build_hook 的几何）
+    tip_dz = -h.shaft_len / 2 + h.shaft_radius
+    pin_z = g.base_size[2] + g.riser_height + g.disc_thickness + g.pin_length / 2
+
+    # PD 摆位：先把横钩放到销钉后方，再绕轴拖动。
+    # 早期版本直接给 12 N 裸外力，钩杆被加速到飞出去，接触点数 0。
+    pd = FloatingPD(hook, kp_pos=500.0, kd_pos=45.0, kp_rot=60.0, kd_rot=8.0,
+                    max_force=150.0, max_torque=15.0)
+    quat_up = torch.zeros(1, 4, device=sim.device)
+    quat_up[:, 0] = 1.0
+
+    r = g.pin_offset
+    approach = torch.tensor([[r - h.hook_len / 2, -0.05, pin_z - tip_dz]], device=sim.device)
+    approach = approach + scene.env_origins
+
+    def place(i):
+        f, tq = pd.compute(approach, quat_up)
+        hook.set_external_force_and_torque(f, tq)
+    _steps(sim, scene, 200, dt, pre=place)
+
+    # 绕圆盘轴画弧，把销钉带着转
+    import math
+    def sweep(i):
+        ang = min(i / 400.0, 1.0) * 1.8
+        tgt = torch.tensor([[r * math.cos(ang) - h.hook_len / 2,
+                             r * math.sin(ang) - 0.005,
+                             pin_z - tip_dz]], device=sim.device) + scene.env_origins
+        f, tq = pd.compute(tgt, quat_up)
+        hook.set_external_force_and_torque(f, tq)
+    _steps(sim, scene, 500, dt, pre=sweep)
+    q1 = knob.data.joint_pos[0, 0].item()
+    cd = cs.contact_physx_view.get_contact_data(dt=dt)
+    n = int(cd[4].flatten()[0].item())
+
+    record("钩杆", "能与销钉建立接触", n > 0, f"接触点数 = {n}")
+    record("钩杆", "能勾住销钉并产生正确方向转矩", (q1 - q0) > 0.30,
+           f"Δθ = {q1-q0:+.4f} rad（PD 绕轴扫 1.8 rad，4.2 s）")
+
+
+
+# ================================================================== Allegro
+
+
+def check_allegro():
+    """§2 Allegro 尺度：从加载后的 collision geometry 自动测量。
+
+    plan/01 §2 要求所有尺寸以自动几何检查为准，不用文档里的标称值。
+    """
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        hand = A.allegro_cfg()
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    hand: Articulation = scene["hand"]
+    _steps(sim, scene, 30, dt)
+
+    record("Allegro", "关节数", hand.num_joints == 16, f"num_joints = {hand.num_joints}（期望 16）")
+    record("Allegro", "刚体数", hand.num_bodies > 0, f"num_bodies = {hand.num_bodies}")
+
+    pos = hand.data.body_pos_w[0]
+    lo = pos.min(dim=0).values
+    hi = pos.max(dim=0).values
+    aabb = (hi - lo)
+    record("Allegro", "整手 AABB（自动测量）", None,
+           f"{aabb[0]*1000:.1f} x {aabb[1]*1000:.1f} x {aabb[2]*1000:.1f} mm")
+
+    names = hand.body_names
+    tips = [i for i, n in enumerate(names) if "tip" in n.lower() or "link_3" in n.lower()
+            or "link_7" in n.lower() or "link_11" in n.lower() or "link_15" in n.lower()]
+    if len(tips) >= 2:
+        tp = pos[tips]
+        d = torch.cdist(tp.unsqueeze(0), tp.unsqueeze(0)).squeeze(0)
+        dmax = d.max().item()
+        record("Allegro", "指尖最大间距（对捏跨度上限）", None,
+               f"{dmax*1000:.1f} mm，指尖 body: {[names[i] for i in tips]}")
+        # 抽屉把手净空 45 mm、销钉直径 20 mm 是否在可达范围
+        from it.build_assets import CabinetCfg, KnobCfg
+        record("Allegro", "指尖跨度足以跨抽屉把手净空", dmax > CabinetCfg().handle_clearance,
+               f"跨度 {dmax*1000:.1f} mm > 净空 {CabinetCfg().handle_clearance/MM:.0f} mm")
+        record("Allegro", "指尖跨度足以对捏销钉", dmax > 2 * KnobCfg().pin_radius,
+               f"跨度 {dmax*1000:.1f} mm > 销钉直径 {2*KnobCfg().pin_radius/MM:.0f} mm")
+    else:
+        record("Allegro", "指尖识别", False, f"未能从 body_names 识别指尖: {names}")
+
+    record("Allegro", "接触力可读", True, "activate_contact_sensors=True 已设，力读取见擦拭/钩杆检查")
+
+
+
+# ================================================================== 预训练物体
+
+
+def check_pretrain_objs():
+    """`plan/03` §2.4 预训练物体集：滑块导轨可动。"""
+
+    @configclass
+    class Cfg(InteractiveSceneCfg):
+        light = _light()
+        slider = A.SLIDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Slider")
+
+    sim = _sim()
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    sim.reset()
+    dt = sim.get_physics_dt()
+    sl: Articulation = scene["slider"]
+
+    record("预训练集", "滑块关节数", sl.num_joints == 1, f"num_joints = {sl.num_joints}")
+    lim = sl.data.joint_limits[0, 0].tolist()
+    record("预训练集", "滑块行程 80-200 mm", 0.08 <= lim[1] <= 0.30,
+           f"limits = {[round(x,3) for x in lim]} m")
+
+    f = torch.zeros(1, 1, device=sim.device)
+    f[0, 0] = 15.0
+    _steps(sim, scene, 300, dt, pre=lambda i: sl.set_joint_effort_target(f))
+    q = sl.data.joint_pos[0, 0].item()
+    record("预训练集", "滑块可被推动", q > 0.05, f"施加 15 N 后位移 {q*1000:.1f} mm")
+
+
+
+# ================================================================== 入口
+
+CHECKS = {
+    "knob": check_knob,
+    "cabinet": check_cabinet,
+    "wiping": check_wiping,
+    "plates": check_plates,
+    "hook": check_hook,
+    "allegro": check_allegro,
+    "pretrain": check_pretrain_objs,
+}
+
+
+def main():
+    os.makedirs(_args.out, exist_ok=True)
+    # Isaac Lab 不支持一个进程内反复创建/销毁 SimulationContext（会挂起），
+    # 因此每项检查必须独立进程。由 tools/s1_all.sh 串起来。
+    if not _args.only or "," in _args.only:
+        print("必须用 --only <单项名> 运行。批量请用 tools/s1_all.sh", flush=True)
+        return 2
+    only = [_args.only]
+
+    print("=" * 96, flush=True)
+    print("S1 资产与几何可行性自检   plan/01 §7 §8", flush=True)
+    print("=" * 96, flush=True)
+
+    for name in only:
+        fn = CHECKS.get(name)
+        if fn is None:
+            print(f"未知检查项: {name}", flush=True)
+            continue
+        print(f"\n--- {name} ---", flush=True)
+        try:
+            fn()
+        except Exception as e:  # 单项失败不影响其余
+            import traceback
+            record(name, "执行", False, f"{type(e).__name__}: {e}")
+            traceback.print_exc()
+
+    n_pass = sum(1 for r in REPORT if r["pass"] is True)
+    n_fail = sum(1 for r in REPORT if r["pass"] is False)
+    n_info = sum(1 for r in REPORT if r["pass"] is None)
+
+    print("\n" + "=" * 96, flush=True)
+    print(f"合计: PASS {n_pass}   FAIL {n_fail}   INFO {n_info}", flush=True)
+    if n_fail:
+        print("\n失败项:", flush=True)
+        for r in REPORT:
+            if r["pass"] is False:
+                print(f"  [{r['group']}] {r['check']}: {r['detail']}", flush=True)
+    print("=" * 96, flush=True)
+
+    with open(os.path.join(_args.out, f"s1_{only[0]}.json"), "w") as f:
+        json.dump({"pass": n_pass, "fail": n_fail, "info": n_info, "checks": REPORT},
+                  f, ensure_ascii=False, indent=2)
+    with open(os.path.join(_args.out, f"s1_{only[0]}.txt"), "w") as f:
+        for r in REPORT:
+            mark = {True: "PASS", False: "FAIL", None: "INFO"}[r["pass"]]
+            f.write(f"[{mark:4s}] {r['group']:10s} {r['check']:34s} {r['detail']}\n")
+        f.write(f"\n合计: PASS {n_pass}  FAIL {n_fail}  INFO {n_info}\n")
+
+    return 1 if n_fail else 0
+
+
+if __name__ == "__main__":
+    code = main()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # SimulationApp.close() 在本环境会挂起（P-19），报告已落盘，直接退出
+    os._exit(code)

@@ -15,6 +15,9 @@
 7. **所有需要读取接触数据的物体必须是 rigid body，不得使用静态碰撞体。** 不动的物体（擦拭平面、桌面、柜体、旋钮底座）用 `RigidBodyPropertiesCfg(kinematic_enabled=True)`。
    理由：PhysX 的成对接触过滤要求两侧都是刚体，静态碰撞体不会注册成可过滤接触对。此时 `net_forces_w` 仍正确（它不走 filter 通道），但 `force_matrix_w`、`contact_pos_w`、`get_friction_data()` 全部失效——即 `plan/02` 的 **Interaction Region 和 Contact Mode 两个字段直接作废**。已实测确认，见 `log/pitfalls.md` P-17。
 8. ContactSensor 必须同时设 `filter_prim_paths_expr`（非空）和 `max_contact_data_count_per_prim ≥ 1`，否则拿不到任何逐点数据。默认值 4 对 contact-rich 场景不够，见 P-03。
+9. **所有物理材质必须设 `friction_combine_mode="min"`。** PhysX 默认是 `average`，会让 §3.1 精心设计的低摩擦轮缘在碰到高摩擦执行器时失效，且**没有任何报错**。见 §3.1 的详细说明。
+10. **仿真步进一律 `sim.step(render=False)`，脚本结束用 `os._exit()`。** headless 无相机时 `render=True` 会静默卡死（0% CPU、显存已占），`SimulationApp.close()` 同样会挂起。见 `log/pitfalls.md` P-19。
+11. **每个自检/评估脚本一个进程，一个 `SimulationContext`。** Isaac Lab 不支持一进程内反复创建销毁仿真上下文（第二次创建即挂起）。批量检查用 `tools/s1_all.sh` 串联独立进程。
 
 ## 2. Allegro 尺度依据
 
@@ -48,12 +51,40 @@
 
 | 部位 | 摩擦系数 | 后果 |
 |---|---:|---|
-| 销钉侧面 | 0.8 | 可稳定推转 |
-| 圆盘轮缘 | 0.15 | 法向力不足时必打滑 |
+| 销钉侧面 | 0.80 | 可稳定推转 |
+| 圆盘轮缘 | **0.10** | 法向力不足时必打滑 |
+| 关节阻尼 | **0.28** N·m·s/rad | 决定需求力矩 |
 
 于是存在两个几何可达但功能后果不同的区域：轮缘可以接触，但要产生同样的力矩需要**大得多的法向压力**，超过安全上限即失败。这使 region 和 mechanics 范围同时成为硬约束，且**纯参数改动，不动几何**，符合 §1 规则 2 和 D-07。
 
-轮缘摩擦系数在开发集上标定到”低压力擦边可行、正常压力必滑”的区间后冻结。标定过程记入 `log/decisions.md`。
+### 设计裕量（S1 标定结果）
+
+安全法向力上限 25 N，目标角速度 1.5 rad/s：
+
+```text
+τ_need = damping × ω        = 0.28 × 1.5     = 0.42 N·m
+τ_rim  = μ_rim × Fn × R     = 0.10 × 25 × 0.070 = 0.175 N·m   比值 0.42  ✓ 要 < 0.5
+τ_pin  = Fn × pin_offset    = 25 × 0.052       = 1.30  N·m   比值 3.10  ✓ 要 > 3.0
+```
+
+本质差别：**推销钉靠法向力直接产生力矩，蹭轮缘只能靠摩擦力**。前者与 μ 无关，后者正比于 μ。
+
+### ⚠️ 摩擦组合模式必须设为 `min`
+
+PhysX 默认的 `frictionCombineMode` 是 **average**。若不改，低摩擦轮缘（μ=0.10）碰上高摩擦执行器（μ=0.7）时，实际接触摩擦是 (0.10+0.7)/2 = **0.40**——τ_rim 变成 0.70 N·m，远超 τ_need，**D-14 直接失效，且失效得毫无征兆**。
+
+因此所有物理材质必须设：
+
+```python
+friction_combine_mode=”min”
+restitution_combine_mode=”min”
+```
+
+已在 `src/it/build_assets.py::_phys_material` 和 `src/it/assets.py` 中固化。S1 的标定用推子故意设 μ=0.9，就是用来验证这条生效的。
+
+### 标定的合法性
+
+摩擦值和阻尼在**任何实验开始前**（S1 阶段）基于上述几何论证设定，不是看到实验结果后回调的。这一点须在论文中写明，否则会被质疑为”调到 baseline 失败为止”。判据是实测的：**纯轮缘接触在安全力上限内推不到目标角 1.0 rad，销钉接触可以**。
 
 ### 3.2 物理参数
 
