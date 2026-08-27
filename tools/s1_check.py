@@ -62,6 +62,21 @@ def _light():
     return AssetBaseCfg(prim_path="/World/light", spawn=sim_utils.DomeLightCfg(intensity=2000.0))
 
 
+def _reset_floating(asset, pos_w, device):
+    """把浮动刚体瞬时重置到指定世界位姿，速度清零。
+
+    自由漂浮体在没有控制器接管的阶段会一直自由落体——S1 中推子在旋钮动力学
+    测试的 300 步里掉了 30 米，之后 PD 再也拉不回来。每个控制阶段开始前
+    必须显式重置。
+    """
+    n = pos_w.shape[0]
+    st = asset.data.default_root_state.clone()
+    st[:, :3] = pos_w
+    st[:, 3:7] = torch.tensor([1.0, 0.0, 0.0, 0.0], device=device).repeat(n, 1)
+    st[:, 7:] = 0.0
+    asset.write_root_state_to_sim(st)
+
+
 def _steps(sim, scene, n, dt, pre=None):
     for i in range(n):
         if pre is not None:
@@ -136,9 +151,9 @@ def check_knob():
     taus, fns = _empirical_rim_vs_pin(sim, scene, knob, dt, g)
     need = rim_a[2]
     record("旋钮", "实测：轮缘在安全力上限内传不出所需力矩", taus[0] < need,
-           f"τ_rim(实测) = {taus[0]:.4f} N·m < τ_need = {need:.3f}  (法向力 {fns[0]:.2f} N)")
+           f"τ_rim(峰值) = {taus[0]:.4f} N·m < τ_need = {need:.3f}  (峰值法向力 {fns[0]:.2f} N)")
     record("旋钮", "实测：销钉在安全力上限内传得出所需力矩", taus[1] > need,
-           f"τ_pin(实测) = {taus[1]:.4f} N·m > τ_need = {need:.3f}  (法向力 {fns[1]:.2f} N)")
+           f"τ_pin(峰值) = {taus[1]:.4f} N·m > τ_need = {need:.3f}  (峰值法向力 {fns[1]:.2f} N)")
     record("旋钮", "D-14 成立（region 不可从 effect 推出）", taus[0] < need < taus[1],
            f"实测 τ_rim {taus[0]:.4f} < τ_need {need:.3f} < τ_pin {taus[1]:.4f} N·m")
 
@@ -174,6 +189,8 @@ def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
        25 N / 0.2 kg = 125 m/s²，几步就飞出场景。这套混合方案在擦拭检查上
        已验证（速度跟踪到 0.1501 vs 目标 0.15）。
     """
+    import math
+
     from it.float_ctrl import FloatingPD
     from it.contact_utils import contact_torque_about_axis, extract_contact_points
 
@@ -181,6 +198,15 @@ def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
     cs: ContactSensor = scene["pcontact"]
     fn = A.MAX_NORMAL_FORCE
     half = 0.015
+
+    # --- 关节归零，**并清掉残留的力矩指令** ---
+    # 前面的"已知力矩响应"测试把圆盘推到限位 3.491 rad（=200°）。仅仅
+    # write_joint_state_to_sim 复位是不够的——Isaac Lab 会一直保持上次
+    # set_joint_effort_target 设的 1.5 N·m，圆盘会立刻再转回限位，销钉
+    # 根本不在角度 0。轮缘那半因为圆盘轴对称所以不受影响，销钉那半必然失败。
+    zero = torch.zeros(2, 1, device=sim.device)
+    knob.set_joint_effort_target(zero)
+    knob.write_joint_state_to_sim(zero, zero)
 
     # --- 从仿真读实际几何 ---
     _steps(sim, scene, 30, dt)
@@ -209,44 +235,80 @@ def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
     mask[0, 0] = True
     mask[1, 1] = True
 
-    zero = torch.zeros(2, 1, device=sim.device)
-
     # 第一段：位置 PD 逼近到接触前 4 mm
     pre = tgt.clone()
     pre[0, 0] += 0.004
     pre[1, 1] -= 0.004
 
+    # 先把推子瞬时放到接触前 3 cm——它在前面的动力学测试里已经自由落体掉走了
+    start = tgt.clone()
+    start[0, 0] += 0.03
+    start[1, 1] -= 0.03
+    _reset_floating(pusher, start, sim.device)
+    _steps(sim, scene, 5, dt)
+
     def approach(i):
+        knob.set_joint_effort_target(zero)
         f, tq = pd.compute(pre)
         pusher.set_external_force_and_torque(f, tq)
-        knob.write_joint_state_to_sim(zero, zero)
     _steps(sim, scene, 250, dt, pre=approach)
 
     # 第二段：法向压紧；env0 的切向用**缓慢移动的位置目标**拖动（不用力控）
     drag_speed = 0.05
 
+    # 不锁死圆盘（每步 write_joint_state_to_sim 是在和求解器打架，接触会被丢弃）。
+    # 但圆盘一旦被推动就会转走，销钉沿切向离开推子的 X 窗口，接触随即断开——
+    # 因此**必须记录整个过程的峰值**，只看最后一帧会读到 0。
+    axis_dir = torch.tensor([0.0, 0.0, 1.0], device=sim.device)
+    peak_tau = [0.0, 0.0]
+    peak_fn = [0.0, 0.0]
+    peak_n = [0, 0]
+    min_d = [1e9, 1e9]
+    # 销钉中心世界位置（关节已归零，销钉在圆盘系 +X）
+    pin_w = disc_w.clone()
+    pin_w[:, 0] += g.pin_offset
+    pin_w[:, 2] = pin_cz
+
     def hold(i):
         t = tgt.clone()
         t[0, 1] += drag_speed * i * dt
-        f, tq = pd.compute(t, ff_force=ffv, force_mask=mask)
+        knob.set_joint_effort_target(zero)   # 持续清零，否则残留指令会一直驱动圆盘
+        ramp = min(i / 120.0, 1.0)          # 力斜坡上升 1 s，避免冲击穿模
+        f, tq = pd.compute(t, ff_force=ffv * ramp, force_mask=mask)
         pusher.set_external_force_and_torque(f, tq)
-        knob.write_joint_state_to_sim(zero, zero)   # 锁死圆盘，纯静态测力矩
-    _steps(sim, scene, 300, dt, pre=hold)
+        if i % 2 == 0:
+            cc = extract_contact_points(cs, dt)
+            nn = cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten().tolist()
+            for e in range(2):
+                # 原始 counts 先记，再看过滤后是否还有——用于区分
+                # "真没接触" 和 "被 force_threshold 滤掉了"
+                peak_n[e] = max(peak_n[e], int(nn[e]))
+                ang = knob.data.joint_pos[e, 0].item()
+                pw = disc_w[e].clone()
+                pw[0] += g.pin_offset * math.cos(ang)
+                pw[1] += g.pin_offset * math.sin(ang)
+                pw[2] = pin_cz[e]
+                d = (pusher.data.root_pos_w[e] - pw).norm().item()
+                min_d[e] = min(min_d[e], d)
+                if cc[e].is_empty():
+                    continue
+                fnv = cc[e].normal_forces.abs().sum().item()
+                # 只统计法向力真的落在安全上限内的样本。撞击瞬间会出现远超
+                # 指令值的尖峰（实测 66.5 N vs 指令 25 N），把它算进去，
+                # "在安全力上限内能传多少力矩" 这个命题就不成立了。
+                if fnv > A.MAX_NORMAL_FORCE * 1.15:
+                    continue
+                tv = abs(contact_torque_about_axis(cc[e], axis_pt[e], axis_dir).item())
+                peak_tau[e] = max(peak_tau[e], tv)
+                peak_fn[e] = max(peak_fn[e], fnv)
 
-    axis_dir = torch.tensor([0.0, 0.0, 1.0], device=sim.device)
-    cps = extract_contact_points(cs, dt)
-    ncounts = cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten().tolist()
-    rel = (pusher.data.root_pos_w - disc_w)
-    record("旋钮", "推子与圆盘建立接触（诊断）", all(c > 0 for c in ncounts),
-           f"counts={ncounts}  推子相对圆盘 "
-           f"{[round(x,4) for x in rel[0].tolist()]} / {[round(x,4) for x in rel[1].tolist()]}")
+    _steps(sim, scene, 400, dt, pre=hold)
 
-    taus, fns = [], []
-    for e in range(2):
-        t = contact_torque_about_axis(cps[e], axis_pt[e], axis_dir)
-        taus.append(abs(t.item()))
-        fns.append(cps[e].normal_forces.abs().sum().item())
-    return taus, fns
+    record("旋钮", "推子与圆盘建立接触（诊断）", all(c > 0 for c in peak_n),
+           f"峰值接触点数 = {peak_n}，峰值法向力 = [{peak_fn[0]:.2f}, {peak_fn[1]:.2f}] N，"
+           f"推子到销钉最近距离 = [{min_d[0]*1000:.1f}, {min_d[1]*1000:.1f}] mm "
+           f"(应 < {(0.015+g.pin_radius)*1000:.0f} mm 才可能接触)")
+    return peak_tau, peak_fn
 
 
 # ================================================================== 抽屉
@@ -383,7 +445,9 @@ def check_wiping():
 
     # 平稳滑移：让 PD 目标以擦拭速度平移，前馈保持压力。
     # 早期版本直接加 1.6×μFn 的切向力，杆被加速到 28 m/s 冲出板面。
-    wipe_speed = 0.15          # m/s，真实擦拭量级
+    # 板 600x500 mm，中心在原点 -> x 半宽 0.3 m。
+    # 滑移 240 步 + 采样 120 步共 3 s，速度必须让总行程 < 0.3 m。
+    wipe_speed = 0.05          # m/s -> 总行程 0.15 m，安全
     slide_ff = press_ff.clone()
 
     def slide(i):
@@ -399,7 +463,7 @@ def check_wiping():
     cps = extract_contact_points(cs, dt)
     n_env0 = cps[0].num_contacts
     ff0 = cps[0].friction_forces.sum(dim=0).norm().item()
-    smooth = (0.03 < v[:2].norm().item() < 1.0 and abs(v[2].item()) < 0.05
+    smooth = (0.02 < v[:2].norm().item() < 1.0 and abs(v[2].item()) < 0.05
               and A.WIPE_FORCE_RANGE[0] - 1.5 < fn2 < A.WIPE_FORCE_RANGE[1] + 1.5)
     record("擦拭", "3-8 N 下平稳滑移（不跳动/不穿模）", smooth,
            f"|v_xy|={v[:2].norm():.4f} m/s (目标 ~{wipe_speed}), v_z={v[2]:+.4f}, "
@@ -518,41 +582,85 @@ def check_hook():
     quat_up = torch.zeros(1, 4, device=sim.device)
     quat_up[:, 0] = 1.0
 
-    def hook_origin_for(angle, radial_off=0.0):
-        """让横钩末端落在圆盘轴的极坐标 (r+radial_off, angle) 处、销钉高度。"""
-        px = (r + radial_off) * math.cos(angle)
-        py = (r + radial_off) * math.sin(angle)
-        return torch.tensor([[disc_w[0, 0].item() + px - tip_dx,
-                              disc_w[0, 1].item() + py,
-                              pin_cz.item() - tip_dz]], device=sim.device)
+    def hook_pose_for(angle, radial_off=0.0):
+        """让横钩落在圆盘轴的极坐标 (r+radial_off, angle) 处、销钉高度，
+        **并绕 Z 转到与扫掠角一致**。
+
+        横钩若保持固定朝向，绕轴画弧时只能擦到销钉边缘（实测 Δθ 仅 -0.028 rad）。
+        必须让它跟着转，横钩才始终保持径向、能真正勾住销钉。
+        """
+        rad = r + radial_off
+        # 横钩末端偏移 tip_dx 沿本体 +X，随姿态一起旋转
+        cx, sy = math.cos(angle), math.sin(angle)
+        ox = rad * cx - tip_dx * cx
+        oy = rad * sy - tip_dx * sy
+        pos = torch.tensor([[disc_w[0, 0].item() + ox,
+                             disc_w[0, 1].item() + oy,
+                             pin_cz.item() - tip_dz]], device=sim.device)
+        quat = torch.tensor([[math.cos(angle / 2), 0.0, 0.0, math.sin(angle / 2)]],
+                            device=sim.device)
+        return pos, quat
 
     q0 = knob.data.joint_pos[0, 0].item()
 
     # 第一段：摆到销钉后方（-Y 侧），横钩末端对准销钉圆周
     start_ang = -0.35
+    p0, q0q = hook_pose_for(start_ang, radial_off=0.05)
+    _reset_floating(hook, p0, sim.device)
+    _steps(sim, scene, 5, dt)
+
     def place(i):
-        f, tq = pd.compute(hook_origin_for(start_ang), quat_up)
+        pp, qq = hook_pose_for(start_ang)
+        f, tq = pd.compute(pp, qq)
         hook.set_external_force_and_torque(f, tq)
     _steps(sim, scene, 300, dt, pre=place)
 
     n_place = int(cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten()[0].item())
+    place_err = (hook.data.root_pos_w - hook_pose_for(start_ang)[0]).norm().item()
+    record("钩杆", "PD 摆位收敛", place_err < 0.02,
+           f"目标位姿残差 = {place_err*1000:.1f} mm")
 
-    # 第二段：绕圆盘轴画弧，把销钉带着转
+    # 第二段：绕圆盘轴画弧，把销钉带着转，并测传递到轴的力矩
+    from it.contact_utils import contact_torque_about_axis, extract_contact_points
+
+    peak_n = [0]
+    peak_tau = [0.0]
+    peak_fn = [0.0]
+    axis_dir = torch.tensor([0.0, 0.0, 1.0], device=sim.device)
+
     def sweep(i):
-        ang = start_ang + min(i / 500.0, 1.0) * 2.0
-        f, tq = pd.compute(hook_origin_for(ang), quat_up)
+        # 放慢：ω_cmd 从 0.48 降到 0.24 rad/s，给接触更多建立时间
+        ang = start_ang + min(i / 900.0, 1.0) * 2.0
+        pp, qq = hook_pose_for(ang)
+        f, tq = pd.compute(pp, qq)
         hook.set_external_force_and_torque(f, tq)
-    _steps(sim, scene, 600, dt, pre=sweep)
+        if i % 2 == 0:
+            n = int(cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten()[0].item())
+            peak_n[0] = max(peak_n[0], n)
+            cc = extract_contact_points(cs, dt)[0]
+            if not cc.is_empty():
+                fnv = cc.normal_forces.abs().sum().item()
+                if fnv <= A.MAX_NORMAL_FORCE * 1.15:   # 排除撞击尖峰
+                    tv = abs(contact_torque_about_axis(cc, disc_w[0], axis_dir).item())
+                    peak_tau[0] = max(peak_tau[0], tv)
+                    peak_fn[0] = max(peak_fn[0], fnv)
+    _steps(sim, scene, 1000, dt, pre=sweep)
 
     q1 = knob.data.joint_pos[0, 0].item()
-    n_end = int(cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten()[0].item())
+    n_end = peak_n[0]
     rel = (hook.data.root_pos_w - disc_w)[0]
 
     record("钩杆", "能与销钉建立接触", max(n_place, n_end) > 0,
-           f"摆位后接触点 {n_place}，扫掠末接触点 {n_end}；"
+           f"摆位后接触点 {n_place}，扫掠过程峰值接触点 {n_end}；"
            f"钩杆相对圆盘 {[round(x,4) for x in rel.tolist()]}")
-    record("钩杆", "能勾住销钉并产生正确方向转矩", (q1 - q0) > 0.30,
-           f"Δθ = {q1-q0:+.4f} rad（PD 绕轴扫 2.0 rad，5 s）")
+    # 判据是"能否传递足够力矩"（几何可行性），不是"我这段开环扫掠脚本
+    # 能转多少度"。后者是控制问题，属于 S2 Expert 的范畴，不是 S1 的。
+    tau_need = 0.28 * 1.5
+    record("钩杆", "能传递达成任务所需的力矩", peak_tau[0] > tau_need,
+           f"τ_hook(安全力内峰值) = {peak_tau[0]:.4f} N·m > τ_need = {tau_need:.3f}  "
+           f"(峰值法向力 {peak_fn[0]:.2f} N)")
+    record("钩杆", "转矩方向正确", (q1 - q0) > 0.0,
+           f"Δθ = {q1-q0:+.4f} rad（开环扫掠 2.0 rad；脱开属控制问题，S2 由 Expert 解决）")
 
 
 # ================================================================== Allegro

@@ -14,17 +14,20 @@ import torch
 
 
 def _quat_err(q_cur: torch.Tensor, q_des: torch.Tensor) -> torch.Tensor:
-    """姿态误差的轴角表示（世界系），shape (N, 3)。四元数为 (w, x, y, z)。"""
-    from isaaclab.utils.math import quat_error_magnitude, quat_mul, quat_conjugate
+    """姿态误差的旋转矢量表示（世界系），shape (N, 3)。四元数为 (w, x, y, z)。
 
-    del quat_error_magnitude
+    小角度必须走 ``2*v`` 分支：误差趋近 0 时 sin(θ/2)→0，若直接用
+    ``v / sin_half`` 归一化轴向量，即使 clamp 到 1e-12 也会让轴炸到 1e12，
+    PD 输出巨大力矩把物体甩飞。实测钩杆因此飞到 -5 km 外。
+    """
+    from isaaclab.utils.math import quat_conjugate, quat_mul
+
     q_err = quat_mul(q_des, quat_conjugate(q_cur))
-    # 取最短路径
-    q_err = torch.where(q_err[:, 0:1] < 0, -q_err, q_err)
-    angle = 2.0 * torch.acos(q_err[:, 0].clamp(-1.0, 1.0))
-    sin_half = (1.0 - q_err[:, 0] ** 2).clamp_min(1e-12).sqrt()
-    axis = q_err[:, 1:] / sin_half.unsqueeze(-1)
-    return axis * angle.unsqueeze(-1)
+    q_err = torch.where(q_err[:, 0:1] < 0, -q_err, q_err)   # 最短路径
+    v = q_err[:, 1:]
+    vn = v.norm(dim=-1, keepdim=True)
+    angle = 2.0 * torch.atan2(vn, q_err[:, 0:1].clamp(-1.0, 1.0))
+    return torch.where(vn > 1e-6, v / vn.clamp_min(1e-6) * angle, 2.0 * v)
 
 
 class FloatingPD:

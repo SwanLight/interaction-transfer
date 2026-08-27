@@ -34,10 +34,17 @@ def _usd(name: str) -> str:
     return os.path.join(ASSETS_GEN, f"{name}.usd")
 
 
-def _rigid_props(**kw):
+def _rigid_props(max_lin_vel: float = 20.0, **kw):
+    """刚体属性。
+
+    ``max_linear_velocity`` 是防穿模的关键：力控轴没有位置参考，物体会一直
+    加速；单步位移超过障碍物厚度就直接穿过去，测不到任何接触。
+    S1 实测中推子以 2.08 m/s 穿过 20 mm 的销钉（单步位移 17 mm）。
+    """
     return sim_utils.RigidBodyPropertiesCfg(
         disable_gravity=False,
         max_depenetration_velocity=5.0,
+        max_linear_velocity=max_lin_vel,
         **kw,
     )
 
@@ -51,7 +58,7 @@ KNOB_CFG = ArticulationCfg(
         activate_contact_sensors=True,
         rigid_props=_rigid_props(),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False, fix_root_link=False
+            enabled_self_collisions=False, fix_root_link=True
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -74,7 +81,7 @@ CABINET_CFG = ArticulationCfg(
         activate_contact_sensors=True,
         rigid_props=_rigid_props(),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False, fix_root_link=False
+            enabled_self_collisions=False, fix_root_link=True
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -162,7 +169,8 @@ def plate_cfg(idx: int, size=(35 * MM, 25 * MM, 3 * MM), mass: float = 0.05,
 HOOK_CFG = RigidObjectCfg(
     prim_path="{ENV_REGEX_NS}/Hook",
     spawn=sim_utils.UsdFileCfg(
-        usd_path=_usd("hook"), activate_contact_sensors=True, rigid_props=_rigid_props()
+        usd_path=_usd("hook"), activate_contact_sensors=True,
+        rigid_props=_rigid_props(max_lin_vel=1.0),
     ),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.4)),
 )
@@ -190,7 +198,7 @@ SLIDER_CFG = ArticulationCfg(
         activate_contact_sensors=True,
         rigid_props=_rigid_props(),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False, fix_root_link=False
+            enabled_self_collisions=False, fix_root_link=True
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(joint_pos={"BlockJoint": 0.0}),
@@ -234,8 +242,9 @@ def allegro_cfg(prim_path: str = "{ENV_REGEX_NS}/Allegro") -> ArticulationCfg:
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.5),
-            # thumb_joint_0 的限位是 [0.279, 1.571]，默认 0.0 越界会直接抛 ValueError
-            joint_pos={".*": 0.0, "thumb_joint_0": 0.4},
+            # thumb_joint_0 的限位是 [0.279, 1.571]，USD 默认 0.0 越界会抛 ValueError。
+            # 只覆盖它——Isaac Lab 不允许 ".*" 与具体名字的模式重叠。
+            joint_pos={"thumb_joint_0": 0.4},
         ),
         actuators={
             "fingers": ImplicitActuatorCfg(
@@ -258,7 +267,7 @@ def pusher_cfg(size=(30 * MM, 30 * MM, 30 * MM), mass: float = 0.2,
         prim_path="{ENV_REGEX_NS}/Pusher",
         spawn=sim_utils.CuboidCfg(
             size=size,
-            rigid_props=_rigid_props(),
+            rigid_props=_rigid_props(max_lin_vel=0.6),   # 单步位移 5 mm < 销钉直径 20 mm
             mass_props=sim_utils.MassPropertiesCfg(mass=mass),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(

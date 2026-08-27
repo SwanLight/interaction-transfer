@@ -263,7 +263,6 @@ def build_knob(path: str, cfg: KnobCfg) -> str:
     """底座固定，圆盘绕 Z 转，销钉偏心竖直伸出。轮缘与销钉摩擦不同（D-14）。"""
     stage = _new_stage(path)
     root = _xform(stage, "/Knob")
-    UsdPhysics.ArticulationRootAPI.Apply(root.GetPrim())
 
     m_rim = _phys_material(stage, "/Knob/PhysMat_Rim", cfg.rim_friction, cfg.rim_friction)
     m_pin = _phys_material(stage, "/Knob/PhysMat_Pin", cfg.pin_friction, cfg.pin_friction)
@@ -271,8 +270,11 @@ def build_knob(path: str, cfg: KnobCfg) -> str:
     bx, by, bz = cfg.base_size
     base = _xform(stage, "/Knob/Base", pos=(0.0, 0.0, bz / 2))
     _rigid(base.GetPrim(), mass=20.0)
-    _joint(stage, "/Knob/RootJoint", "fixed", None, "/Knob/Base",
-           None, (0.0, 0.0, bz / 2), (0.0, 0.0, 0.0))
+    # ArticulationRootAPI 必须挂在**有 RigidBodyAPI 的 link** 上，Isaac Lab 的
+    # fix_root_link=True 才能给它建世界固定关节。挂在纯 Xform 根上会报
+    # NotImplementedError；而自己在 USD 里建 body0 为空的 FixedJoint **不生效**——
+    # S1 实测整个旋钮以 20 m/s 自由落体到 z=-46 m。
+    UsdPhysics.ArticulationRootAPI.Apply(base.GetPrim())
     _box(stage, "/Knob/Base/geom", (bx, by, bz), mat=m_rim)
 
     _cyl(stage, "/Knob/Base/riser", cfg.riser_radius, cfg.riser_height,
@@ -305,7 +307,6 @@ def build_cabinet(path: str, cfg: CabinetCfg) -> str:
     """柜体固定，抽屉沿 +X 拉出。把手前方留净空供手指/钩杆伸入。"""
     stage = _new_stage(path)
     root = _xform(stage, "/Cabinet")
-    UsdPhysics.ArticulationRootAPI.Apply(root.GetPrim())
     mat = _phys_material(stage, "/Cabinet/PhysMat", cfg.friction, cfg.friction)
 
     inner_w = cfg.panel_w - 2 * cfg.wall_t
@@ -315,8 +316,7 @@ def build_cabinet(path: str, cfg: CabinetCfg) -> str:
 
     body = _xform(stage, "/Cabinet/Body", pos=(0.0, 0.0, 0.0))
     _rigid(body.GetPrim(), mass=50.0)
-    _joint(stage, "/Cabinet/RootJoint", "fixed", None, "/Cabinet/Body",
-           None, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+    UsdPhysics.ArticulationRootAPI.Apply(body.GetPrim())
     _box(stage, "/Cabinet/Body/bottom", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, -t / 2), mat=mat)
     _box(stage, "/Cabinet/Body/top", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, inner_h + t / 2), mat=mat)
     _box(stage, "/Cabinet/Body/left", (depth, t, inner_h), pos=(-depth / 2, (inner_w + t) / 2, inner_h / 2), mat=mat)
@@ -397,13 +397,11 @@ def build_slider(path: str, cfg: SliderCfg) -> str:
     """预训练物体集：滑块沿导轨平移，阻尼可随机化。"""
     stage = _new_stage(path)
     root = _xform(stage, "/Slider")
-    UsdPhysics.ArticulationRootAPI.Apply(root.GetPrim())
     mat = _phys_material(stage, "/Slider/PhysMat", cfg.friction, cfg.friction)
 
     rail = _xform(stage, "/Slider/Rail", pos=(0.0, 0.0, cfg.rail_h / 2))
     _rigid(rail.GetPrim(), mass=20.0)
-    _joint(stage, "/Slider/RootJoint", "fixed", None, "/Slider/Rail",
-           None, (0.0, 0.0, cfg.rail_h / 2), (0.0, 0.0, 0.0))
+    UsdPhysics.ArticulationRootAPI.Apply(rail.GetPrim())
     _box(stage, "/Slider/Rail/geom", (cfg.rail_len, cfg.rail_w, cfg.rail_h), mat=mat)
 
     bw, bd, bh = cfg.block
