@@ -23,7 +23,7 @@
 | nvcc | ❌ 未安装（torch 自带 runtime，仅在需要编译自定义 CUDA kernel 时才是问题） |
 | 外网 | ✅ S3 资产源和 pypi 均可达 |
 | **Isaac Lab 快照 commit** | **`2ab57ade`**（= upstream `v2.3.1 / 5c2ec81` + `assets.py` 补丁），见 D-22 |
-| 项目 git commit（起点） | _待填：首次 commit 后填_ |
+| 项目 git commit（起点） | `2d454a2`（首次提交，2026-08-28） |
 
 ### 冒烟测试
 
