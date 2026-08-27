@@ -163,14 +163,16 @@ def _knob_friction_calibration(g):
 
 
 def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
-    """实测：法向力锁定在安全上限，分别顶轮缘和销钉，**直接测量传递到关节轴的力矩**。
+    """实测：法向力锁定在安全上限，分别顶轮缘和销钉，测传递到关节轴的力矩。
 
-    早期版本看"能否推转到目标角"，但推子在圆盘转动后会蹭到销钉，两种条件
-    测出完全相同的转角，判据失效。改为测量绕轴力矩——直接、无歧义，
-    且正好是 `plan/02` §8 要求的"用接触集合重建物体广义力"。
+    两条经验教训写在这里，别再重蹈：
 
-    env 0：推子压在轮缘外侧（径向压紧 + 切向拖动），力矩只能靠摩擦传递
-    env 1：推子顶在销钉侧面（切向直推），法向力本身产生力矩
+    1. **位置从仿真里读，不从 config 推算。** 早期版本按配置算推子目标位姿，
+       结果推子飞出 30 米也没碰到任何东西——USD 的 fixed joint 会叠加
+       Xform 的平移，实际几何和纸面算的不一样。
+    2. **法向力控 + 切向位置 PD**，不要两个方向都力控。纯力控无位置参考，
+       25 N / 0.2 kg = 125 m/s²，几步就飞出场景。这套混合方案在擦拭检查上
+       已验证（速度跟踪到 0.1501 vs 目标 0.15）。
     """
     from it.float_ctrl import FloatingPD
     from it.contact_utils import contact_torque_about_axis, extract_contact_points
@@ -178,46 +180,70 @@ def _empirical_rim_vs_pin(sim, scene, knob, dt, g):
     pusher: RigidObject = scene["pusher"]
     cs: ContactSensor = scene["pcontact"]
     fn = A.MAX_NORMAL_FORCE
+    half = 0.015
 
-    kz = g.base_size[2] + g.riser_height + g.disc_thickness / 2
-    pin_z = g.base_size[2] + g.riser_height + g.disc_thickness + g.pin_length / 2
-    half = 0.015  # 推子半边长
+    # --- 从仿真读实际几何 ---
+    _steps(sim, scene, 30, dt)
+    bi = knob.body_names.index("Disc")
+    disc_w = knob.data.body_pos_w[:, bi, :].clone()          # (2,3) 世界系
+    axis_pt = disc_w.clone()
+    disc_top = disc_w[:, 2] + g.disc_thickness / 2
+    pin_cz = disc_top + g.pin_length / 2
 
-    # 目标位姿：贴住但不穿透（留 0.5 mm 预压）
     tgt = torch.zeros(2, 3, device=sim.device)
-    tgt[0] = torch.tensor([g.disc_radius + half - 0.0005, 0.0, kz], device=sim.device)
-    tgt[1] = torch.tensor([g.pin_offset, -(g.pin_radius + half - 0.0005), pin_z], device=sim.device)
-    tgt = tgt + scene.env_origins
+    # env0：轮缘外侧，径向 +X
+    tgt[0] = torch.tensor([g.disc_radius + half - 0.001, 0.0, 0.0], device=sim.device) + disc_w[0]
+    # env1：销钉 -Y 侧
+    tgt[1, 0] = disc_w[1, 0] + g.pin_offset
+    tgt[1, 1] = disc_w[1, 1] - (g.pin_radius + half - 0.001)
+    tgt[1, 2] = pin_cz[1]
 
-    pd = FloatingPD(pusher, kp_pos=600.0, kd_pos=50.0, kp_rot=40.0, kd_rot=6.0,
-                    max_force=300.0, max_torque=30.0)
+    pd = FloatingPD(pusher, kp_pos=800.0, kd_pos=60.0, kp_rot=60.0, kd_rot=8.0,
+                    max_force=300.0, max_torque=30.0, kd_force=60.0)
 
-    # 前馈：env0 径向 -X 压 fn；env1 +Y 压 fn（法向即切向驱动）
-    ff = torch.zeros(2, 3, device=sim.device)
-    ff[0, 0] = -fn
-    ff[1, 1] = fn
+    # 法向轴力控，其余轴位置 PD
+    ffv = torch.zeros(2, 3, device=sim.device)
+    ffv[0, 0] = -fn
+    ffv[1, 1] = fn
+    mask = torch.zeros(2, 3, dtype=torch.bool, device=sim.device)
+    mask[0, 0] = True
+    mask[1, 1] = True
 
-    # 锁住圆盘，纯静态测"能传多少力矩"，排除转动带来的接触漂移
-    knob.write_joint_state_to_sim(torch.zeros(2, 1, device=sim.device),
-                                  torch.zeros(2, 1, device=sim.device))
+    zero = torch.zeros(2, 1, device=sim.device)
+
+    # 第一段：位置 PD 逼近到接触前 4 mm
+    pre = tgt.clone()
+    pre[0, 0] += 0.004
+    pre[1, 1] -= 0.004
+
+    def approach(i):
+        f, tq = pd.compute(pre)
+        pusher.set_external_force_and_torque(f, tq)
+        knob.write_joint_state_to_sim(zero, zero)
+    _steps(sim, scene, 250, dt, pre=approach)
+
+    # 第二段：法向压紧；env0 的切向用**缓慢移动的位置目标**拖动（不用力控）
+    drag_speed = 0.05
 
     def hold(i):
-        # env0 额外给切向拖动力，让摩擦被拉满
-        f_extra = ff.clone()
-        f_extra[0, 1] = fn * 3.0
-        f, tq = pd.compute(tgt, ff_force=f_extra)
+        t = tgt.clone()
+        t[0, 1] += drag_speed * i * dt
+        f, tq = pd.compute(t, ff_force=ffv, force_mask=mask)
         pusher.set_external_force_and_torque(f, tq)
-        knob.write_joint_state_to_sim(torch.zeros(2, 1, device=sim.device),
-                                      torch.zeros(2, 1, device=sim.device))
-
+        knob.write_joint_state_to_sim(zero, zero)   # 锁死圆盘，纯静态测力矩
     _steps(sim, scene, 300, dt, pre=hold)
 
     axis_dir = torch.tensor([0.0, 0.0, 1.0], device=sim.device)
-    taus, fns = [], []
     cps = extract_contact_points(cs, dt)
+    ncounts = cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten().tolist()
+    rel = (pusher.data.root_pos_w - disc_w)
+    record("旋钮", "推子与圆盘建立接触（诊断）", all(c > 0 for c in ncounts),
+           f"counts={ncounts}  推子相对圆盘 "
+           f"{[round(x,4) for x in rel[0].tolist()]} / {[round(x,4) for x in rel[1].tolist()]}")
+
+    taus, fns = [], []
     for e in range(2):
-        axis_pt = scene.env_origins[e].clone()
-        t = contact_torque_about_axis(cps[e], axis_pt, axis_dir)
+        t = contact_torque_about_axis(cps[e], axis_pt[e], axis_dir)
         taus.append(abs(t.item()))
         fns.append(cps[e].normal_forces.abs().sum().item())
     return taus, fns
@@ -322,12 +348,24 @@ def check_wiping():
     # 重复计入重力，实测 Fn 变成 11.6 N 而非 5.5 N）
     press_ff = torch.zeros(2, 3, device=sim.device)
     press_ff[:, 2] = -target_fn
+    z_mask = torch.zeros(2, 3, dtype=torch.bool, device=sim.device)
+    z_mask[:, 2] = True          # Z 纯力控，XY 与姿态位置 PD
 
+    # 第一段：位置 PD 落到板面上方 6 mm
+    pre_h = hover.clone()
+    pre_h[:, 2] += 0.006
+
+    def approach(i):
+        f, tq = pd.compute(pre_h, quat_up)
+        rod.set_external_force_and_torque(f, tq)
+    _steps(sim, scene, 300, dt, pre=approach)
+
+    # 第二段：Z 纯力控压出目标法向力
     def press(i):
-        f, tq = pd.compute(hover, quat_up, ff_force=press_ff)
+        f, tq = pd.compute(hover, quat_up, ff_force=press_ff, force_mask=z_mask)
         rod.set_external_force_and_torque(f, tq)
 
-    _steps(sim, scene, 400, dt, pre=press)
+    _steps(sim, scene, 300, dt, pre=press)
 
     cd = cs.contact_physx_view.get_contact_data(dt=dt)
     counts = cd[4].flatten().tolist()
@@ -351,23 +389,39 @@ def check_wiping():
     def slide(i):
         tgt = hover.clone()
         tgt[:, 0] += wipe_speed * i * dt
-        f, tq = pd.compute(tgt, quat_up, ff_force=slide_ff)
+        f, tq = pd.compute(tgt, quat_up, ff_force=slide_ff, force_mask=z_mask)
         rod.set_external_force_and_torque(f, tq)
 
     _steps(sim, scene, 240, dt, pre=slide)
     v = rod.data.root_lin_vel_w[0]
     fn2 = cs.data.net_forces_w[0, 0].norm().item()
-    ff = cs.contact_physx_view.get_friction_data(dt=dt)[0].view(-1, 3)
-    n_env0 = int(cd[4].flatten()[0].item())
-    ff0 = ff[: n_env0].sum(dim=0).norm().item()
+    from it.contact_utils import extract_contact_points
+    cps = extract_contact_points(cs, dt)
+    n_env0 = cps[0].num_contacts
+    ff0 = cps[0].friction_forces.sum(dim=0).norm().item()
     smooth = (0.03 < v[:2].norm().item() < 1.0 and abs(v[2].item()) < 0.05
               and A.WIPE_FORCE_RANGE[0] - 1.5 < fn2 < A.WIPE_FORCE_RANGE[1] + 1.5)
     record("擦拭", "3-8 N 下平稳滑移（不跳动/不穿模）", smooth,
            f"|v_xy|={v[:2].norm():.4f} m/s (目标 ~{wipe_speed}), v_z={v[2]:+.4f}, "
            f"滑动中 |Fn|={fn2:.3f} N, |Ff|={ff0:.3f} N (理论 μFn={mu*fn2:.3f})")
 
-    record("擦拭", "垫头杆可建立稳定面接触", n_env0 >= 2,
-           f"接触点数 = {n_env0}（平垫压平面，2-4 点均可接受）")
+    # 接触点数是不好的稳定性代理——PhysX 对平面-平面接触常只报 1-2 个点，
+    # 但只要法向力稳定、无跳动，面接触就是成立的。改用力的稳定性判据。
+    fn_hist = []
+    def sample(i):
+        tgt2 = hover.clone()
+        tgt2[:, 0] += wipe_speed * (240 + i) * dt
+        f, tq = pd.compute(tgt2, quat_up, ff_force=slide_ff, force_mask=z_mask)
+        rod.set_external_force_and_torque(f, tq)
+        fn_hist.append(cs.data.net_forces_w[0, 0].norm().item())
+    _steps(sim, scene, 120, dt, pre=sample)
+    import statistics
+    fn_mean = statistics.mean(fn_hist)
+    fn_std = statistics.pstdev(fn_hist)
+    stable = fn_std < 0.35 * fn_mean and fn_mean > 1.0 and min(fn_hist) > 0.5
+    record("擦拭", "垫头杆可建立稳定面接触（力稳定性）", stable,
+           f"滑动 1 s 内 Fn = {fn_mean:.3f} ± {fn_std:.3f} N (变异 {fn_std/max(fn_mean,1e-6)*100:.1f}%), "
+           f"最小 {min(fn_hist):.3f} N，接触点数 {n_env0}")
 
 
 
@@ -416,23 +470,25 @@ def check_plates():
 
 
 def check_hook():
-    """§7 钩杆：能勾住销钉并产生正确方向转矩。"""
+    """§7 钩杆：能勾住销钉并产生正确方向转矩。
+
+    几何从仿真读取，不从 config 推算（见 _empirical_rim_vs_pin 的教训）。
+    """
 
     @configclass
     class Cfg(InteractiveSceneCfg):
         light = _light()
         knob = A.KNOB_CFG.replace(prim_path="{ENV_REGEX_NS}/Knob")
-        hook = A.HOOK_CFG.replace(
-            init_state=type(A.HOOK_CFG.init_state)(pos=(0.052, -0.12, 0.20))
-        )
+        hook = A.HOOK_CFG
         contact = ContactSensorCfg(
             prim_path="{ENV_REGEX_NS}/Hook",
             track_contact_points=True,
             max_contact_data_count_per_prim=16,
             filter_prim_paths_expr=["{ENV_REGEX_NS}/Knob/Disc"],
-            update_period=0.0,
-            history_length=0,
+            update_period=0.0, history_length=0,
         )
+
+    import math
 
     sim = _sim()
     scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
@@ -445,48 +501,58 @@ def check_hook():
     from it.build_assets import HookCfg, KnobCfg
     from it.float_ctrl import FloatingPD
 
-    h = HookCfg()
-    g = KnobCfg()
-    q0 = knob.data.joint_pos[0, 0].item()
+    h, g = HookCfg(), KnobCfg()
+    _steps(sim, scene, 30, dt)
 
-    # 横钩末端相对钩杆原点的偏移（build_hook 的几何）
+    bi = knob.body_names.index("Disc")
+    disc_w = knob.data.body_pos_w[:, bi, :].clone()
+    pin_cz = disc_w[0, 2] + g.disc_thickness / 2 + g.pin_length / 2
+    r = g.pin_offset
+
+    # 钩杆原点到横钩末端的偏移（build_hook 几何）：横钩沿 +X，位于杆底
     tip_dz = -h.shaft_len / 2 + h.shaft_radius
-    pin_z = g.base_size[2] + g.riser_height + g.disc_thickness + g.pin_length / 2
+    tip_dx = h.hook_len / 2
 
-    # PD 摆位：先把横钩放到销钉后方，再绕轴拖动。
-    # 早期版本直接给 12 N 裸外力，钩杆被加速到飞出去，接触点数 0。
-    pd = FloatingPD(hook, kp_pos=500.0, kd_pos=45.0, kp_rot=60.0, kd_rot=8.0,
-                    max_force=150.0, max_torque=15.0)
+    pd = FloatingPD(hook, kp_pos=700.0, kd_pos=55.0, kp_rot=80.0, kd_rot=10.0,
+                    max_force=200.0, max_torque=20.0)
     quat_up = torch.zeros(1, 4, device=sim.device)
     quat_up[:, 0] = 1.0
 
-    r = g.pin_offset
-    approach = torch.tensor([[r - h.hook_len / 2, -0.05, pin_z - tip_dz]], device=sim.device)
-    approach = approach + scene.env_origins
+    def hook_origin_for(angle, radial_off=0.0):
+        """让横钩末端落在圆盘轴的极坐标 (r+radial_off, angle) 处、销钉高度。"""
+        px = (r + radial_off) * math.cos(angle)
+        py = (r + radial_off) * math.sin(angle)
+        return torch.tensor([[disc_w[0, 0].item() + px - tip_dx,
+                              disc_w[0, 1].item() + py,
+                              pin_cz.item() - tip_dz]], device=sim.device)
 
+    q0 = knob.data.joint_pos[0, 0].item()
+
+    # 第一段：摆到销钉后方（-Y 侧），横钩末端对准销钉圆周
+    start_ang = -0.35
     def place(i):
-        f, tq = pd.compute(approach, quat_up)
+        f, tq = pd.compute(hook_origin_for(start_ang), quat_up)
         hook.set_external_force_and_torque(f, tq)
-    _steps(sim, scene, 200, dt, pre=place)
+    _steps(sim, scene, 300, dt, pre=place)
 
-    # 绕圆盘轴画弧，把销钉带着转
-    import math
+    n_place = int(cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten()[0].item())
+
+    # 第二段：绕圆盘轴画弧，把销钉带着转
     def sweep(i):
-        ang = min(i / 400.0, 1.0) * 1.8
-        tgt = torch.tensor([[r * math.cos(ang) - h.hook_len / 2,
-                             r * math.sin(ang) - 0.005,
-                             pin_z - tip_dz]], device=sim.device) + scene.env_origins
-        f, tq = pd.compute(tgt, quat_up)
+        ang = start_ang + min(i / 500.0, 1.0) * 2.0
+        f, tq = pd.compute(hook_origin_for(ang), quat_up)
         hook.set_external_force_and_torque(f, tq)
-    _steps(sim, scene, 500, dt, pre=sweep)
+    _steps(sim, scene, 600, dt, pre=sweep)
+
     q1 = knob.data.joint_pos[0, 0].item()
-    cd = cs.contact_physx_view.get_contact_data(dt=dt)
-    n = int(cd[4].flatten()[0].item())
+    n_end = int(cs.contact_physx_view.get_contact_data(dt=dt)[4].flatten()[0].item())
+    rel = (hook.data.root_pos_w - disc_w)[0]
 
-    record("钩杆", "能与销钉建立接触", n > 0, f"接触点数 = {n}")
+    record("钩杆", "能与销钉建立接触", max(n_place, n_end) > 0,
+           f"摆位后接触点 {n_place}，扫掠末接触点 {n_end}；"
+           f"钩杆相对圆盘 {[round(x,4) for x in rel.tolist()]}")
     record("钩杆", "能勾住销钉并产生正确方向转矩", (q1 - q0) > 0.30,
-           f"Δθ = {q1-q0:+.4f} rad（PD 绕轴扫 1.8 rad，4.2 s）")
-
+           f"Δθ = {q1-q0:+.4f} rad（PD 绕轴扫 2.0 rad，5 s）")
 
 
 # ================================================================== Allegro

@@ -40,18 +40,31 @@ class FloatingPD:
     """
 
     def __init__(self, asset, kp_pos=400.0, kd_pos=40.0, kp_rot=20.0, kd_rot=4.0,
-                 max_force=200.0, max_torque=20.0, compensate_gravity=True, g=9.81):
+                 max_force=200.0, max_torque=20.0, compensate_gravity=True, g=9.81,
+                 kd_force=30.0):
         self.a = asset
         self.kp_pos, self.kd_pos = kp_pos, kd_pos
         self.kp_rot, self.kd_rot = kp_rot, kd_rot
         self.max_force, self.max_torque = max_force, max_torque
         self.compensate_gravity = compensate_gravity
         self.g = g
+        self.kd_force = kd_force
         self.mass = asset.data.default_mass.sum(dim=-1).to(asset.device)
 
-    def compute(self, target_pos_w, target_quat_w=None, ff_force=None, ff_torque=None):
+    def compute(self, target_pos_w, target_quat_w=None, ff_force=None, ff_torque=None,
+                force_mask=None):
         """返回 (force, torque)，形状均为 (N, 1, 3)，可直接喂给
-        ``set_external_force_and_torque``。"""
+        ``set_external_force_and_torque``。
+
+        Args:
+            force_mask: (N, 3) bool。为 True 的轴走**纯力控**——输出直接取
+                ``ff_force``（外加重力补偿），不做位置 PD。
+
+        为什么需要混合控制：位置 PD 和前馈压力会互相抵消。PD 把物体牢牢固定
+        在目标位姿，压不进接触面，接触力只有 ``kp·m·穿透量``——实测把推子
+        放在距离表面 0.5 mm 处，法向力只有 0.06 N，而目标是 25 N。
+        要产生受控的接触力，法向必须是力控，其余轴才用位置 PD。
+        """
         d = self.a.data
         m = self.mass.unsqueeze(-1)
 
@@ -67,7 +80,18 @@ class FloatingPD:
             tq = -self.kd_rot * m * d.root_ang_vel_w
 
         if ff_force is not None:
-            f = f + ff_force
+            if force_mask is None:
+                f = f + ff_force
+            else:
+                grav = torch.zeros_like(f)
+                if self.compensate_gravity:
+                    grav[:, 2] = self.g * m.squeeze(-1)
+                # 力控轴必须带速度阻尼，否则是无阻尼自由加速：25 N / 0.2 kg
+                # = 125 m/s²，8 mm 间隙 1.3 个物理步就撞上，撞击速度 1.37 m/s，
+                # 单步穿透 11 mm —— 直接穿模弹飞，测不到任何接触力。
+                # 稳态接触时 v→0，输出精确收敛到 ff_force。
+                damp = self.kd_force * m * d.root_lin_vel_w
+                f = torch.where(force_mask, ff_force + grav - damp, f)
         if ff_torque is not None:
             tq = tq + ff_torque
 

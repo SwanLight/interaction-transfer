@@ -233,7 +233,9 @@ def allegro_cfg(prim_path: str = "{ENV_REGEX_NS}/Allegro") -> ArticulationCfg:
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.5), joint_pos={".*": 0.0}
+            pos=(0.0, 0.0, 0.5),
+            # thumb_joint_0 的限位是 [0.279, 1.571]，默认 0.0 越界会直接抛 ValueError
+            joint_pos={".*": 0.0, "thumb_joint_0": 0.4},
         ),
         actuators={
             "fingers": ImplicitActuatorCfg(
