@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# 训练产物 —— 一律不进仓库，体积大且可重跑
+outputs/
+logs/
+runs/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+wandb/
+
+# 评估产物
+videos/
+*.mp4
+report*.html
+eval_results/
+
+# 数据集 —— Oracle Interaction Record 按 plan/03 §6 是 GB 量级
+data/
+datasets/
+*.hdf5
+*.npz
+*.zarr
+
+# Isaac 资产（由 tools/fetch_assets.py 重新拉取，不进仓库）
+assets/
+*.usd
+*.usda
+*.usdc
+
+# 系统
+.DS_Store
+*.swp
+.idea/
+.vscode/
