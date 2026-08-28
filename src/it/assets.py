@@ -34,7 +34,8 @@ def _usd(name: str) -> str:
     return os.path.join(ASSETS_GEN, f"{name}.usd")
 
 
-def _rigid_props(max_lin_vel: float = 20.0, **kw):
+def _rigid_props(max_lin_vel: float = 20.0, max_depenetration_velocity: float = 1.0,
+                 **kw):
     """刚体属性。
 
     ``max_linear_velocity`` 防穿模：力控轴没有位置参考，物体会一直加速；
@@ -48,7 +49,7 @@ def _rigid_props(max_lin_vel: float = 20.0, **kw):
     """
     return sim_utils.RigidBodyPropertiesCfg(
         disable_gravity=False,
-        max_depenetration_velocity=1.0,
+        max_depenetration_velocity=max_depenetration_velocity,
         max_linear_velocity=max_lin_vel,
         linear_damping=0.05,
         angular_damping=0.05,
@@ -146,29 +147,36 @@ def board_cfg(size=(600 * MM, 500 * MM, 20 * MM), friction: float = 0.35) -> Rig
 
 # ---------------------------------------------------------------- 执行器
 
-def plate_cfg(idx: int, size=(35 * MM, 25 * MM, 3 * MM), mass: float = 0.05,
-              friction: float = 0.9) -> RigidObjectCfg:
-    """双板 source 的单块薄板。
+def plate_cfg(idx: int) -> RigidObjectCfg:
+    """双板 source 的单块薄板（0 或 1），由 ``build_assets`` 生成的 USD 载入。
 
     **普通刚体 + PD 外力驱动，绝不能设 kinematic**——kinematic body 不参与
     动力学求解，能施加无限大的力，接触力将失去物理意义（P-09）。
     自检判据：自由落体后稳态接触力 ≈ mg。
+
+    局部坐标 **+Z 是工作面法向**，长边 35 mm 在 X、短边 25 mm 在 Y。
+    USD 里带两个**纯视觉**朝向标记（工作面浅色贴片 + 顶边深色鳍），
+    碰撞几何仍然只有那一个 35×25×3 mm 的盒子，与改版前逐字等价。
+    改用 USD 的原因见 ``build_assets.PlateCfg``：录像里必须能看出板子朝向，
+    否则无法人工确认"接触发生在工作面上"。
+
+    ``max_lin_vel`` 收到 6 m/s：PD 的力上限能给出很大的加速度，一旦目标位姿
+    跳变就会在一个物理步内穿过把手。
+
+    ``max_depenetration_velocity`` 从全局的 1.0 再降到 0.25：板贴着圆柱做
+    力控时，求解器每次把微小穿透以 1 m/s 弹开，板被弹离再被推回，接触变成
+    高频断续——S3 实测只有 12% 的物理子步能报到接触，而抽屉是被一连串冲击
+    推开的。`plan/02` §3.4 要记 stick/slide，断续接触既不是 stick 也不是 slide，
+    这种数据没法用。
     """
+    if idx not in (0, 1):
+        raise ValueError(f"只有 plate0 / plate1 两块板，收到 idx={idx}")
     return RigidObjectCfg(
         prim_path=f"{{ENV_REGEX_NS}}/Plate{idx}",
-        spawn=sim_utils.CuboidCfg(
-            size=size,
-            rigid_props=_rigid_props(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=friction, dynamic_friction=friction, restitution=0.0,
-                friction_combine_mode="min", restitution_combine_mode="min",
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.9, 0.6, 0.2) if idx == 0 else (0.2, 0.6, 0.9)
-            ),
-            activate_contact_sensors=True,
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=_usd(f"plate{idx}"), activate_contact_sensors=True,
+            rigid_props=_rigid_props(max_lin_vel=6.0,
+                                     max_depenetration_velocity=0.25),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.3)),
     )

@@ -114,6 +114,39 @@ class PadRodCfg:
 
 
 @dataclass
+class PlateCfg:
+    """双板 source 的单块薄板。plan/01 §6，D-02。
+
+    局部坐标：**+Z 是工作面法向**，长边 35 mm 在 X，短边 25 mm 在 Y。
+
+    ``face_*`` / ``fin_*`` 是**只有视觉、没有碰撞**的朝向标记。加它们的理由：
+    薄板前后对称、四边接近对称，S3 录像验收时肉眼无法判断哪一面在接触、
+    哪条边朝上，也就无法确认"接触发生在该发生的面上"——而那正是
+    `plan/06` §7 要人工看视频的目的。
+
+    **为什么不给标记加碰撞**：碰撞几何一改，S1 已验过的接触判据
+    （稳态接触力/mg = 1.0000）和 D-02 的板尺寸就都要重验。标记的唯一
+    用途是让画面可读，不该改变物理。代价是标记会与物体视觉穿插而无提示，
+    因此它们只放在**背面和顶边**——工作面一侧保持干净。
+    """
+
+    size: tuple[float, float, float] = (35 * MM, 25 * MM, 3 * MM)
+    #: 0.05 -> 0.5 kg。理由是数值的，不是物理的：板只有 35×25 mm，绕长边的
+    #: 转动惯量 I = m(b²+c²)/12，50 g 时只有 2.6e-6 kg·m²。显式积分下姿态 PD 的
+    #: 稳定条件 ω·dt < 2 会把刚度压到守不住姿态（实测极限环，平均偏 20°）。
+    #: 惯量正比于质量，加重是唯一不改尺寸的解。物理上也说得通——采集面背后
+    #: 本来就该有一只手或一段器械，不是一片孤立的塑料片。
+    mass: float = 0.5
+    friction: float = 0.9
+    #: 工作面贴片（浅色）：告诉观众哪一面是接触面。每边内缩 1 mm 便于看出边界。
+    face_inset: float = 1 * MM
+    face_t: float = 0.4 * MM
+    #: 顶边鳍（深色）：告诉观众哪条边朝上。突出 6 mm，占板高 24%，
+    #: 在 960×540 的录像里能看清——2 mm 级的标记在这个尺度上只有 1~2 像素。
+    fin: tuple[float, float, float] = (30 * MM, 6 * MM, 3 * MM)
+
+
+@dataclass
 class SliderCfg:
     """预训练物体集：滑块导轨。plan/03 §2.4。"""
 
@@ -134,6 +167,7 @@ class BuildCfg:
     eraser: EraserCfg = field(default_factory=EraserCfg)
     hook: HookCfg = field(default_factory=HookCfg)
     padrod: PadRodCfg = field(default_factory=PadRodCfg)
+    plate: PlateCfg = field(default_factory=PlateCfg)
     slider: SliderCfg = field(default_factory=SliderCfg)
 
 
@@ -183,6 +217,10 @@ COLOR = {
     "hook":    (0.95, 0.85, 0.20),
     "rod":     (0.30, 0.75, 0.90),
     "block":   (0.70, 0.35, 0.75),
+    "plate0":  (0.90, 0.55, 0.15),   # 橙板
+    "plate1":  (0.15, 0.55, 0.90),   # 蓝板
+    "face":    (0.96, 0.96, 0.92),   # 浅色 = 工作面（两块板相同，看一次就记住）
+    "marker":  (0.10, 0.10, 0.12),   # 深色顶边鳍 = 这条边朝上
 }
 
 
@@ -215,15 +253,21 @@ def _xform(stage, path: str, pos=(0.0, 0.0, 0.0), rot_wxyz=None):
     return xf
 
 
-def _box(stage, path: str, size, pos=(0.0, 0.0, 0.0), mat=None, rot_wxyz=None, vis=None):
-    """size 为 (sx, sy, sz) 实际边长。Cube 基准边长 1，用 scale 缩放。"""
+def _box(stage, path: str, size, pos=(0.0, 0.0, 0.0), mat=None, rot_wxyz=None, vis=None,
+         collision: bool = True):
+    """size 为 (sx, sy, sz) 实际边长。Cube 基准边长 1，用 scale 缩放。
+
+    ``collision=False`` 生成**纯视觉**几何（不 Apply CollisionAPI，也不参与
+    惯性张量计算）。用于朝向标记一类"只为看得清、不该改变物理"的东西。
+    """
     cube = UsdGeom.Cube.Define(stage, path)
     cube.CreateSizeAttr(1.0)
     cube.AddTranslateOp().Set(Gf.Vec3d(*pos))
     if rot_wxyz is not None:
         cube.AddOrientOp().Set(Gf.Quatf(rot_wxyz[0], Gf.Vec3f(*rot_wxyz[1:])))
     cube.AddScaleOp().Set(Gf.Vec3f(*size))
-    UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+    if collision:
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
     if mat is not None:
         _bind_material(cube.GetPrim(), mat)
     if vis is not None:
@@ -446,6 +490,45 @@ def build_padrod(path: str, cfg: PadRodCfg) -> str:
     return path
 
 
+def _build_plate(path: str, cfg: PlateCfg, body_rgb) -> str:
+    """一块采集板：一个碰撞盒 + 两个纯视觉朝向标记。
+
+    碰撞几何**只有** ``pad`` 那一个盒子，与 S1 验过的
+    ``sim_utils.CuboidCfg(size=(35,25,3) mm)`` 完全等价——标记不参与碰撞，
+    也不参与惯性（质量由 MassAPI 显式给定）。
+    """
+    stage = _new_stage(path)
+    root = _xform(stage, "/Plate")
+    _rigid(root.GetPrim(), mass=cfg.mass)
+    mat = _phys_material(stage, "/Plate/PhysMat", cfg.friction, cfg.friction)
+    v_body = _vis_material(stage, "/Plate/VisBody", body_rgb)
+    v_face = _vis_material(stage, "/Plate/VisFace", COLOR["face"], rough=0.30)
+    v_fin = _vis_material(stage, "/Plate/VisFin", COLOR["marker"], rough=0.70)
+
+    sx, sy, sz = cfg.size
+    _box(stage, "/Plate/pad", (sx, sy, sz), mat=mat, vis=v_body)
+    _box(stage, "/Plate/face_mark",
+         (sx - 2 * cfg.face_inset, sy - 2 * cfg.face_inset, cfg.face_t),
+         pos=(0.0, 0.0, sz / 2 + cfg.face_t / 2), vis=v_face, collision=False)
+    fx, fy, fz = cfg.fin
+    _box(stage, "/Plate/fin", (fx, fy, fz),
+         pos=(0.0, sy / 2 + fy / 2, 0.0), vis=v_fin, collision=False)
+
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_plate0(path: str, cfg: PlateCfg) -> str:
+    """橙板。两块板几何完全相同，只有机身颜色不同（用于在录像里区分彼此）。"""
+    return _build_plate(path, cfg, COLOR["plate0"])
+
+
+def build_plate1(path: str, cfg: PlateCfg) -> str:
+    """蓝板。"""
+    return _build_plate(path, cfg, COLOR["plate1"])
+
+
 def build_slider(path: str, cfg: SliderCfg) -> str:
     """预训练物体集：滑块沿导轨平移，阻尼可随机化。"""
     stage = _new_stage(path)
@@ -482,6 +565,8 @@ BUILDERS = {
     "eraser": (build_eraser, "eraser"),
     "hook": (build_hook, "hook"),
     "padrod": (build_padrod, "padrod"),
+    "plate0": (build_plate0, "plate"),
+    "plate1": (build_plate1, "plate"),
     "slider": (build_slider, "slider"),
 }
 

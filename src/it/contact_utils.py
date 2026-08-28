@@ -78,6 +78,12 @@ def extract_contact_points(
         ``max_contact_data_count_per_prim * num_envs * num_sensor_bodies``。
         必须用 counts/start_idx 切片，直接对整个 buffer 求和会把所有 env 加在
         一起（见 P-18：2 env 时结果恰好是 2 倍，极易被误认为单位问题）。
+
+        ⚠️ **这个函数只在"所有 env 同时有接触"时给出正确的 env 归属**。
+        接触逐个 env 先后建立时，``start_idx`` 的下标与 env 下标会错开，
+        本函数会把别的 env 的接触点交给你，且不报错——见 P-30 与
+        ``extract_contact_points_padded``。需要逐 env 正确归属时用后者。
+        本函数保留是因为它是 S1/S2 的既有依赖，且逐点数值本身是对的。
     """
     view = sensor.contact_physx_view
 
@@ -272,3 +278,150 @@ def contact_torque_about_axis(
     r = cp.positions - axis_point.unsqueeze(0)
     tau = torch.cross(r, f_total, dim=-1).sum(dim=0)
     return torch.dot(tau, axis_dir / axis_dir.norm())
+
+
+def extract_contact_points_padded(
+    sensor,
+    dt: float,
+    body_pos_w: torch.Tensor,
+    max_points: int = 16,
+    force_threshold: float = 1e-4,
+    own_radius: float = 0.08,
+) -> dict[str, torch.Tensor]:
+    """一次取出所有 env 的逐点接触数据，补齐到定长，**按位置归属到 env**。
+
+    Args:
+        sensor: 已初始化的 ``isaaclab.sensors.ContactSensor``。
+        dt: **物理**步长。
+        body_pos_w: (N, 3)，传感器所在刚体在各 env 的世界位置。**必填**——
+            env 归属就是靠它判定的，理由见下面的 P-30。
+        max_points: 每个 env 保留的最大接触点数，超出丢弃（同 P-03 的问题）。
+        force_threshold: 法向力低于此值的槽位视为空槽。PhysX 未使用的槽位是全零。
+        own_radius: 接触点到本体的最大距离。超出的点既不属于本 env、也找不到
+            更近的本体，计进 ``foreign`` 并丢弃。取值要大于刚体自身尺寸的一半。
+
+    Returns:
+        dict，键为 ``positions`` (N, K, 3)、``normals`` (N, K, 3)、
+        ``normal_forces`` (N, K)、``friction_forces`` (N, K, 3)、
+        ``separations`` (N, K)、``valid`` (N, K) bool、``count`` (N,) long、
+        ``foreign`` (标量 long，被丢弃的点数)、``dropped`` (标量 long，
+        因超过 ``max_points`` 被截掉的点数)。
+
+    Note:
+        **P-30 · ``start_idx`` 的下标不是 env 下标。**
+
+        `pitfalls.md` P-18 记的做法是"用 counts/start_idx 按 env 切片"。实测
+        **那个下标不可信**：某一帧只有 env 2 有接触时，``counts`` 报的是
+        ``[0, 0, 0, 2]``、``start_idx`` 是 ``[0, 0, 0, 0]``——数量和位置都对，
+        但**记在了 env 3 名下**。于是 env 3 会拿到 env 2 的接触点，世界坐标
+        整整差一个 ``env_spacing``，而且不报任何错。
+
+        所有 env 同时有接触时下标恰好是恒等的，所以静态自检根本发现不了；
+        S3 采集里接触是逐个 env 先后建立的，68% 的点归属错误。
+
+        因此这里只用 ``counts``/``start_idx`` 圈定"buffer 里哪些槽位是这一帧
+        新鲜的"（这一点它是对的），**env 归属改为按接触点离哪个本体最近来判**。
+
+        ⚠️ 用过旧切片法的结论要重新审视：`decisions.md` D-34（钩杆接触部位
+        分布）就是那样算的。它当时 16 个 env 几乎同时接触、下标大概率是恒等，
+        但没有验证过。
+    """
+    view = sensor.contact_physx_view
+    c_forces, c_points, c_normals, c_seps, counts, start_idx = view.get_contact_data(dt=dt)
+    f_forces, _f_points, _f_counts, _f_start = view.get_friction_data(dt=dt)
+
+    device = c_points.device
+    counts = counts.flatten().long()
+    start = start_idx.flatten().long()
+    total = int(c_points.shape[0])
+    n_env = int(body_pos_w.shape[0])
+    K = max_points
+
+    def _empty(extra_foreign=0):
+        z = torch.zeros(n_env, K, device=device)
+        return {
+            "positions": torch.zeros(n_env, K, 3, device=device),
+            "normals": torch.zeros(n_env, K, 3, device=device),
+            "normal_forces": z.clone(),
+            "friction_forces": torch.zeros(n_env, K, 3, device=device),
+            "separations": z.clone(),
+            "valid": torch.zeros(n_env, K, dtype=torch.bool, device=device),
+            "count": torch.zeros(n_env, dtype=torch.long, device=device),
+            "foreign": torch.as_tensor(extra_foreign, device=device),
+            "dropped": torch.zeros((), dtype=torch.long, device=device),
+        }
+
+    if total == 0:
+        return _empty()
+
+    # 1) 圈出这一帧有数据的槽位。
+    #
+    # **不用 counts/start_idx 圈范围**：实测它们连"总共有多少点"都会漏报——
+    # 有 env 的板明明压进横杆 0.5 mm、抽屉被推开了 160 mm，counts 却从头到尾
+    # 报 0，那些点其实躺在前缀和覆盖不到的槽位里。既然 env 归属已经改成按
+    # 位置判（见下面的 P-30），范围也就不必再依赖它：**扫全 buffer**，
+    # 用"法向力非零"+"离某块本体足够近"两道闸门筛。
+    nf_all = c_forces.reshape(-1)
+    fresh = nf_all.abs() > force_threshold
+    sel = fresh.nonzero().flatten()
+    if sel.numel() == 0:
+        return _empty()
+
+    # 2) 按位置归属：接触点必然贴在自己那块刚体上
+    pts = c_points[sel]
+    dist = (pts.unsqueeze(1) - body_pos_w.unsqueeze(0)).norm(dim=-1)   # (M, N)
+    d_min, owner = dist.min(dim=1)
+    near = d_min <= own_radius
+    n_foreign = (~near).sum()
+    sel, owner = sel[near], owner[near]
+    if sel.numel() == 0:
+        return _empty(n_foreign)
+
+    # 3) 按 env 分组，组内排序号即定长数组的槽位
+    order = torch.argsort(owner, stable=True)
+    sel, owner = sel[order], owner[order]
+    per_env = torch.bincount(owner, minlength=n_env)
+    offsets = torch.cumsum(per_env, dim=0) - per_env
+    rank = torch.arange(sel.numel(), device=device) - offsets[owner]
+    keep = rank < K
+    n_dropped = (~keep).sum()
+    sel, owner, rank = sel[keep], owner[keep], rank[keep]
+
+    out = _empty(n_foreign)
+    out["dropped"] = n_dropped
+    out["positions"][owner, rank] = c_points[sel]
+    out["normals"][owner, rank] = c_normals[sel]
+    out["normal_forces"][owner, rank] = nf_all[sel]
+    out["friction_forces"][owner, rank] = f_forces[sel]
+    out["separations"][owner, rank] = c_seps.reshape(-1)[sel]
+    out["valid"][owner, rank] = True
+    out["count"] = out["valid"].sum(dim=1)
+    return out
+
+
+def classify_contact_mode_padded(
+    normal_forces: torch.Tensor,
+    friction_forces: torch.Tensor,
+    separations: torch.Tensor,
+    valid: torch.Tensor,
+    mu: float,
+    stick_ratio: float = 0.95,
+) -> torch.Tensor:
+    """``classify_contact_mode`` 的定长批量版本，判据完全相同。
+
+    返回与 ``normal_forces`` 同形状的 int8 张量，取值 0=no contact /
+    1=sticking / 2=sliding / 3=separating（`plan/02` §3.4）。
+
+    与逐 env 版本的**唯一**差别：这里不接受 ``slip_speed``。逐点切向相对
+    速度需要额外一次 PhysX 查询，采数据时不划算；「力已饱和但实际没动」的
+    边界情况会被判成 sliding。S4 构造 Oracle Interaction Record 时若需要
+    区分，用物体速度和接触点位置自行补判。
+    """
+    fn = normal_forces.abs()
+    ff = friction_forces.norm(dim=-1)
+    mode = torch.full(fn.shape, 2, dtype=torch.int8, device=fn.device)
+    mode[ff < stick_ratio * mu * fn] = 1
+    mode[separations > 0] = 3
+    mode[fn <= 0] = 0
+    mode[~valid] = 0
+    return mode

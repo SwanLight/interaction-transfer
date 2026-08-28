@@ -44,3 +44,5 @@ assets/
 
 # S0/S1 产出（视频与报告，可由 tools/s0_all.sh + tools/make_report.py 重新生成）
 out/
+
+.git_sha
