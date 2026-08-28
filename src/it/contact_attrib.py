@@ -88,15 +88,6 @@ def classify_plate_face(normals_local: torch.Tensor,
     return mode
 
 
-def plate_face_offset(pts_local: torch.Tensor) -> torch.Tensor:
-    """接触点在板面内的位置，返回 (N, K, 2)，单位 m，原点在板心。
-
-    用来看接触是压在面**中央**还是挂在**边角**上。板半宽 (17.5, 12.5) mm，
-    所以 |x| 接近 17.5 就说明只有一条边在受力。
-    """
-    return pts_local[..., :2]
-
-
 # ---------------------------------------------------------------- 抽屉一侧
 
 #: 抽屉局部系的部位归类。顺序即返回的整数编码。

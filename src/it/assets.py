@@ -182,6 +182,70 @@ def plate_cfg(idx: int) -> RigidObjectCfg:
     )
 
 
+# ---------------------------------------------------------------- 预训练物体集
+#
+# `plan/03` §2.4：这一组**只用于产生指令多样性，永不作为任务评估**。
+# 它不进 E-T、不进 Shared Structure Model、不进任何评估。
+# 覆盖设计与"够不够"的论证见 `plan/03` §2.4 与 `log/decisions.md` D-39。
+
+BLOCK_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Block",
+    spawn=sim_utils.UsdFileCfg(usd_path=_usd("block"), activate_contact_sensors=True,
+                               rigid_props=_rigid_props()),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.02)),
+)
+"""自由方块：推移 / 侧推翻倒 / 按住不动。覆盖**无约束物体**这一档。"""
+
+
+COLUMN_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Column",
+    spawn=sim_utils.UsdFileCfg(usd_path=_usd("column"), activate_contact_sensors=True,
+                               rigid_props=_rigid_props()),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.06)),
+)
+"""自由立柱：侧推 / 双面搓转 / 推倒。覆盖**切向摩擦主导**的力学。"""
+
+
+DIAL_CFG = ArticulationCfg(
+    prim_path="{ENV_REGEX_NS}/Dial",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=_usd("dial"), activate_contact_sensors=True, rigid_props=_rigid_props(),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False, fix_root_link=True),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.0), joint_pos={"DiscJoint": 0.0}, joint_vel={"DiscJoint": 0.0}),
+    actuators={
+        "disc": ImplicitActuatorCfg(
+            joint_names_expr=["DiscJoint"], effort_limit=100.0, velocity_limit=8.0,
+            # 必须与 build_assets 的 joint_damping 一致
+            stiffness=0.0, damping=0.20,
+        )
+    },
+)
+"""转盘：覆盖**受约束转动**。与旋钮刻意不同（三耳、无低摩擦轮缘），见 D-39。"""
+
+
+WIPEBOARD_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/WipeBoard",
+    spawn=sim_utils.UsdFileCfg(usd_path=_usd("wipeboard"), activate_contact_sensors=True),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
+)
+"""固定擦板：覆盖**带法向力的持续滑移**，即擦拭任务的核心交互原语。
+
+USD 里已设 ``kinematic_enabled=True``（规则 7 / P-17），所以这里不再传
+``rigid_props``——传了会用默认值把 kinematic 覆盖掉。
+"""
+
+
+RIDGE_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Ridge",
+    spawn=sim_utils.UsdFileCfg(usd_path=_usd("ridge"), activate_contact_sensors=True),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
+)
+"""固定凸棱台：覆盖**曲面上的接触**。抽屉把手是圆柱，而钩杆要零样本抽屉。"""
+
+
 HOOK_CFG = RigidObjectCfg(
     prim_path="{ENV_REGEX_NS}/Hook",
     spawn=sim_utils.UsdFileCfg(

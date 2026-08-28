@@ -1,13 +1,26 @@
-"""把向量化的 ``extract_contact_points_padded`` 与 S2 已验证过的逐 env 版本逐点对拍。
+"""对拍两种接触提取实现，并**保留它给过假放行的证据**。
 
-S3 第一次 pilot 出现了跨环境串数据：env 3 记到的接触点在物体系里 y 偏了
--2223 mm，恰好是 env_spacing 的量级，而 env 0 完全正常。P-18 记过同一类问题
-（逐点 buffer 是跨 env 扁平打包的），所以先怀疑新写的向量化切片，而不是
-物理或场景。
+S3 第一次采集出现跨环境串数据（env 3 记到的接触点在物体系里 y 偏了 −2223 mm）。
+按 P-18 的说法，逐点 buffer 是跨 env 扁平打包的，所以先怀疑新写的向量化切片。
 
-判据：同一帧、同一传感器，两个实现取出的接触点集合必须逐点相同。
+这个脚本就是那次的对拍工具，它**通过了**——单板、双板双传感器两种配置下，
+前缀和切片取出的接触点与逐 env 循环版逐点一致，槽位归属也全对。
+
+**然后真实采集里 68% 的点归属是错的。**
+
+原因见 `log/pitfalls.md` P-30：`counts`/`start_idx` 的下标只在"所有 env 同时
+有接触"时才恰好等于 env 下标。静态场景里所有 env 同时接触，于是这个脚本
+永远看不到问题；真实采集里接触是逐个 env 先后建立的，下标就错开了。
+
+保留它，是因为它能证伪不能证真这件事本身值得记住：
+**静态自检通过，不等于动态场景里对。**
+
+用法::
+
+    PYTHONPATH=src /isaac-sim/python.sh tools/s3_check_padded.py --plates 2 --envs 4
 """
 
+from __future__ import annotations
 from __future__ import annotations
 
 import os

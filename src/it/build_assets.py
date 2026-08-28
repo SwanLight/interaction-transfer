@@ -13,6 +13,7 @@ D-07 禁止手工编辑 USD 和 URDF 导入。本模块用 pxr API 从参数生�
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from dataclasses import dataclass, field
 
@@ -154,10 +155,107 @@ class SliderCfg:
     rail_w: float = 40 * MM
     rail_h: float = 20 * MM
     block: tuple[float, float, float] = (60 * MM, 50 * MM, 40 * MM)
+    #: 块顶部的凸缘。**必须有**：没有它，滑块只能被"推"，而钩杆的留出任务
+    #: 是抽屉——那是"勾住某个凸出结构往外拉"。预训练集若只有推没有拉，
+    #: 钩杆等于从没做过留出任务所需的那类接合方式（D-39）。
+    flange: tuple[float, float, float] = (10 * MM, 70 * MM, 12 * MM)
     travel: float = 150 * MM
     mass: float = 0.4
     friction: float = 0.5
     joint_damping: float = 2.0
+
+
+@dataclass
+class BlockCfg:
+    """预训练物体集：桌面方块。plan/03 §2.4。
+
+    自由刚体，产生"推移 / 侧推翻倒 / 按住不动"三类交互。它覆盖的是
+    **无约束物体**这一档——effect 是自由的平移和翻转，与滑块/转盘的
+    受约束运动形成对照。
+    """
+
+    size: tuple[float, float, float] = (60 * MM, 45 * MM, 40 * MM)
+    mass: float = 0.25
+    friction: float = 0.6
+
+
+@dataclass
+class ColumnCfg:
+    """预训练物体集：立柱。plan/03 §2.4。
+
+    自由刚体，产生"侧推 / 双面搓转 / 推倒"。搓转那一档是**切向摩擦主导**的
+    交互，与"法向力主导"（推方块、勾抽屉）形成对照——`plan/02` §3.5 的
+    mechanics 字段要覆盖这两种，否则 range 的意义无从检验。
+    """
+
+    radius: float = 28 * MM
+    height: float = 120 * MM
+    mass: float = 0.30
+    friction: float = 0.7
+
+
+@dataclass
+class DialCfg:
+    """预训练物体集：转盘。plan/03 §2.4 的**新增项**，理由见 D-39。
+
+    圆盘 + 3 个均布凸耳 + revolute joint，阻尼可随机。它覆盖
+    **受约束转动**这一档——钩杆的留出任务里有旋钮，若预训练集完全没有
+    绕固定轴转动这件事，钩杆就不是"没学过这个任务"，而是"没学过这类动作"，
+    Gate E 不通过将无法归因。
+
+    **与旋钮资产刻意做得不一样**：无偏心销钉、凸耳有三个而非一个、
+    半径 90 vs 70 mm、无低摩擦轮缘设计（D-14 是旋钮特有的）。
+    """
+
+    disc_radius: float = 45 * MM
+    disc_thickness: float = 14 * MM
+    lug_radius: float = 9 * MM
+    lug_height: float = 30 * MM
+    lug_offset: float = 32 * MM
+    base_size: tuple[float, float, float] = (140 * MM, 140 * MM, 30 * MM)
+    riser_radius: float = 22 * MM
+    riser_height: float = 26 * MM
+    mass: float = 0.30
+    friction: float = 0.7
+    joint_damping: float = 0.20
+
+
+@dataclass
+class WipeBoardCfg:
+    """预训练物体集：擦板。plan/03 §2.4 的**新增项**，理由见 D-39。
+
+    固定（kinematic）平面，可带倾角。它覆盖**在固定面上带法向力持续滑移**
+    这一档——垫头杆、夹爪、Allegro 的留出任务都是擦拭，而擦拭的核心交互
+    就是这个。预训练集若没有它，那三个执行器等于从没做过留出任务所需的
+    那类动作。
+
+    **与擦拭任务的平面刻意不同**：400×300 vs 600×500、可倾斜、
+    没有 dirt grid、没有黑板擦。同样是"在面上滑"，但不是那个任务。
+
+    规则 7：必须是 kinematic 刚体而不是静态碰撞体，否则 filter 通道失效（P-17）。
+    """
+
+    size: tuple[float, float, float] = (400 * MM, 300 * MM, 20 * MM)
+    tilt_deg: float = 0.0
+    friction: float = 0.45
+
+
+@dataclass
+class RidgeCfg:
+    """预训练物体集：凸棱台。plan/03 §2.4 的**新增项**，理由见 D-39。
+
+    固定台面上横着一条圆柱棱。覆盖**曲面上的接触**——抽屉把手是圆柱，
+    而钩杆的留出任务正是抽屉；预训练集若只有平面，执行器从没在曲面上
+    建立过接触，engage 方向随曲率变化这件事也无从学起。
+
+    产生的交互：贴着棱侧推（线接触）、跨棱滑过（接触点沿棱移动）、
+    沿棱滑动（接触点不动而物体表面在动）。
+    """
+
+    base: tuple[float, float, float] = (300 * MM, 200 * MM, 20 * MM)
+    ridge_radius: float = 10 * MM
+    ridge_len: float = 200 * MM
+    friction: float = 0.55
 
 
 @dataclass
@@ -168,6 +266,11 @@ class BuildCfg:
     hook: HookCfg = field(default_factory=HookCfg)
     padrod: PadRodCfg = field(default_factory=PadRodCfg)
     plate: PlateCfg = field(default_factory=PlateCfg)
+    block: BlockCfg = field(default_factory=BlockCfg)
+    column: ColumnCfg = field(default_factory=ColumnCfg)
+    dial: DialCfg = field(default_factory=DialCfg)
+    wipeboard: WipeBoardCfg = field(default_factory=WipeBoardCfg)
+    ridge: RidgeCfg = field(default_factory=RidgeCfg)
     slider: SliderCfg = field(default_factory=SliderCfg)
 
 
@@ -217,6 +320,11 @@ COLOR = {
     "hook":    (0.95, 0.85, 0.20),
     "rod":     (0.30, 0.75, 0.90),
     "block":   (0.70, 0.35, 0.75),
+    "column":  (0.35, 0.70, 0.45),
+    "dial":    (0.80, 0.70, 0.30),
+    "lug":     (0.95, 0.45, 0.20),
+    "wipe":    (0.30, 0.45, 0.60),
+    "ridge":   (0.75, 0.55, 0.35),
     "plate0":  (0.90, 0.55, 0.15),   # 橙板
     "plate1":  (0.15, 0.55, 0.90),   # 蓝板
     "face":    (0.96, 0.96, 0.92),   # 浅色 = 工作面（两块板相同，看一次就记住）
@@ -546,12 +654,122 @@ def build_slider(path: str, cfg: SliderCfg) -> str:
     block = _xform(stage, "/Slider/Block", pos=(-cfg.travel / 2, 0.0, cfg.rail_h + bh / 2))
     _rigid(block.GetPrim(), mass=cfg.mass)
     _box(stage, "/Slider/Block/geom", (bw, bd, bh), mat=mat, vis=v_blk)
+    fw, fd, fh = cfg.flange
+    _box(stage, "/Slider/Block/flange", (fw, fd, fh),
+         pos=(bw / 2 + fw / 2, 0.0, bh / 2 - fh / 2), mat=mat, vis=v_blk)
 
     _joint(
         stage, "/Slider/BlockJoint", "prismatic", "/Slider/Rail", "/Slider/Block",
         "X", (-cfg.travel / 2, 0.0, cfg.rail_h / 2), (0.0, 0.0, -bh / 2),
         limits=(0.0, cfg.travel), damping=cfg.joint_damping,
     )
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_block(path: str, cfg: BlockCfg) -> str:
+    """预训练物体集：自由方块。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Block")
+    _rigid(root.GetPrim(), mass=cfg.mass)
+    mat = _phys_material(stage, "/Block/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/Block/Vis", COLOR["block"])
+    _box(stage, "/Block/geom", cfg.size, mat=mat, vis=vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_column(path: str, cfg: ColumnCfg) -> str:
+    """预训练物体集：自由立柱。竖直放置，可被侧推、搓转或推倒。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Column")
+    _rigid(root.GetPrim(), mass=cfg.mass)
+    mat = _phys_material(stage, "/Column/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/Column/Vis", COLOR["column"])
+    _cyl(stage, "/Column/geom", cfg.radius, cfg.height, axis="Z", mat=mat, vis=vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_dial(path: str, cfg: DialCfg) -> str:
+    """预训练物体集：转盘。底座固定，圆盘绕 Z 转，三个均布凸耳供推动。
+
+    与旋钮（``build_knob``）刻意不同：三耳而非单销、无低摩擦轮缘（D-14 是
+    旋钮特有的设计）、半径更小。它提供的是"绕固定轴转动"这个**能力**，
+    不是旋钮那个**任务**。
+    """
+    stage = _new_stage(path)
+    root = _xform(stage, "/Dial")
+    mat = _phys_material(stage, "/Dial/PhysMat", cfg.friction, cfg.friction)
+    v_base = _vis_material(stage, "/Dial/VisBase", COLOR["base"])
+    v_disc = _vis_material(stage, "/Dial/VisDisc", COLOR["dial"])
+    v_lug = _vis_material(stage, "/Dial/VisLug", COLOR["lug"])
+
+    bw, bd, bh = cfg.base_size
+    base = _xform(stage, "/Dial/Base", pos=(0.0, 0.0, bh / 2))
+    _rigid(base.GetPrim(), mass=20.0)
+    UsdPhysics.ArticulationRootAPI.Apply(base.GetPrim())
+    _box(stage, "/Dial/Base/geom", (bw, bd, bh), mat=mat, vis=v_base)
+    # 立柱把圆盘抬到底座之上，否则径向接近轮缘会先撞底座（同 D-26）
+    _cyl(stage, "/Dial/Base/riser", cfg.riser_radius, cfg.riser_height,
+         pos=(0.0, 0.0, bh / 2 + cfg.riser_height / 2), axis="Z", mat=mat, vis=v_base)
+
+    disc_z = bh + cfg.riser_height + cfg.disc_thickness / 2
+    disc = _xform(stage, "/Dial/Disc", pos=(0.0, 0.0, disc_z))
+    _rigid(disc.GetPrim(), mass=cfg.mass)
+    _cyl(stage, "/Dial/Disc/geom", cfg.disc_radius, cfg.disc_thickness,
+         axis="Z", mat=mat, vis=v_disc)
+    for i in range(3):
+        ang = 2.0 * math.pi * i / 3.0
+        _cyl(stage, f"/Dial/Disc/lug{i}", cfg.lug_radius, cfg.lug_height,
+             pos=(cfg.lug_offset * math.cos(ang), cfg.lug_offset * math.sin(ang),
+                  cfg.disc_thickness / 2 + cfg.lug_height / 2),
+             axis="Z", mat=mat, vis=v_lug)
+
+    _joint(stage, "/Dial/DiscJoint", "revolute", "/Dial/Base", "/Dial/Disc", "Z",
+           (0.0, 0.0, cfg.riser_height + bh / 2), (0.0, 0.0, -cfg.disc_thickness / 2),
+           limits=(-720.0, 720.0), damping=cfg.joint_damping)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_wipeboard(path: str, cfg: WipeBoardCfg) -> str:
+    """预训练物体集：固定擦板，可带倾角。
+
+    规则 7：kinematic 刚体，不是静态碰撞体——静态碰撞体会让 filter 通道
+    静默失效，region 和 mode 两个字段直接作废（P-17）。
+    """
+    stage = _new_stage(path)
+    root = _xform(stage, "/WipeBoard")
+    mat = _phys_material(stage, "/WipeBoard/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/WipeBoard/Vis", COLOR["wipe"])
+    half = math.radians(cfg.tilt_deg) / 2.0
+    board = _xform(stage, "/WipeBoard/Board", pos=(0.0, 0.0, 0.0),
+                   rot_wxyz=(math.cos(half), 0.0, math.sin(half), 0.0))
+    _rigid(board.GetPrim(), mass=100.0, kinematic=True)
+    _box(stage, "/WipeBoard/Board/geom", cfg.size, mat=mat, vis=vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_ridge(path: str, cfg: RidgeCfg) -> str:
+    """预训练物体集：固定台面 + 一条圆柱凸棱，提供曲面接触。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Ridge")
+    mat = _phys_material(stage, "/Ridge/PhysMat", cfg.friction, cfg.friction)
+    v_base = _vis_material(stage, "/Ridge/VisBase", COLOR["base"])
+    v_rid = _vis_material(stage, "/Ridge/VisRidge", COLOR["ridge"])
+    bw, bd, bh = cfg.base
+    body = _xform(stage, "/Ridge/Body", pos=(0.0, 0.0, bh / 2))
+    _rigid(body.GetPrim(), mass=100.0, kinematic=True)
+    _box(stage, "/Ridge/Body/geom", (bw, bd, bh), mat=mat, vis=v_base)
+    _cyl(stage, "/Ridge/Body/ridge", cfg.ridge_radius, cfg.ridge_len,
+         pos=(0.0, 0.0, bh / 2 + cfg.ridge_radius), axis="Y", mat=mat, vis=v_rid)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -568,6 +786,11 @@ BUILDERS = {
     "plate0": (build_plate0, "plate"),
     "plate1": (build_plate1, "plate"),
     "slider": (build_slider, "slider"),
+    "block": (build_block, "block"),
+    "column": (build_column, "column"),
+    "dial": (build_dial, "dial"),
+    "wipeboard": (build_wipeboard, "wipeboard"),
+    "ridge": (build_ridge, "ridge"),
 }
 
 DEFAULT_OUT = "/workspace/interaction_transfer/assets_gen"

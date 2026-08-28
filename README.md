@@ -27,7 +27,7 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 
 1. [`plan/00-positioning.md`](plan/00-positioning.md) — 定位、相对 KITE/ART-Glove/CHORD 的差异、可声称的边界
 2. [`plan/README.md`](plan/README.md) — 系统结构、两个执行器、五个信息条件、步骤与闸门
-3. [`log/decisions.md`](log/decisions.md) — 21 条技术决策及其被否决的备选
+3. [`log/decisions.md`](log/decisions.md) — 39 条技术决策及其被否决的备选
 
 ## 本轮的核心主张
 
@@ -58,7 +58,11 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 | `check_contact_sensor.py` | 接触传感器验证。**改动接触相关代码后必跑** |
 | `contact_utils.py` | 逐接触点数据提取、stick/slide 判定、物体系转换、表面热力图 |
 
-`contact_utils.py` 是每个环境都要用的基础件。它存在的原因见 `log/pitfalls.md` **P-16/P-17/P-18**——当前 Isaac Lab 版本的 `ContactSensor` 不暴露摩擦力，底层 buffer 又是跨 env 扁平打包的。
+`src/it/contact_utils.py` 是每个环境都要用的基础件。它存在的原因见 `log/pitfalls.md` **P-16/P-17/P-18**——当前 Isaac Lab 版本的 `ContactSensor` 不暴露摩擦力，底层 buffer 又是跨 env 扁平打包的。
+
+⚠️ **P-30 推翻了 P-18 的切片做法**：`counts`/`start_idx` 的下标不是 env 下标，
+总数还会漏报。逐 env 归属改为**按接触点离哪个本体最近**判定，见
+`extract_contact_points_padded`。静态自检发现不了这个问题。
 
 ## 最容易让结论作废的三件事
 

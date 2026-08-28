@@ -720,30 +720,92 @@ def check_allegro():
 
 
 def check_pretrain_objs():
-    """`plan/03` §2.4 预训练物体集：滑块导轨可动。"""
+    """`plan/03` §2.4 预训练物体集：六个物体都能载入、且各自的交互原语可行。
+
+    这一组不是任务，但它决定 Gate E 能不能成立（D-39）：如果某个执行器
+    的留出任务所需的交互原语在这一组里根本不存在，Gate E 不通过就无法归因于
+    "执行器不是任务无关的"，只能归因于"训练分布没覆盖到"。所以每个物体都要
+    验的是**它承诺提供的那个原语真的可行**，不是"它能载入"。
+    """
 
     @configclass
     class Cfg(InteractiveSceneCfg):
         light = _light()
-        slider = A.SLIDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Slider")
+        # 六个物体摆在同一个场景里省进程（规则 11 一进程一个 SimulationContext），
+        # 但**必须真的摆开**：滑块导轨 300 mm 长、转盘底座 140 mm 见方，
+        # 都放在原点就会互相穿插，PhysX 把它们粘住，关节一点都推不动——
+        # 症状是"施加 15 N 位移 0.0 mm"，看起来像资产坏了。同 P-32。
+        slider = A.SLIDER_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/Slider",
+            init_state=type(A.SLIDER_CFG.init_state)(pos=(0.0, 0.0, 0.0)))
+        dial = A.DIAL_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/Dial",
+            init_state=type(A.DIAL_CFG.init_state)(
+                pos=(0.0, -0.9, 0.0), joint_pos={"DiscJoint": 0.0},
+                joint_vel={"DiscJoint": 0.0}))
+        block = A.BLOCK_CFG.replace(
+            init_state=type(A.BLOCK_CFG.init_state)(pos=(0.0, 0.7, 0.061)))
+        column = A.COLUMN_CFG.replace(
+            init_state=type(A.COLUMN_CFG.init_state)(pos=(0.0, 1.2, 0.101)))
+        wipeboard = A.WIPEBOARD_CFG.replace(
+            init_state=type(A.WIPEBOARD_CFG.init_state)(pos=(0.9, 0.0, 0.051)))
+        ridge = A.RIDGE_CFG.replace(
+            init_state=type(A.RIDGE_CFG.init_state)(pos=(0.9, 0.9, 0.041)))
+        ground = A.board_cfg(size=(4.0, 4.0, 0.08))
 
     sim = _sim()
-    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=3.0))
+    scene = InteractiveScene(Cfg(num_envs=1, env_spacing=4.0))
     sim.reset()
     dt = sim.get_physics_dt()
-    sl: Articulation = scene["slider"]
 
+    # --- 滑块：受约束平移，且**可拉**（钩杆留出抽屉所需）---
+    sl: Articulation = scene["slider"]
     record("预训练集", "滑块关节数", sl.num_joints == 1, f"num_joints = {sl.num_joints}")
     lim = sl.data.joint_limits[0, 0].tolist()
-    record("预训练集", "滑块行程 80-200 mm", 0.08 <= lim[1] <= 0.30,
-           f"limits = {[round(x,3) for x in lim]} m")
-
+    record("预训练集", "滑块行程 80-300 mm", 0.08 <= lim[1] <= 0.30,
+           f"limits = {[round(x, 3) for x in lim]} m")
     f = torch.zeros(1, 1, device=sim.device)
     f[0, 0] = 15.0
     _steps(sim, scene, 300, dt, pre=lambda i: sl.set_joint_effort_target(f))
-    q = sl.data.joint_pos[0, 0].item()
-    record("预训练集", "滑块可被推动", q > 0.05, f"施加 15 N 后位移 {q*1000:.1f} mm")
+    q_push = sl.data.joint_pos[0, 0].item()
+    record("预训练集", "滑块可被推动", q_push > 0.05,
+           f"施加 15 N 后位移 {q_push * 1000:.1f} mm")
+    f[0, 0] = -15.0
+    _steps(sim, scene, 300, dt, pre=lambda i: sl.set_joint_effort_target(f))
+    q_pull = sl.data.joint_pos[0, 0].item()
+    record("预训练集", "滑块可被拉回（凸缘提供可勾结构）", q_pull < q_push - 0.03,
+           f"反向 15 N 后从 {q_push * 1000:.1f} 回到 {q_pull * 1000:.1f} mm")
+    zero1 = torch.zeros(1, 1, device=sim.device)
+    sl.set_joint_effort_target(zero1)
 
+    # --- 转盘：受约束转动（钩杆留出旋钮所需的原语）---
+    dl: Articulation = scene["dial"]
+    record("预训练集", "转盘关节数", dl.num_joints == 1, f"num_joints = {dl.num_joints}")
+    tq = torch.zeros(1, 1, device=sim.device)
+    tq[0, 0] = 0.6
+    _steps(sim, scene, 300, dt, pre=lambda i: dl.set_joint_effort_target(tq))
+    th = dl.data.joint_pos[0, 0].item()
+    record("预训练集", "转盘可被转动", abs(th) > 0.3,
+           f"施加 0.6 N·m 后转过 {th:.3f} rad")
+    dl.set_joint_effort_target(zero1)
+
+    # --- 固定件：必须是 kinematic 刚体，不是静态碰撞体（规则 7 / P-17）---
+    for name in ("wipeboard", "ridge"):
+        obj: RigidObject = scene[name]
+        kin = bool(obj.root_physx_view.count) and float(
+            obj.data.root_lin_vel_w[0].norm()) < 1e-3
+        record("预训练集", f"{name} 固定不动（kinematic，filter 通道才有效）", kin,
+               f"线速度 {float(obj.data.root_lin_vel_w[0].norm()):.6f} m/s")
+
+    # --- 自由体：静置后应当落在地面上而不是穿下去或乱飞 ---
+    _steps(sim, scene, 400, dt)
+    for name, z_lo, z_hi in (("block", 0.015, 0.06), ("column", 0.05, 0.12)):
+        obj = scene[name]
+        z = obj.data.root_pos_w[0, 2].item()
+        record("预训练集", f"{name} 静置稳定（无穿模/无飞出）", z_lo < z < z_hi,
+               f"静置后 z = {z * 1000:.1f} mm")
+        v = obj.data.root_lin_vel_w[0].norm().item()
+        record("预训练集", f"{name} 静置后速度趋零", v < 0.02, f"|v| = {v:.4f} m/s")
 
 
 # ================================================================== 入口

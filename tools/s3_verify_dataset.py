@@ -34,7 +34,6 @@ from it.records import (  # noqa: E402
 )
 
 FAIL = []
-INFO = []
 
 
 def check(ok: bool, name: str, detail: str = "") -> None:
