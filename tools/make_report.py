@@ -224,13 +224,42 @@ def card(s, vid_dir):
 <div class=watch><b>看什么</b> — {s['watch']}</div>{cav}</div>"""
 
 
+S2_SCENES = [
+    dict(
+        key="expert_drawer_hook", group="s2", title="抽屉 · 钩杆 Privileged Expert",
+        verify="训练好的策略在<b>做什么</b>。成功率 100% 不等于做对了——"
+               "策略完全可能找到物理漏洞（穿模、抖动、利用求解器瑕疵），"
+               "那些只能看出来。`plan/06` §7 因此把人工看视频列为必经步骤。",
+        objects=[
+            ("执行器", "L 形钩杆，0 自由度，浮动底座由 PD 外力/力矩驱动"),
+            ("动作", "6 维位姿增量（每步 ≤12 mm / 0.05 rad），经 PD 转成 wrench"),
+            ("观测", "39 维<b>特权观测</b>：执行器状态、把手位置、开度、目标、接触摘要、物理参数"),
+            ("训练", "PPO（rsl-rl 3.0.1），2048 并行环境，<b>只训 100 轮</b>"),
+        ],
+        procedure=[
+            "策略自主决定如何接近——没有脚本，没有预设轨迹",
+            "确定性动作（推理模式，无探索噪声）",
+            "4 个并行 env 同时录制，episode 完成后自动重置",
+        ],
+        criterion="画面里必须看到：主杆插进把手净空、沿 +X 拉、抽屉正常滑出，"
+                  "且无穿模/瞬移/异常抖动",
+        result="4/4 成功，首次成功在第 52 / 51 / 264 / 54 控制步",
+        verdict="动作合理，与设计的机制一致", cls="ok",
+        watch="钩杆的<b>竖直主杆</b>插进把手与面板之间的 45 mm 净空，然后沿 +X 拉——"
+              "拉力靠主杆前面压把手背面，横钩只负责不碰撞。这正是脚本验证时设计的机制，"
+              "策略自己学到了同一个解法。",
+    ),
+]
+
+
 def main(vid_dir, s1_txt, out_path):
     P = [f"<!doctype html><html lang=zh><meta charset=utf-8>",
-         "<title>S0/S1 验证报告 · Functional Interaction Transfer</title>",
+         "<title>S0/S1/S2 验证报告 · Functional Interaction Transfer</title>",
          "<meta name=viewport content='width=device-width,initial-scale=1'>",
          f"<style>{CSS}</style><div class=wrap>",
-         "<h1>S0 / S1 验证报告</h1>",
-         "<p class=sub>Functional Interaction Transfer —— 仿真资产的几何与动力学可行性自检</p>",
+         "<h1>S0 / S1 / S2 验证报告</h1>",
+         "<p class=sub>Functional Interaction Transfer —— 资产可行性自检、可视化链路、"
+         "与第一个 Privileged Expert</p>",
          "<p class='sub env'>Isaac Sim <code>5.1.0-rc.19</code> + Isaac Lab <code>2.3.1</code>"
          "（快照 <code>2ab57ade</code>）· 8 × RTX 4090 · 物理步长 1/120 s</p>",
          "<p class=lead>本项目要验证的想法是：不迁移人的动作，而迁移动作所实现的"
@@ -261,6 +290,21 @@ def main(vid_dir, s1_txt, out_path):
     for s in SCENES:
         if s["group"] != "core":
             P.append(card(s, vid_dir))
+
+    P.append("<h2>S2 · 训练好的策略</h2>")
+    P.append("<p class=lead>Privileged Expert 的作用是<b>排除「这个执行器本身做不到」</b>，"
+             "它不进入最终系统。门槛是「能明确学会」，不要求完美策略（D-32）。</p>")
+    s2dir = os.path.join(os.path.dirname(vid_dir), "s2")
+    for sc in S2_SCENES:
+        P.append(card(sc, s2dir))
+    P.append("""<table><tr><th>环境</th><th>成功率</th><th>飞出边界</th><th>超时</th>
+<th>终止开度</th><th>用时</th></tr>
+<tr><td>固定</td><td><b>100.0%</b></td><td>0%</td><td>0%</td>
+<td>128.9 mm</td><td>59.8 步</td></tr>
+<tr><td>随机化</td><td><b>100.0%</b></td><td>0%</td><td>0%</td>
+<td>127.7 mm</td><td>61.2 步</td></tr></table>
+<p class=lead style="margin-top:14px">目标区间 100–160 mm，episode 上限 400 步，
+各 256+ 条 episode。<b>Gate A 通过。</b></p>""")
 
     P.append("<h2>S1 自检完整结果</h2>")
     P.append("<p class=lead>共 35 项，33 项 PASS、2 项 INFO（仅记录测量值，无判据）、0 项 FAIL。"

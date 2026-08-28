@@ -55,33 +55,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from it import assets as A  # noqa: E402
 from it.build_assets import CabinetCfg, HookCfg, KnobCfg, PadRodCfg  # noqa: E402
 from it.float_ctrl import FloatingPD  # noqa: E402
+from it.viz import look_at_quat  # noqa: E402
 
 G = 9.81
-
-
-def look_at_quat(eye, target, up=(0.0, 0.0, 1.0)):
-    """USD/OpenGL 相机约定（-Z 朝前，+Y 朝上）的四元数 (w, x, y, z)。"""
-    eye = np.asarray(eye, float); target = np.asarray(target, float); up = np.asarray(up, float)
-    fwd = target - eye
-    fwd /= np.linalg.norm(fwd)
-    z = -fwd
-    x = np.cross(up, z); x /= np.linalg.norm(x)
-    y = np.cross(z, x)
-    R = np.stack([x, y, z], axis=1)
-    t = np.trace(R)
-    if t > 0:
-        s = math.sqrt(t + 1.0) * 2
-        w, qx, qy, qz = 0.25 * s, (R[2,1]-R[1,2])/s, (R[0,2]-R[2,0])/s, (R[1,0]-R[0,1])/s
-    elif R[0,0] > R[1,1] and R[0,0] > R[2,2]:
-        s = math.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2]) * 2
-        w, qx, qy, qz = (R[2,1]-R[1,2])/s, 0.25*s, (R[0,1]+R[1,0])/s, (R[0,2]+R[2,0])/s
-    elif R[1,1] > R[2,2]:
-        s = math.sqrt(1.0 + R[1,1] - R[0,0] - R[2,2]) * 2
-        w, qx, qy, qz = (R[0,2]-R[2,0])/s, (R[0,1]+R[1,0])/s, 0.25*s, (R[1,2]+R[2,1])/s
-    else:
-        s = math.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2
-        w, qx, qy, qz = (R[1,0]-R[0,1])/s, (R[0,2]+R[2,0])/s, (R[1,2]+R[2,1])/s, 0.25*s
-    return (float(w), float(qx), float(qy), float(qz))
 
 
 def cam_cfg(eye, target, w, h):
