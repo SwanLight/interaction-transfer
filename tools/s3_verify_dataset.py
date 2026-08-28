@@ -101,9 +101,14 @@ def main() -> int:
         phys_hold = {by_id[i]["meta"].get("physics_variant") for i in hold_phys}
         check("nominal" not in phys_hold and phys_hold,
               "unseen_physics_test 只含非名义物理参数", f"{sorted(phys_hold)}")
-        check(set(hold_phys) == set(has_var) - set(splits.get("failed", [])),
-              "所有成功的物理变体 episode 都进了 unseen_physics_test",
-              f"变体 {len(has_var)} 条，留出 {len(hold_phys)} 条")
+        # 划分是有优先级的（失败 -> 策略留出 -> 物理留出），所以一条既属于
+        # 留出家族、又带物理变体的成功 episode 会进 unseen_strategy_test。
+        # 判据必须把这两块都扣掉，否则会得到一个假的 FAIL。
+        expect = (set(has_var) - set(splits.get("failed", []))
+                  - set(splits.get("unseen_strategy_test", [])))
+        check(set(hold_phys) == expect,
+              "所有成功、且不属于留出家族的物理变体都进了 unseen_physics_test",
+              f"变体 {len(has_var)} 条，应留出 {len(expect)} 条，实际 {len(hold_phys)} 条")
         damp_h = [by_id[i]["meta"]["physics"].get("joint_damping",
                   by_id[i]["meta"]["physics"].get("drawer_joint_damping", 0.0))
                   for i in hold_phys]
