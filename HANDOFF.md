@@ -174,7 +174,19 @@ tools/
 | **P-24** 相机 | `SimulationApp({"enable_cameras":True})` 无效 | 必须用 `AppLauncher(headless=True, enable_cameras=True)` |
 | **P-24** 相机位姿 | `cam.set_world_poses_from_view()` 卡死 | 在 `CameraCfg.OffsetCfg` 里静态给定 |
 
-### 6.3 reward 设计的四个洞（D-31）
+### 6.3 接触力可能爆到几千牛（P-27）
+
+`max_depenetration_velocity` 默认 5.0，求解器会用高速把穿透的物体推开，
+产生巨大冲量。S2 实测峰值 **4384 N**（均值只有 13 N），把奖励曲线炸得
+在 ±250 之间乱甩，239 轮训练作废。
+
+两层都要修：惩罚封顶 + `max_depenetration_velocity=1.0`。
+只封顶等于掩盖——尖峰还在，只是不体现在奖励里。
+
+**并且：任何新任务环境的 `_get_rewards` 必须把每一项写进 `extras["log"]`。**
+没有分项记录，训练不收敛时只能猜；我猜了三轮全错。
+
+### 6.4 reward 设计的四个洞（D-31）
 
 每个新任务都会遇到，**开训前跑 `tools/s2_scripted.py` 就能提前发现**：
 

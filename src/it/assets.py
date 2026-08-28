@@ -37,14 +37,21 @@ def _usd(name: str) -> str:
 def _rigid_props(max_lin_vel: float = 20.0, **kw):
     """刚体属性。
 
-    ``max_linear_velocity`` 是防穿模的关键：力控轴没有位置参考，物体会一直
-    加速；单步位移超过障碍物厚度就直接穿过去，测不到任何接触。
-    S1 实测中推子以 2.08 m/s 穿过 20 mm 的销钉（单步位移 17 mm）。
+    ``max_linear_velocity`` 防穿模：力控轴没有位置参考，物体会一直加速；
+    单步位移超过障碍物厚度就直接穿过去，测不到任何接触。S1 实测中推子以
+    2.08 m/s 穿过 20 mm 的销钉（单步位移 17 mm）。
+
+    ``max_depenetration_velocity`` 防接触力爆炸：默认 5.0 m/s 意味着求解器
+    可以用极高的速度把互相穿透的物体推开，产生巨大的冲量。S2 训练中实测
+    **峰值接触力 4384 N**（均值只有 13 N），这些尖峰把奖励曲线甩到 -256。
+    降到 1.0 m/s 后穿透恢复得慢一些，但力不会爆。
     """
     return sim_utils.RigidBodyPropertiesCfg(
         disable_gravity=False,
-        max_depenetration_velocity=5.0,
+        max_depenetration_velocity=1.0,
         max_linear_velocity=max_lin_vel,
+        linear_damping=0.05,
+        angular_damping=0.05,
         **kw,
     )
 

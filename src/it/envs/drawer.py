@@ -186,6 +186,12 @@ class DrawerEnv(DirectRLEnv):
     # ------------------------------------------------------------ reward
 
     def _get_rewards(self) -> torch.Tensor:
+        """奖励各项**必须分别记录**。
+
+        第一次训练 239 轮曲线全程不收敛、在 +55 和 -256 之间来回甩，
+        而我只有总 reward，只能猜是哪一项在爆。猜了三轮都没猜对。
+        分项记录之后一眼就能看出来是谁。
+        """
         cab = self.cabinet.data
         opening = cab.joint_pos[:, self._dj[0]]
         d = self.executor.data
@@ -195,35 +201,59 @@ class DrawerEnv(DirectRLEnv):
         # 奖励出现悬崖，训练曲线剧烈震荡（52 → -90 → +17 → -51）。
         # 用差距的差分则处处连续，且求和 telescope 到「初始差距 - 最终差距」。
         gap = (self.goal - opening).abs()
-        r = self.cfg.w_progress * (self.prev_gap - gap).clamp(-0.02, 0.02)
+        r_prog = self.cfg.w_progress * (self.prev_gap - gap).clamp(-0.02, 0.02)
         self.prev_gap = gap.clone()
+        r = r_prog
 
         # 2) 靠近把手：**势函数式塑形**（只奖励距离的减少量）。
         # 早期用 exp(-4d) 直接给分，随机策略每步就能拿 +0.29、累计 +31.65，
         # 而抽屉几乎没开——策略可以靠「在把手附近悬停但不开抽屉」无限刷分。
         # 差分形式求和会 telescope，总量等于起止距离之差，刷不了。
         dist = (self._handle_pos_w() - d.root_pos_w).norm(dim=-1)
-        r = r + self.cfg.w_reach * (self.prev_dist - dist).clamp(-0.05, 0.05)
+        r_reach = self.cfg.w_reach * (self.prev_dist - dist).clamp(-0.05, 0.05)
         self.prev_dist = dist.clone()
+        r = r + r_reach
 
         # 3) 达标
         reached = (opening - self.goal).abs() < self.cfg.goal_tol
-        r = r + self.cfg.w_success * reached.float()
+        r_succ = self.cfg.w_success * reached.float()
+        r = r + r_succ
 
         # 4) 惩罚：过大接触力、动作突变
         cs = contact_summary(self.contact, self.physics_dt, self.num_envs, self.device)
-        over = (cs[:, 7] - self.cfg.max_contact_force).clamp(min=0.0)
-        r = r - self.cfg.w_force * over
-        r = r - self.cfg.w_action * (self.actions - self.prev_act).pow(2).sum(dim=-1)
+        # 力惩罚**必须封顶**。它原来是无界的：接触力尖峰到几百牛时，
+        # 单步就能扣掉几十分，400 步累计上千——这就是曲线甩到 -256 的来源。
+        over = (cs[:, 7] - self.cfg.max_contact_force).clamp(min=0.0, max=20.0)
+        r_force = self.cfg.w_force * over
+        r = r - r_force
+        r_act = self.cfg.w_action * (self.actions - self.prev_act).pow(2).sum(dim=-1)
+        r = r - r_act
 
         # 5) 失败终止的显式惩罚。
         # 没有它就有一个致命漏洞：每步 reward 可能为负，而策略只要让执行器
         # 飞出边界就能立刻结束 episode——**主动自杀比继续做任务划算**。
         # 实测表现为 episode 长度掉到 250 左右而 reward 一路走低。
-        r = r - self.cfg.w_fail * self._far_buf.float()
+        r_fail = self.cfg.w_fail * self._far_buf.float()
+        r = r - r_fail
 
         self.prev_open = opening.clone()
         self.prev_act = self.actions.clone()
+
+        # 分项写进 extras，rsl_rl 会打进 tensorboard 并在终端汇总
+        self.extras.setdefault("log", {})
+        self.extras["log"].update({
+            "rew/1_progress": r_prog.mean().item(),
+            "rew/2_reach": r_reach.mean().item(),
+            "rew/3_success": r_succ.mean().item(),
+            "rew/4_force": (-r_force).mean().item(),
+            "rew/5_action": (-r_act).mean().item(),
+            "rew/6_fail": (-r_fail).mean().item(),
+            "rew/total": r.mean().item(),
+            "diag/opening_mm": (opening * 1000).mean().item(),
+            "diag/contact_force_N": cs[:, 7].mean().item(),
+            "diag/contact_force_max_N": cs[:, 7].max().item(),
+            "diag/over_force_N": over.mean().item(),
+        })
         return r
 
     # ------------------------------------------------------------ 终止
