@@ -64,6 +64,10 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 总数还会漏报。逐 env 归属改为**按接触点离哪个本体最近**判定，见
 `extract_contact_points_padded`。静态自检发现不了这个问题。
 
+⚠️ **P-36**：摩擦 buffer 有自己的 counts/start_idx，行数与接触 buffer 不同。
+混用下标会让一半环境的摩擦翻倍、另一半全为零，`plan/02` §3.4 的
+Contact Mode 因此整体错误。取摩擦一律走 `extract_contact_points_padded`。
+
 ## 最容易让结论作废的三件事
 
 摘自 `log/README.md`，都会让数字变好看：

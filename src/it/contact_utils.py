@@ -79,6 +79,11 @@ def extract_contact_points(
         必须用 counts/start_idx 切片，直接对整个 buffer 求和会把所有 env 加在
         一起（见 P-18：2 env 时结果恰好是 2 倍，极易被误认为单位问题）。
 
+        ⚠️ **这个函数返回的 ``friction_forces`` 是错的**，见 P-36：摩擦 buffer 有
+        自己的 counts/start_idx，行数与接触 buffer 不同（实测接触 4 个点对应
+        摩擦 2 个锚点），拿接触的切片去索引摩擦，env0 会多算一倍、env1 全是零。
+        需要摩擦力时用 ``extract_contact_points_padded``。
+
         ⚠️ **这个函数只在"所有 env 同时有接触"时给出正确的 env 归属**。
         接触逐个 env 先后建立时，``start_idx`` 的下标与 env 下标会错开，
         本函数会把别的 env 的接触点交给你，且不报错——见 P-30 与
@@ -328,7 +333,7 @@ def extract_contact_points_padded(
     """
     view = sensor.contact_physx_view
     c_forces, c_points, c_normals, c_seps, counts, start_idx = view.get_contact_data(dt=dt)
-    f_forces, _f_points, _f_counts, _f_start = view.get_friction_data(dt=dt)
+    f_forces, f_points, _f_counts, _f_start = view.get_friction_data(dt=dt)
 
     device = c_points.device
     counts = counts.flatten().long()
@@ -392,11 +397,69 @@ def extract_contact_points_padded(
     out["positions"][owner, rank] = c_points[sel]
     out["normals"][owner, rank] = c_normals[sel]
     out["normal_forces"][owner, rank] = nf_all[sel]
-    out["friction_forces"][owner, rank] = f_forces[sel]
     out["separations"][owner, rank] = c_seps.reshape(-1)[sel]
     out["valid"][owner, rank] = True
     out["count"] = out["valid"].sum(dim=1)
+
+    # 4) 摩擦：**摩擦 buffer 有自己的行数和自己的下标**，不能拿接触的下标去索引。
+    #    实测同一帧接触 counts=[4,4] 而摩擦 counts=[2,2]（PhysX 的摩擦锚点是
+    #    按**接触斑块**给的，一个斑块通常 2 个锚点，与接触点不是一一对应）。
+    #    用接触下标去索引摩擦，env0 会读到"自己 2 个 + env1 的 2 个"= 恰好 2 倍，
+    #    env1 读到全零 —— 见 P-36。
+    _friction_into(out, f_forces, f_points, body_pos_w, own_radius)
     return out
+
+
+def _friction_into(out, f_forces, f_points, body_pos_w, own_radius: float) -> None:
+    """把摩擦锚点按位置归属到 env，再按法向力占比摊到各接触点上。
+
+    摩擦是**斑块级**的量，接触点是点级的量，两者不同构。这里的摊派用的是
+    库仑摩擦的标准假设——同一斑块内摩擦力正比于法向载荷——所以摊派后
+    「每点的 |f_t| 与 μ·f_n 之比」仍然是判 stick/slide 的正确依据，
+    且各点之和精确等于该斑块的实际摩擦力，不会凭空多出或少掉。
+    """
+    ff = f_forces.reshape(-1, 3)
+    fp = f_points.reshape(-1, 3)
+    live = ff.norm(dim=-1) > 1e-9
+    idx = live.nonzero().flatten()
+    if idx.numel() == 0:
+        return
+    d = (fp[idx].unsqueeze(1) - body_pos_w.unsqueeze(0)).norm(dim=-1)   # (A, N)
+    d_min, a_owner = d.min(dim=1)
+    near = d_min <= own_radius
+    idx, a_owner = idx[near], a_owner[near]
+    if idx.numel() == 0:
+        return
+
+    n_env, K = out["valid"].shape
+    device = ff.device
+    A = int(torch.bincount(a_owner, minlength=n_env).max().item())
+    a_rank = torch.zeros_like(a_owner)
+    order = torch.argsort(a_owner, stable=True)
+    idx, a_owner = idx[order], a_owner[order]
+    per = torch.bincount(a_owner, minlength=n_env)
+    a_rank = (torch.arange(idx.numel(), device=device)
+              - (torch.cumsum(per, 0) - per)[a_owner])
+
+    anc_f = torch.zeros(n_env, A, 3, device=device)
+    anc_p = torch.zeros(n_env, A, 3, device=device)
+    anc_v = torch.zeros(n_env, A, dtype=torch.bool, device=device)
+    anc_f[a_owner, a_rank] = ff[idx]
+    anc_p[a_owner, a_rank] = fp[idx]
+    anc_v[a_owner, a_rank] = True
+
+    # 每个接触点认领离它最近的锚点
+    dist = (out["positions"].unsqueeze(2) - anc_p.unsqueeze(1)).norm(dim=-1)  # (N,K,A)
+    dist = dist.masked_fill(~anc_v.unsqueeze(1), float("inf"))
+    claim = dist.argmin(dim=2)                                                # (N,K)
+    ok = out["valid"] & anc_v.gather(1, claim)
+
+    fn = out["normal_forces"].abs() * ok
+    load = torch.zeros(n_env, A, device=device).scatter_add_(1, claim, fn)
+    share = torch.where(load.gather(1, claim) > 1e-9,
+                        fn / load.gather(1, claim).clamp_min(1e-9), torch.zeros_like(fn))
+    out["friction_forces"] = (anc_f.gather(1, claim.unsqueeze(-1).expand(-1, -1, 3))
+                              * share.unsqueeze(-1))
 
 
 def classify_contact_mode_padded(

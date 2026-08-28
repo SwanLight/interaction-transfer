@@ -752,8 +752,13 @@ def episode_diagnostics(buf: Buffers, e: int) -> dict[str, Any]:
         "plate_face_force_share": share(face, PLATE_PARTS),
         "bar_inside_posts_share": float(
             (fn * buf.inspan[:, :, e, :]).sum().item() / total) if total > 0 else 0.0,
-        "stick_share": float((fn * (buf.mode[:, :, e, :] == 1)).sum().item() / total)
-        if total > 0 else 0.0,
+        # 四种 mode 都报（`plan/02` §3.4）。只报 stick 比例会掩盖"接触其实是
+        # 断续的"——separating 占比高就是那个信号。
+        "mode_share": {
+            name: (float((fn * (buf.mode[:, :, e, :] == i)).sum().item() / total)
+                   if total > 0 else 0.0)
+            for i, name in enumerate(("no_contact", "sticking", "sliding", "separating"))
+        },
     }
 
 
@@ -950,11 +955,16 @@ def report(out_dir: Path, records, splits) -> None:
     add("")
     add("其他")
     for key in ("peak_point_force_N", "invalid_frame_fraction", "pd_saturation_fraction",
-                "unfiltered_force_ratio", "stick_share", "mean_contacts_per_frame",
+                "unfiltered_force_ratio", "mean_contacts_per_frame",
                 "mean_orientation_error_deg", "max_orientation_error_deg",
                 "mean_pull_force_x_N", "substep_contact_fraction",
                 "matrix_contact_fraction", "points_contact_fraction"):
         add(f"  {key:<28}{np.mean([m['diagnostics'][key] for m in metas]):>9.4f}")
+    add("")
+    add("接触模式分布（按法向力加权，`plan/02` §3.4）")
+    for name in ("no_contact", "sticking", "sliding", "separating"):
+        v = np.mean([m["diagnostics"]["mode_share"][name] for m in metas])
+        add(f"  {name:<14}{100 * v:>7.2f}%")
     add("")
     add("划分（按 episode，P-10）")
     for name, ids in splits.items():

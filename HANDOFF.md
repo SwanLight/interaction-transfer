@@ -103,7 +103,7 @@ ssh root@10.0.6.98 'cd /workspace/interaction_transfer && PYTHONPATH=src \
     /isaac-sim/python.sh tools/s3_verify_dataset.py /tmp/s3_drawer_full --sample 60'
 ```
 
-- 五个策略家族，752/800 成功（94.0%）
+- 五个策略家族，741/800 成功（92.6%）
 - **接触 90.2% 落在把手横杆背面、9.8% 在正面（拇指）**，
   横杆上下表面 / 支撑柱 / 面板全为 0；**100% 落在板的工作面**；
   **100% 落在两根支撑柱之间**
@@ -127,6 +127,12 @@ ssh root@10.0.6.98 'cd /workspace/interaction_transfer && PYTHONPATH=src \
 **`decisions.md` D-34（钩杆接触部位分布：主杆 78%、横钩 4.3%）是用一个
 已被推翻的方法算的**，见 `pitfalls.md` P-30。那组数字与用户看录像的观察一致，
 大概率没错，但**引用具体百分比之前应当用新方法重算**。
+
+**还有一条**：`src/it/envs/base.py::contact_summary` 和
+`extract_contact_points` 返回的**摩擦力是错的**（P-36：摩擦 buffer 有自己的
+下标，混用会让一半环境翻倍、一半全零）。S1/S2 依赖它们所以没动，
+但 **S4 之后不得再用那条路径取摩擦**，要用
+`extract_contact_points_padded`。
 
 ## 5. 怎么在服务器上跑东西
 
