@@ -294,7 +294,7 @@ def main(vid_dir, s1_txt, out_path):
     P.append("<h2>S2 · 训练好的策略</h2>")
     P.append("<p class=lead>Privileged Expert 的作用是<b>排除「这个执行器本身做不到」</b>，"
              "它不进入最终系统。门槛是「能明确学会」，不要求完美策略（D-32）。</p>")
-    s2dir = os.path.join(os.path.dirname(vid_dir), "expert")
+    s2dir = os.path.join(os.path.dirname(vid_dir), "s2_expert")
     for sc in S2_SCENES:
         P.append(card(sc, s2dir))
     P.append("""<table><tr><th>环境</th><th>成功率</th><th>飞出边界</th><th>超时</th>
