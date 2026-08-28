@@ -70,7 +70,14 @@ class CabinetCfg:
     wall_t: float = 15 * MM
     drawer_mass: float = 1.2
     friction: float = 0.6
-    joint_damping: float = 3.0
+    # 阻尼必须大到「松手就停」，否则策略会学会**捅一下让抽屉自己滑**。
+    # 滑行距离 = v0 · m/c。原来 c=3.0 时，0.2 m/s 能滑 80 mm——
+    # 抽屉总行程才 180 mm，一次冲量滑完大半，根本不需要持续拉。
+    # S2 实测：打开过程中 60% 的控制步接触力为零，速度衰减反解出的
+    # 阻尼恰好是 3.06，确认是自由滑行（P-28）。
+    # c=30 时滑行距离 0.2×1.2/30 = 8 mm（原来 80 mm），既压掉了「捅一下滑行」
+    # 这个退化解，又不至于把拉力需求推得太高。
+    joint_damping: float = 30.0
 
 
 @dataclass

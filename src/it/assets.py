@@ -97,7 +97,8 @@ CABINET_CFG = ArticulationCfg(
     actuators={
         "drawer": ImplicitActuatorCfg(
             joint_names_expr=["DrawerJoint"], effort_limit=200.0, velocity_limit=5.0,
-            stiffness=0.0, damping=3.0,
+            # 必须与 build_assets 的 joint_damping 一致；理由见那里的注释
+            stiffness=0.0, damping=30.0,
         )
     },
 )

@@ -77,7 +77,7 @@ class DrawerEnvCfg(DirectRLEnvCfg):
     # --- 随机化（Curriculum B，`plan/04` §10）---
     randomize: bool = False
     exec_pos_noise: float = 0.03
-    damping_range: tuple[float, float] = (2.0, 4.5)
+    damping_range: tuple[float, float] = (20.0, 42.0)
 
     # --- reward 权重（`plan/04` §8.1）---
     # 权重由 tools/s2_scripted.py 在**一条成功的脚本轨迹**上标定，不是拍的。

@@ -41,49 +41,68 @@ P(f"把手：杆心距面板 {(C.panel_t + C.handle_clearance + C.handle_radius)
 P(f"钩杆：主杆半径 {H.shaft_radius*1000:.0f} mm，横钩长 {H.hook_len*1000:.0f} mm")
 P(f"目标开度：{env.goal[0].item()*1000:.1f} mm\n")
 
-# --- 几何分析（把手区的可通行空间）---
-# 面板前面 x = panel_t = 18 mm
-# 把手杆心 x = panel_t + clearance + r = 74 mm，杆背面 x = 63 mm
-# → 净空是 x ∈ [18, 63] mm 这一段，中心 40.5 mm
-# 主杆半径 8 mm，放在净空中心两侧各余 14.5 mm
-# 支撑柱在 y = ±62.5 mm，y = 0 处这一列是空的，竖直主杆可以自由下探
+# --- 几何分析与「真正勾住」的动作设计 ---
 #
-# 关键：横钩若指向 +X，下探时会扫过把手杆所在的 x 区间 [63, 85] 而撞上。
-# 把钩杆绕 Z 转 90°，横钩改指 +Y 就避开了——**拉抽屉靠的是主杆前面压
-# 把手背面，横钩只需要不碰撞**。
-tip_dz = -H.shaft_len / 2 + H.shaft_radius        # 横钩相对原点的 z 偏移
-GAP_X = C.panel_t + C.handle_clearance / 2         # 净空中心
+# 把手区可通行空间：
+#   面板前面 x = 18 mm，把手杆心 x = 74 mm，杆背面 x = 63 mm
+#   -> 净空 x ∈ [18, 63]，中心 40.5 mm；主杆直径 16 mm，两侧各余 14.5 mm
+#   支撑柱在 y = ±62.5 mm，y = 0 这一列是空的，竖直主杆可自由下探
+#
+# **为什么必须真的勾住**（S2 实测教训）：
+# 早期设计让横钩指 +Y（纯避让），拉力全靠**主杆圆柱压把手圆柱**——
+# 两根轴垂直的圆柱接触是**点接触**。抽屉阻尼小时勉强够用；阻尼提高后
+# 需要的力变大，点接触立刻滑脱（实测钩杆飞到 319 mm 外，抽屉只开了 3.6 mm）。
+#
+# 正确的动作分三段：
+#   ① 下探：横钩转到 +Y 避让，竖直主杆落进净空（横钩指 +X 会扫过把手撞上）
+#   ② 转正：到位后绕 Z 转 90°，横钩转到 +X，伸到**把手杆下方**
+#   ③ 拉：主杆前面压把手背面提供拉力，横钩挡住向上脱出 -> **形封闭**
+#
+# 高度约束：横钩顶面必须低于把手杆底面（79 mm），否则转正时会撞上。
+# 横钩相对原点 z 偏移 = -shaft_len/2 + r = -117 mm，横钩半径 8 mm
+# -> 原点高度 ≤ 79 + 117 - 8 = 188 mm。取 180 mm，余 8 mm 间隙。
+tip_dz = -H.shaft_len / 2 + H.shaft_radius
+GAP_X = C.panel_t + C.handle_clearance / 2
 BAR_X = C.panel_t + C.handle_clearance + C.handle_radius
-handle = env._handle_pos_w()                       # 世界系把手杆心
+handle = env._handle_pos_w()
 base_xy = handle.clone()
-base_xy[:, 0] = handle[:, 0] - BAR_X + GAP_X       # 挪到净空中心
-base_xy[:, 1] = handle[:, 1]                       # y = 0，支撑柱之间
+base_xy[:, 0] = handle[:, 0] - BAR_X + GAP_X
+base_xy[:, 1] = handle[:, 1]
 
 P(f"净空 x ∈ [{C.panel_t*1000:.0f}, {(C.panel_t+C.handle_clearance)*1000:.0f}] mm，"
   f"中心 {GAP_X*1000:.1f} mm；主杆直径 {2*H.shaft_radius*1000:.0f} mm -> 两侧各余 "
   f"{(C.handle_clearance/2 - H.shaft_radius)*1000:.1f} mm")
+P(f"横钩顶面需低于把手底面 {(handle[0,2].item() - C.handle_radius)*1000:.0f} mm "
+  f"-> 原点高度上限 {(handle[0,2].item() - C.handle_radius - tip_dz - H.shaft_radius)*1000:.0f} mm")
 
-# 姿态：绕 Z 转 90°，横钩指 +Y
-quat = torch.zeros(env.num_envs, 4, device=dev)
-quat[:, 0] = math.cos(math.pi / 4)
-quat[:, 3] = math.sin(math.pi / 4)
+Z_ENGAGE = 0.180
+Q_AVOID = math.pi / 2      # 下探时横钩指 +Y
+Q_HOOK = 0.0               # 勾住时横钩指 +X（伸到把手下方）
 
-Z_ENGAGE = 0.185          # 原点高度：横钩落在把手杆下方 ~11 mm，主杆穿过净空
+
+def phase_pose(i):
+    """① 悬停对位 ② 下探（横钩避让）③ 原地转正让横钩伸到把手下 ④ 拉开"""
+    t = base_xy.clone()
+    ang = Q_AVOID
+    if i < 50:
+        t[:, 2] = 0.34
+    elif i < 140:
+        t[:, 2] = 0.34 + (Z_ENGAGE - 0.34) * (i - 50) / 90.0
+    elif i < 190:
+        t[:, 2] = Z_ENGAGE
+        ang = Q_AVOID * (1.0 - (i - 140) / 50.0)      # 转到 Q_HOOK
+    else:
+        t[:, 2] = Z_ENGAGE
+        ang = Q_HOOK
+        t[:, 0] += min((i - 190) / 170.0, 1.0) * 0.34
+    q = torch.zeros(env.num_envs, 4, device=dev)
+    q[:, 0] = math.cos(ang / 2)
+    q[:, 3] = math.sin(ang / 2)
+    return t, q
 
 
 def phase_target(i):
-    """① 净空正上方悬停 ② 竖直下探进净空 ③ 沿 +X 拉开抽屉"""
-    t = base_xy.clone()
-    if i < 50:                       # 悬停对位
-        t[:, 2] = handle[:, 2] + 0.26 - tip_dz * 0
-        t[:, 2] = 0.34
-    elif i < 140:                    # 下探
-        f = (i - 50) / 90.0
-        t[:, 2] = 0.34 * (1 - f) + Z_ENGAGE * f
-    else:                            # 拉开
-        t[:, 2] = Z_ENGAGE
-        t[:, 0] += min((i - 140) / 220.0, 1.0) * 0.24
-    return t
+    return phase_pose(i)[0]
 
 
 # **通过 policy 的动作接口驱动**，不直接调底层控制器。
@@ -99,8 +118,8 @@ clamp_hits = torch.zeros(env.num_envs, device=dev)
 n_steps_done = 0
 
 st = env.executor.data.default_root_state.clone()
-st[:, :3] = phase_target(0)
-st[:, 3:7] = quat
+st[:, :3], _q0 = phase_pose(0)[0], phase_pose(0)[1]
+st[:, 3:7] = _q0
 st[:, 7:] = 0.0
 env.executor.write_root_state_to_sim(st)
 env.act.reset(st[:, :3], st[:, 3:7])
@@ -115,11 +134,15 @@ max_open = torch.zeros(env.num_envs, device=dev)
 max_fn = torch.zeros(env.num_envs, device=dev)
 
 for i in range(400):
-    want = phase_target(i)
-    # 位姿增量 -> 归一化动作
+    want, want_q = phase_pose(i)
+    # 位姿增量 -> 归一化动作。姿态用 yaw 增量（本任务只需绕 Z 转）。
     dpos = (want - env.act.target_pos) / env.act.pos_scale
+    cur_yaw = 2.0 * torch.atan2(env.act.target_quat[:, 3], env.act.target_quat[:, 0])
+    want_yaw = 2.0 * torch.atan2(want_q[:, 3], want_q[:, 0])
+    dyaw = torch.atan2(torch.sin(want_yaw - cur_yaw), torch.cos(want_yaw - cur_yaw))
     a = torch.zeros(env.num_envs, cfg.action_space, device=dev)
     a[:, :3] = dpos
+    a[:, 5] = dyaw / env.act.rot_scale
     clamp_hits += (a[:, :3].abs() > 1.0).any(dim=-1).float()
     n_steps_done += 1
     a = a.clamp(-1.0, 1.0)
