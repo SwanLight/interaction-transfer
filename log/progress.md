@@ -142,7 +142,7 @@ ssh root@10.0.6.98 'cd /workspace/isaaclab && git diff --numstat upstream-v2.3.1
 
 | 步骤 | 内容 | 状态 | 完成日期 |
 |---|---|---|---|
-| S0 | 可视化链路 | ⬜ 未开始 | |
+| S0 | 可视化链路 | ✅ 通过 | 2026-08-28 |
 | S1 | 资产自检 | ✅ 通过 | 2026-08-28 |
 | S2 | 场景组装 + 执行器接入 + Expert 上限 | ⬜ 未开始 | |
 | S3 | Source 脚本 + 数据集 + 预训练物体集 | ⬜ 未开始 | |
@@ -161,18 +161,47 @@ ssh root@10.0.6.98 'cd /workspace/isaaclab && git diff --numstat upstream-v2.3.1
 
 ---
 
-## S0 — 可视化链路
+## S0 — 可视化链路 ✅ 通过（2026-08-28）
 
-判据见 `../plan/06-eval-and-visualization.md` §3。
+判据见 `../plan/06-eval-and-visualization.md` §1 §3。
 
-- [ ] WebRTC 串流可用
-- [ ] 最小 demo 能录 mp4
-- [ ] report.html 骨架可生成
-- [ ] `--enable_cameras` 不卡死（训练时不录像，见 `pitfalls.md` P-07）
+- [x] headless 渲染可用（**需 `AppLauncher(enable_cameras=True)`**，不是裸 SimulationApp）
+- [x] 能录 mp4（6 个场景，`tools/s0_record.py` + `tools/s0_all.sh`）
+- [x] `report.html` 可生成（`tools/make_report.py`）
+- [ ] WebRTC 串流 —— **未做**，本轮用离线录像替代，够用且更适合归档
 
-记录：
+重新生成：
 
----
+```bash
+./tools/sync.sh && ./tools/run_remote.sh "bash tools/s0_all.sh /tmp/s0" s0
+scp root@10.0.6.98:'/tmp/s0/*.mp4' out/s0/
+python3 tools/make_report.py out/s0 log/s1/s1_report.txt out/report.html
+```
+
+### 录像结果（数字与 S1 自检一致）
+
+| 场景 | 实测 |
+|---|---|
+| **旋钮·轮缘**（蓝，μ=0.10） | Δθ = **+0.025 rad** —— 推不动 |
+| **旋钮·销钉**（橙，μ=0.80） | Δθ = **+1.516 rad** —— 转进目标区间 1.0–2.2 |
+| 擦拭·垫头杆直擦 | Fn = 5.456 ± 0.369 N，\|v_xy\| = 0.0498 m/s |
+| 抽屉·全行程 | 拉开 180.0 mm，推回 0.0 mm |
+| 钩杆·绕轴扫掠 | τ_hook = 0.515 N·m > τ_need = 0.420 |
+| 滑块·预训练集 | 15 N 推满 150 mm |
+
+前两行是 D-14 的**可视化对照**：同一份物理、同样 25 N 上限，只改接触区域。
+
+### 三条本环境特有的渲染约束（P-24）
+
+1. 必须用 `AppLauncher(headless=True, enable_cameras=True)`。裸 `SimulationApp({"enable_cameras": True})` **无效**——Camera 检查的是 carb 键 `/isaaclab/cameras_enabled`，只有 AppLauncher 会写，它还负责选 `headless.rendering.kit`。
+2. `sim.step(render=True)` 即使开了 cameras **仍然卡死**。物理走 `step(render=False)`，出图时单独调 `sim.render()` + `cam.update()`。
+3. `cam.set_world_poses_from_view()` **会卡死**。相机位姿必须在 `CameraCfg.OffsetCfg` 里静态给定（`tools/s0_record.py::look_at_quat`）。
+
+### 录像本身暴露的三个问题（都是数字发现不了的）
+
+1. **推子飞出画面** —— 数字仍报"轮缘推不动"（正确），但视频里看起来像"推子飞了所以没转"，说服力全无。
+2. **两种情况不能用同一条轨迹** —— 曾把销钉也写成"径向压紧+沿圆周走"，力穿过转轴，力矩恒为零，Δθ=0.0000。视频看起来像销钉也推不动，**完全误导**。
+3. **全白渲染看不出功能区域** —— 只设了物理材质没设视觉材质，轮缘和销钉一个颜色，而它们的区别正是 D-14 的全部内容。现已配色：轮缘蓝、销钉橙。
 
 ## S1 — 资产自检 ✅ 通过（2026-08-28）
 

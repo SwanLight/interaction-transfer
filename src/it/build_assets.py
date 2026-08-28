@@ -163,6 +163,38 @@ def _phys_material(stage, path: str, static_f: float, dynamic_f: float, restitut
     return mat
 
 
+#: 视觉配色。让 S0 录像里一眼能分辨功能区域——尤其轮缘(低摩擦)与销钉(高摩擦)，
+#: 那是 D-14 的关键，全白渲染根本看不出区别。
+COLOR = {
+    "base":    (0.45, 0.45, 0.48),
+    "rim":     (0.20, 0.45, 0.85),   # 蓝 = 低摩擦，推不动
+    "pin":     (0.95, 0.55, 0.10),   # 橙 = 高摩擦，可推转
+    "cabinet": (0.55, 0.40, 0.28),
+    "handle":  (0.85, 0.85, 0.88),
+    "eraser":  (0.85, 0.25, 0.25),
+    "pad":     (0.20, 0.75, 0.55),
+    "hook":    (0.95, 0.85, 0.20),
+    "rod":     (0.30, 0.75, 0.90),
+    "block":   (0.70, 0.35, 0.75),
+}
+
+
+def _vis_material(stage, path: str, rgb, rough: float = 0.55):
+    """UsdPreviewSurface 视觉材质。"""
+    mat = UsdShade.Material.Define(stage, path)
+    sh = UsdShade.Shader.Define(stage, path + "/Shader")
+    sh.CreateIdAttr("UsdPreviewSurface")
+    sh.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*rgb))
+    sh.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(rough)
+    sh.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
+    mat.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
+    return mat
+
+
+def _bind_visual(prim, mat):
+    UsdShade.MaterialBindingAPI.Apply(prim).Bind(mat, UsdShade.Tokens.weakerThanDescendants)
+
+
 def _bind_material(prim, mat):
     binding = UsdShade.MaterialBindingAPI.Apply(prim)
     binding.Bind(mat, UsdShade.Tokens.weakerThanDescendants, "physics")
@@ -176,7 +208,7 @@ def _xform(stage, path: str, pos=(0.0, 0.0, 0.0), rot_wxyz=None):
     return xf
 
 
-def _box(stage, path: str, size, pos=(0.0, 0.0, 0.0), mat=None, rot_wxyz=None):
+def _box(stage, path: str, size, pos=(0.0, 0.0, 0.0), mat=None, rot_wxyz=None, vis=None):
     """size 为 (sx, sy, sz) 实际边长。Cube 基准边长 1，用 scale 缩放。"""
     cube = UsdGeom.Cube.Define(stage, path)
     cube.CreateSizeAttr(1.0)
@@ -187,10 +219,12 @@ def _box(stage, path: str, size, pos=(0.0, 0.0, 0.0), mat=None, rot_wxyz=None):
     UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
     if mat is not None:
         _bind_material(cube.GetPrim(), mat)
+    if vis is not None:
+        _bind_visual(cube.GetPrim(), vis)
     return cube
 
 
-def _cyl(stage, path: str, radius, height, pos=(0.0, 0.0, 0.0), axis="Z", mat=None):
+def _cyl(stage, path: str, radius, height, pos=(0.0, 0.0, 0.0), axis="Z", mat=None, vis=None):
     cyl = UsdGeom.Cylinder.Define(stage, path)
     cyl.CreateRadiusAttr(radius)
     cyl.CreateHeightAttr(height)
@@ -206,6 +240,8 @@ def _cyl(stage, path: str, radius, height, pos=(0.0, 0.0, 0.0), axis="Z", mat=No
     UsdPhysics.CollisionAPI.Apply(cyl.GetPrim())
     if mat is not None:
         _bind_material(cyl.GetPrim(), mat)
+    if vis is not None:
+        _bind_visual(cyl.GetPrim(), vis)
     del half
     return cyl
 
@@ -266,6 +302,9 @@ def build_knob(path: str, cfg: KnobCfg) -> str:
 
     m_rim = _phys_material(stage, "/Knob/PhysMat_Rim", cfg.rim_friction, cfg.rim_friction)
     m_pin = _phys_material(stage, "/Knob/PhysMat_Pin", cfg.pin_friction, cfg.pin_friction)
+    v_base = _vis_material(stage, "/Knob/VisBase", COLOR["base"])
+    v_rim = _vis_material(stage, "/Knob/VisRim", COLOR["rim"])
+    v_pin = _vis_material(stage, "/Knob/VisPin", COLOR["pin"])
 
     bx, by, bz = cfg.base_size
     base = _xform(stage, "/Knob/Base", pos=(0.0, 0.0, bz / 2))
@@ -275,22 +314,22 @@ def build_knob(path: str, cfg: KnobCfg) -> str:
     # NotImplementedError；而自己在 USD 里建 body0 为空的 FixedJoint **不生效**——
     # S1 实测整个旋钮以 20 m/s 自由落体到 z=-46 m。
     UsdPhysics.ArticulationRootAPI.Apply(base.GetPrim())
-    _box(stage, "/Knob/Base/geom", (bx, by, bz), mat=m_rim)
+    _box(stage, "/Knob/Base/geom", (bx, by, bz), mat=m_rim, vis=v_base)
 
     _cyl(stage, "/Knob/Base/riser", cfg.riser_radius, cfg.riser_height,
-         pos=(0.0, 0.0, bz / 2 + cfg.riser_height / 2), mat=m_rim)
+         pos=(0.0, 0.0, bz / 2 + cfg.riser_height / 2), mat=m_rim, vis=v_base)
 
     disc_z = bz + cfg.riser_height + cfg.disc_thickness / 2
     disc = _xform(stage, "/Knob/Disc", pos=(0.0, 0.0, disc_z))
     _rigid(disc.GetPrim(), mass=cfg.disc_mass)
-    _cyl(stage, "/Knob/Disc/rim", cfg.disc_radius, cfg.disc_thickness, mat=m_rim)
+    _cyl(stage, "/Knob/Disc/rim", cfg.disc_radius, cfg.disc_thickness, mat=m_rim, vis=v_rim)
     _cyl(
         stage,
         "/Knob/Disc/pin",
         cfg.pin_radius,
         cfg.pin_length,
         pos=(cfg.pin_offset, 0.0, cfg.disc_thickness / 2 + cfg.pin_length / 2),
-        mat=m_pin,
+        mat=m_pin, vis=v_pin,
     )
 
     _joint(
@@ -308,6 +347,8 @@ def build_cabinet(path: str, cfg: CabinetCfg) -> str:
     stage = _new_stage(path)
     root = _xform(stage, "/Cabinet")
     mat = _phys_material(stage, "/Cabinet/PhysMat", cfg.friction, cfg.friction)
+    v_cab = _vis_material(stage, "/Cabinet/VisBody", COLOR["cabinet"])
+    v_hdl = _vis_material(stage, "/Cabinet/VisHandle", COLOR["handle"], rough=0.25)
 
     inner_w = cfg.panel_w - 2 * cfg.wall_t
     inner_h = cfg.panel_h
@@ -317,27 +358,27 @@ def build_cabinet(path: str, cfg: CabinetCfg) -> str:
     body = _xform(stage, "/Cabinet/Body", pos=(0.0, 0.0, 0.0))
     _rigid(body.GetPrim(), mass=50.0)
     UsdPhysics.ArticulationRootAPI.Apply(body.GetPrim())
-    _box(stage, "/Cabinet/Body/bottom", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, -t / 2), mat=mat)
-    _box(stage, "/Cabinet/Body/top", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, inner_h + t / 2), mat=mat)
-    _box(stage, "/Cabinet/Body/left", (depth, t, inner_h), pos=(-depth / 2, (inner_w + t) / 2, inner_h / 2), mat=mat)
-    _box(stage, "/Cabinet/Body/right", (depth, t, inner_h), pos=(-depth / 2, -(inner_w + t) / 2, inner_h / 2), mat=mat)
-    _box(stage, "/Cabinet/Body/back", (t, cfg.panel_w, inner_h), pos=(-depth - t / 2, 0.0, inner_h / 2), mat=mat)
+    _box(stage, "/Cabinet/Body/bottom", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, -t / 2), mat=mat, vis=v_cab)
+    _box(stage, "/Cabinet/Body/top", (depth, cfg.panel_w, t), pos=(-depth / 2, 0.0, inner_h + t / 2), mat=mat, vis=v_cab)
+    _box(stage, "/Cabinet/Body/left", (depth, t, inner_h), pos=(-depth / 2, (inner_w + t) / 2, inner_h / 2), mat=mat, vis=v_cab)
+    _box(stage, "/Cabinet/Body/right", (depth, t, inner_h), pos=(-depth / 2, -(inner_w + t) / 2, inner_h / 2), mat=mat, vis=v_cab)
+    _box(stage, "/Cabinet/Body/back", (t, cfg.panel_w, inner_h), pos=(-depth - t / 2, 0.0, inner_h / 2), mat=mat, vis=v_cab)
 
     drawer = _xform(stage, "/Cabinet/Drawer", pos=(0.0, 0.0, 0.0))
     _rigid(drawer.GetPrim(), mass=cfg.drawer_mass)
     _box(stage, "/Cabinet/Drawer/panel", (cfg.panel_t, cfg.panel_w, cfg.panel_h),
-         pos=(cfg.panel_t / 2, 0.0, cfg.panel_h / 2), mat=mat)
+         pos=(cfg.panel_t / 2, 0.0, cfg.panel_h / 2), mat=mat, vis=v_cab)
     _box(stage, "/Cabinet/Drawer/tray", (cfg.tray_depth, inner_w - 2 * MM, cfg.tray_t),
-         pos=(-cfg.tray_depth / 2, 0.0, cfg.tray_t / 2), mat=mat)
+         pos=(-cfg.tray_depth / 2, 0.0, cfg.tray_t / 2), mat=mat, vis=v_cab)
 
     hx = cfg.panel_t + cfg.handle_clearance + cfg.handle_radius
     hz = cfg.panel_h / 2
     _cyl(stage, "/Cabinet/Drawer/handle_bar", cfg.handle_radius, cfg.handle_bar_len,
-         pos=(hx, 0.0, hz), axis="Y", mat=mat)
+         pos=(hx, 0.0, hz), axis="Y", mat=mat, vis=v_hdl)
     post_len = cfg.handle_clearance + cfg.handle_radius
     for sgn, nm in ((1, "l"), (-1, "r")):
         _cyl(stage, f"/Cabinet/Drawer/handle_post_{nm}", cfg.post_radius, post_len,
-             pos=(cfg.panel_t + post_len / 2, sgn * cfg.post_spacing / 2, hz), axis="X", mat=mat)
+             pos=(cfg.panel_t + post_len / 2, sgn * cfg.post_spacing / 2, hz), axis="X", mat=mat, vis=v_hdl)
 
     _joint(
         stage, "/Cabinet/DrawerJoint", "prismatic", "/Cabinet/Body", "/Cabinet/Drawer",
@@ -356,10 +397,12 @@ def build_eraser(path: str, cfg: EraserCfg) -> str:
     _rigid(root.GetPrim(), mass=cfg.mass)
     m_body = _phys_material(stage, "/Eraser/PhysMat_Body", cfg.body_friction, cfg.body_friction)
     m_pad = _phys_material(stage, "/Eraser/PhysMat_Pad", cfg.pad_friction, cfg.pad_friction)
+    v_bod = _vis_material(stage, "/Eraser/VisBody", COLOR["eraser"])
+    v_pad = _vis_material(stage, "/Eraser/VisPad", COLOR["pad"])
     bw, bd, bh = cfg.body
     pw, pd, ph = cfg.pad
-    _box(stage, "/Eraser/body", (bw, bd, bh), pos=(0.0, 0.0, ph + bh / 2), mat=m_body)
-    _box(stage, "/Eraser/pad", (pw, pd, ph), pos=(0.0, 0.0, ph / 2), mat=m_pad)
+    _box(stage, "/Eraser/body", (bw, bd, bh), pos=(0.0, 0.0, ph + bh / 2), mat=m_body, vis=v_bod)
+    _box(stage, "/Eraser/pad", (pw, pd, ph), pos=(0.0, 0.0, ph / 2), mat=m_pad, vis=v_pad)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -371,9 +414,10 @@ def build_hook(path: str, cfg: HookCfg) -> str:
     root = _xform(stage, "/Hook")
     _rigid(root.GetPrim(), mass=cfg.mass)
     mat = _phys_material(stage, "/Hook/PhysMat", cfg.friction, cfg.friction)
-    _cyl(stage, "/Hook/shaft", cfg.shaft_radius, cfg.shaft_len, pos=(0.0, 0.0, 0.0), axis="Z", mat=mat)
+    vis = _vis_material(stage, "/Hook/Vis", COLOR["hook"])
+    _cyl(stage, "/Hook/shaft", cfg.shaft_radius, cfg.shaft_len, pos=(0.0, 0.0, 0.0), axis="Z", mat=mat, vis=vis)
     _cyl(stage, "/Hook/tip", cfg.shaft_radius, cfg.hook_len,
-         pos=(cfg.hook_len / 2, 0.0, -cfg.shaft_len / 2 + cfg.shaft_radius), axis="X", mat=mat)
+         pos=(cfg.hook_len / 2, 0.0, -cfg.shaft_len / 2 + cfg.shaft_radius), axis="X", mat=mat, vis=vis)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -385,9 +429,11 @@ def build_padrod(path: str, cfg: PadRodCfg) -> str:
     root = _xform(stage, "/PadRod")
     _rigid(root.GetPrim(), mass=cfg.mass)
     mat = _phys_material(stage, "/PadRod/PhysMat", cfg.pad_friction, cfg.pad_friction)
+    v_rod = _vis_material(stage, "/PadRod/VisRod", COLOR["rod"])
+    v_pad = _vis_material(stage, "/PadRod/VisPad", COLOR["pad"])
     pw, pd, ph = cfg.pad
-    _cyl(stage, "/PadRod/shaft", cfg.shaft_radius, cfg.shaft_len, pos=(0.0, 0.0, 0.0), axis="Z", mat=mat)
-    _box(stage, "/PadRod/pad", (pw, pd, ph), pos=(0.0, 0.0, -cfg.shaft_len / 2 - ph / 2), mat=mat)
+    _cyl(stage, "/PadRod/shaft", cfg.shaft_radius, cfg.shaft_len, pos=(0.0, 0.0, 0.0), axis="Z", mat=mat, vis=v_rod)
+    _box(stage, "/PadRod/pad", (pw, pd, ph), pos=(0.0, 0.0, -cfg.shaft_len / 2 - ph / 2), mat=mat, vis=v_pad)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -398,16 +444,18 @@ def build_slider(path: str, cfg: SliderCfg) -> str:
     stage = _new_stage(path)
     root = _xform(stage, "/Slider")
     mat = _phys_material(stage, "/Slider/PhysMat", cfg.friction, cfg.friction)
+    v_rail = _vis_material(stage, "/Slider/VisRail", COLOR["base"])
+    v_blk = _vis_material(stage, "/Slider/VisBlock", COLOR["block"])
 
     rail = _xform(stage, "/Slider/Rail", pos=(0.0, 0.0, cfg.rail_h / 2))
     _rigid(rail.GetPrim(), mass=20.0)
     UsdPhysics.ArticulationRootAPI.Apply(rail.GetPrim())
-    _box(stage, "/Slider/Rail/geom", (cfg.rail_len, cfg.rail_w, cfg.rail_h), mat=mat)
+    _box(stage, "/Slider/Rail/geom", (cfg.rail_len, cfg.rail_w, cfg.rail_h), mat=mat, vis=v_rail)
 
     bw, bd, bh = cfg.block
     block = _xform(stage, "/Slider/Block", pos=(-cfg.travel / 2, 0.0, cfg.rail_h + bh / 2))
     _rigid(block.GetPrim(), mass=cfg.mass)
-    _box(stage, "/Slider/Block/geom", (bw, bd, bh), mat=mat)
+    _box(stage, "/Slider/Block/geom", (bw, bd, bh), mat=mat, vis=v_blk)
 
     _joint(
         stage, "/Slider/BlockJoint", "prismatic", "/Slider/Rail", "/Slider/Block",

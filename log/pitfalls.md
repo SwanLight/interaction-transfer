@@ -403,4 +403,43 @@ if fnv > MAX_NORMAL_FORCE * 1.15:
 
 ---
 
-<!-- 从 P-24 开始追加实际踩到的坑 -->
+## P-24 · headless 渲染的三个坑
+
+**日期**：2026-08-28（S0）
+
+**现象与解法**：
+
+| 现象 | 原因 | 解法 |
+|---|---|---|
+| `RuntimeError: A camera was spawned without the --enable_cameras flag` | `SimulationApp({"enable_cameras": True})` **不起作用**。Camera 检查的是 carb 键 `/isaaclab/cameras_enabled`，只有 `AppLauncher` 会写它 | 用 `AppLauncher(headless=True, enable_cameras=True)`，它同时负责选 `isaaclab.python.headless.rendering.kit`（P-06） |
+| 开了 cameras 后 `sim.step(render=True)` 仍卡死 | 与 P-19 同源 | 物理走 `step(render=False)`；出图时单独 `sim.render()` + `cam.update(dt)` |
+| `cam.set_world_poses_from_view()` 卡死 | 未定位 | 相机位姿在 `CameraCfg.OffsetCfg(pos=..., rot=..., convention="opengl")` 里静态给定，四元数用 `tools/s0_record.py::look_at_quat()` 算 |
+
+**顺带**：只设物理材质不设视觉材质，渲染出来全是白的，**功能区域完全看不出区别**。旋钮的轮缘和销钉一个颜色，而它们的区别就是 D-14 的全部内容。`src/it/build_assets.py::COLOR` 已给所有资产配色。
+
+---
+
+## P-25 · 可视化脚本的动作设计错了，会让正确的结论看起来是错的
+
+**日期**：2026-08-28（S0）
+
+**现象**：S1 数字全对，但录出来的视频要么看不出在验证什么，要么给出相反印象。
+
+**三个实例**：
+
+1. **推子飞出画面**：轮缘那段数字正确（圆盘没转），但画面里推子飞走了，观众合理地理解成"推子飞了所以没转"，而不是"摩擦不够所以没转"。
+2. **两种情况用了同一条轨迹**：把销钉也写成"径向压紧 + 沿圆周走"——力穿过转轴，力矩恒为零，Δθ=0.0000。**视频看起来像销钉也推不动，与 D-14 的结论完全相反。**
+3. **让推子追着销钉走**：推子的位置目标随圆盘一起动，两者互相拉扯，只转到 +0.13 rad（直线推法能到 +1.52）。
+
+**解法**：可视化的动作必须**忠实反映被验证的物理**，不能图省事统一。旋钮的两种情况本来就不同：
+
+```
+销钉：切向直推      τ = F·r        与 μ 无关
+轮缘：径向压+切向拖  τ = μ·F·R      只能靠摩擦
+```
+
+**教训**：视频不是"把数字配个画面"，它是独立的一道检查。`plan/06` §7 要求人工看视频，正是因为它能抓到数字抓不到的东西——但前提是**视频本身得是对的**。
+
+---
+
+<!-- 从 P-26 开始追加实际踩到的坑 -->
