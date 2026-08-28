@@ -35,7 +35,7 @@ def _usd(name: str) -> str:
 
 
 def _rigid_props(max_lin_vel: float = 20.0, max_depenetration_velocity: float = 1.0,
-                 **kw):
+                 angular_damping: float = 0.05, linear_damping: float = 0.05, **kw):
     """刚体属性。
 
     ``max_linear_velocity`` 防穿模：力控轴没有位置参考，物体会一直加速；
@@ -51,8 +51,8 @@ def _rigid_props(max_lin_vel: float = 20.0, max_depenetration_velocity: float = 
         disable_gravity=False,
         max_depenetration_velocity=max_depenetration_velocity,
         max_linear_velocity=max_lin_vel,
-        linear_damping=0.05,
-        angular_damping=0.05,
+        linear_damping=linear_damping,
+        angular_damping=angular_damping,
         **kw,
     )
 
@@ -206,6 +206,22 @@ COLUMN_CFG = RigidObjectCfg(
 """自由立柱：侧推 / 双面搓转 / 推倒。覆盖**切向摩擦主导**的力学。"""
 
 
+ROLLER_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Roller",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=_usd("roller"), activate_contact_sensors=True,
+        # 滚动阻力：PhysX 不建模滚阻，自由圆柱一推就无限加速——实测被推着
+        # 跑出 2.9 m、94% 的操作步脱手。角阻尼是滚阻的标准替代，
+        # 4.0 对应约 0.25 s 的衰减时间常数，滚柱只在被推时滚。
+        rigid_props=_rigid_props(angular_damping=4.0, linear_damping=3.0)),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.03)),
+)
+"""卧倒的自由滚柱：原语 P7 roll / P2 push / P1 press / P12 poke。
+
+冗余规则要求 P7 不能只有一个物体，而立着的 `column` 受侧推只会倒不会滚。
+"""
+
+
 DIAL_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Dial",
     spawn=sim_utils.UsdFileCfg(
@@ -226,15 +242,63 @@ DIAL_CFG = ArticulationCfg(
 """转盘：覆盖**受约束转动**。与旋钮刻意不同（三耳、无低摩擦轮缘），见 D-39。"""
 
 
-WIPEBOARD_CFG = RigidObjectCfg(
-    prim_path="{ENV_REGEX_NS}/WipeBoard",
-    spawn=sim_utils.UsdFileCfg(usd_path=_usd("wipeboard"), activate_contact_sensors=True),
+SLAB_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Slab",
+    spawn=sim_utils.UsdFileCfg(usd_path=_usd("slab"), activate_contact_sensors=True),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
 )
-"""固定擦板：覆盖**带法向力的持续滑移**，即擦拭任务的核心交互原语。
+"""固定斜板：原语 P1 press / P4 rub / P5 shear / P12 poke。
 
 USD 里已设 ``kinematic_enabled=True``（规则 7 / P-17），所以这里不再传
 ``rigid_props``——传了会用默认值把 kinematic 覆盖掉。
+"""
+
+
+FLAP_CFG = ArticulationCfg(
+    prim_path="{ENV_REGEX_NS}/Flap",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=_usd("flap"), activate_contact_sensors=True, rigid_props=_rigid_props(),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False, fix_root_link=True),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.0), joint_pos={"PanelJoint": 0.0}, joint_vel={"PanelJoint": 0.0}),
+    actuators={
+        "panel": ImplicitActuatorCfg(
+            joint_names_expr=["PanelJoint"], effort_limit=60.0, velocity_limit=8.0,
+            # 必须与 build_assets 的 joint_damping 一致
+            stiffness=0.0, damping=2.0,
+        )
+    },
+)
+"""翻板：原语 P9 crank / P4 rub / P1 press / P12 poke。
+
+与 `dial` 同属受约束转动（E4）但转轴在物体**边缘**、力臂随开合角变化，
+是 `plan/03` §2.4.5 冗余规则要求的第二个 E4 物体。
+"""
+
+
+PLUNGER_CFG = ArticulationCfg(
+    prim_path="{ENV_REGEX_NS}/Plunger",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=_usd("plunger"), activate_contact_sensors=True,
+        rigid_props=_rigid_props(),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False, fix_root_link=True),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.0), joint_pos={"RodJoint": 0.0}, joint_vel={"RodJoint": 0.0}),
+    actuators={
+        "rod": ImplicitActuatorCfg(
+            joint_names_expr=["RodJoint"], effort_limit=120.0, velocity_limit=5.0,
+            stiffness=0.0, damping=1.5,
+        )
+    },
+)
+"""柱塞：原语 P10 slide-along / P11 hook-pull / P1 press / P12 poke。
+
+与 `slider` 同属受约束平移（E3）但几何完全不同（圆柱+套筒 vs 方块+导轨，
+端帽台肩 vs 侧向凸缘），是冗余规则要求的第二个 E3 与 P11 物体。
 """
 
 

@@ -105,7 +105,8 @@ class RecordContractTests(unittest.TestCase):
                                 if e["strategy_family"] == "asymmetric"))
 
     def test_划分确定且按_episode(self) -> None:
-        entries = [{"episode_id": f"ep-{i}", "strategy_family": "a" if i < 2 else "b"}
+        entries = [{"episode_id": f"ep-{i}", "strategy_family": "a" if i < 2 else "b",
+                    "success": True}
                    for i in range(10)]
         first = split_episode_entries(entries, seed=3, holdout_strategy_family="b")
         second = split_episode_entries(entries, seed=3, holdout_strategy_family="b")
@@ -117,14 +118,38 @@ class RecordContractTests(unittest.TestCase):
     def test_物理留出集只收_physics_variant_非_nominal(self) -> None:
         """2026-08-28 修的真 bug：旧实现用随机 shuffle 填 unseen_physics_test，
         于是「没见过的物理」里装的是同分布 episode，泛化数字是假的。"""
-        entries = [{"episode_id": f"ep-{i}", "strategy_family": "a",
+        entries = [{"episode_id": f"ep-{i}", "strategy_family": "a", "success": True,
                     "physics_variant": "high_friction" if i < 3 else "nominal"}
                    for i in range(12)]
         s = split_episode_entries(entries, seed=1)
         self.assertEqual(set(s["unseen_physics_test"]), {"ep-0", "ep-1", "ep-2"})
         # 没有变体时该集合必须为空，不许拿随机 episode 顶替
-        plain = [{"episode_id": f"ep-{i}", "strategy_family": "a"} for i in range(12)]
+        plain = [{"episode_id": f"ep-{i}", "strategy_family": "a", "success": True}
+                 for i in range(12)]
         self.assertEqual(split_episode_entries(plain, seed=1)["unseen_physics_test"], [])
+
+    def test_失败样本单独成桶不混进任何划分(self) -> None:
+        """`plan/03` §6：失败、近成功和物理不可行样本单独保存，
+        不与成功 shared-structure 标签混合。
+
+        这条容易被漏掉，因为混进去了照样跑得通——只是
+        `unseen_strategy_test` 里装着一批本来就没完成任务的 episode，
+        那个集合上的泛化数字随之失去意义，而且从结果上看不出来。
+        """
+        entries = [{"episode_id": f"ep-{i}", "strategy_family": "b" if i % 3 == 0 else "a",
+                    "physics_variant": "odd" if i % 5 == 0 else "nominal",
+                    "success": i % 2 == 0}
+                   for i in range(20)]
+        s = split_episode_entries(entries, seed=7, holdout_strategy_family="b")
+        by_id = {e["episode_id"]: e for e in entries}
+        self.assertEqual(set(s["failed"]),
+                         {e["episode_id"] for e in entries if not e["success"]})
+        for name in ("train", "calibration", "in_distribution_test",
+                     "unseen_physics_test", "unseen_strategy_test"):
+            self.assertTrue(all(by_id[i]["success"] for i in s[name]),
+                            f"{name} 里混进了失败样本")
+        self.assertEqual(set().union(*map(set, s.values())),
+                         {e["episode_id"] for e in entries})
 
     def test_manifest_条目数对不上要拒绝(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

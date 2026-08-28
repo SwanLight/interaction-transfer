@@ -262,18 +262,21 @@ def split_episode_entries(
 ) -> dict[str, list[str]]:
     """确定性地按 **episode** 分配划分（P-10：绝不按帧）。
 
-    `plan/03` §7 要一个校准集 + 四个冻结测试集。两个留出集**由元数据决定，
-    不靠随机抽**：
+    `plan/03` §7 要一个校准集 + 四个冻结测试集，另加一个 ``failed`` 桶。
+    三条不靠随机抽、由元数据决定的规则，**按以下顺序**生效：
 
-    - ``unseen_strategy_test``：``strategy_family == holdout_strategy_family`` 的全部
-    - ``unseen_physics_test``：``physics_variant != "nominal"`` 的全部
+    1. ``failed``：``success == False`` 的全部。
+       `plan/03` §6 要求"失败、近成功和物理不可行样本单独保存，
+       **不与成功 shared-structure 标签混合**"。它们仍然留在数据集里可供检查，
+       但不进训练集、不进任何测试集——**一条失败的示教不是示教**，
+       把它放进 `unseen_strategy_test` 会让那个集合的泛化数字失去意义。
+    2. ``unseen_strategy_test``：``strategy_family == holdout_strategy_family`` 的成功样本。
+    3. ``unseen_physics_test``：``physics_variant != "nominal"`` 的其余成功样本。
 
-    ⚠️ 这一条是 2026-08-28 修的一个真 bug：原实现用随机 shuffle 填
-    ``unseen_physics_test``，于是这个名字叫「没见过的物理」的集合里装的其实是
-    同分布 episode。**跑出来的泛化数字会是假的，而且从结果上看不出来**——
-    正是 P-11/P-13 那一类「让结论作废但不报错」的问题。
-
-    没有对应元数据时，该集合就是**空的**，不拿随机 episode 顶替。
+    ⚠️ 第 3 条是 2026-08-28 修的一个真 bug：原实现用随机 shuffle 填它，
+    于是这个名字叫「没有见过的物理」的集合里装的其实是同分布 episode，
+    **跑出来的泛化数字会是假的，而且从结果上看不出来**。
+    没有对应元数据时该集合就是**空的**，不拿随机 episode 顶替。
     """
     if not entries:
         raise RecordError("不能划分空的 episode 列表")
@@ -282,13 +285,15 @@ def split_episode_entries(
         raise RecordError("划分前 episode_id 必须唯一")
 
     by_id = {str(e["episode_id"]): e for e in entries}
+    failed = [i for i in ids if not by_id[i].get("success", False)]
+    taken = set(failed)
+
     holdout_strategy = [
         i for i in ids
-        if holdout_strategy_family is not None
+        if i not in taken and holdout_strategy_family is not None
         and by_id[i].get("strategy_family") == holdout_strategy_family
     ]
-    taken = set(holdout_strategy)
-    # 物理留出：由 physics_variant 决定，不随机抽
+    taken |= set(holdout_strategy)
     holdout_physics = [
         i for i in ids
         if i not in taken and by_id[i].get("physics_variant", "nominal") != "nominal"
@@ -315,6 +320,7 @@ def split_episode_entries(
         "in_distribution_test": remaining[n_train + n_cal: n_train + n_cal + n_test],
         "unseen_physics_test": holdout_physics,
         "unseen_strategy_test": holdout_strategy,
+        "failed": failed,
     }
     assigned = [item for values in result.values() for item in values]
     if sorted(assigned) != sorted(ids):

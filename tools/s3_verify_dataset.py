@@ -49,6 +49,12 @@ def main() -> int:
     ap.add_argument("root")
     ap.add_argument("--sample", type=int, default=40, help="抽查几条 episode 读回")
     ap.add_argument("--seed", type=int, default=0)
+    # 数量门槛按数据集类型给，不写死。`plan/03` §6：
+    #   抽屉  --min-total 450 --min-per-family 150 --min-families 3
+    #   探针  --min-total 0   --min-per-family 200 --min-families 1（逐原语看）
+    ap.add_argument("--min-total", type=int, default=450)
+    ap.add_argument("--min-per-family", type=int, default=150)
+    ap.add_argument("--min-families", type=int, default=3)
     a = ap.parse_args()
 
     root = Path(a.root)
@@ -67,33 +73,58 @@ def main() -> int:
           f"漏 {len(all_ids - set(assigned))}，多 {len(set(assigned) - all_ids)}")
 
     by_id = {e["episode_id"]: e for e in eps}
+    ids_all = list(by_id)
 
     # ---- 留出集名副其实（这两条就是 records.py 修过的那个 bug 的守门人）----
-    fam_hold = {by_id[i]["strategy_family"] for i in splits.get("unseen_strategy_test", [])}
-    fam_train = {by_id[i]["strategy_family"] for i in splits.get("train", [])}
-    check(len(fam_hold) == 1 and not (fam_hold & fam_train),
-          "unseen_strategy_test 只含留出家族，且该家族不在训练集里",
-          f"留出 {sorted(fam_hold)}，训练 {sorted(fam_train)}")
+    #
+    # 判据按**数据集自己声明的意图**来，不假定每个数据集都有留出集：
+    # 探针物体集就没有策略留出（它整体都是 E-I 的训练指令来源，
+    # 留出是在**任务**层面做的，见 `plan/04` §5.4），自由刚体也没有关节阻尼可变。
+    # 但"声明了却没兑现"和"装错了东西"都必须抓住。
+    want_fam = man.get("holdout_strategy_family")
+    hold_fam = splits.get("unseen_strategy_test", [])
+    if want_fam:
+        fam_hold = {by_id[i]["strategy_family"] for i in hold_fam}
+        fam_train = {by_id[i]["strategy_family"] for i in splits.get("train", [])}
+        check(fam_hold == {want_fam} and not (fam_hold & fam_train),
+              "unseen_strategy_test 只含声明的留出家族，且该家族不在训练集里",
+              f"声明留出 {want_fam}，实际留出 {sorted(fam_hold)}，训练 {sorted(fam_train)}")
+    else:
+        check(not hold_fam, "未声明策略留出，unseen_strategy_test 应为空",
+              f"却有 {len(hold_fam)} 条")
+        print("[INFO] 本数据集未声明留出策略家族")
 
-    phys_hold = {by_id[i]["meta"].get("physics_variant") for i in
-                 splits.get("unseen_physics_test", [])}
-    phys_train = {by_id[i]["meta"].get("physics_variant") for i in splits.get("train", [])}
-    check("nominal" not in phys_hold and phys_hold,
-          "unseen_physics_test 只含非名义物理参数", f"{sorted(phys_hold)}")
-    check(phys_train == {"nominal"}, "训练集只含名义物理参数", f"{sorted(phys_train)}")
-
-    damp_h = [by_id[i]["meta"]["physics"]["drawer_joint_damping"]
-              for i in splits.get("unseen_physics_test", [])]
-    damp_t = [by_id[i]["meta"]["physics"]["drawer_joint_damping"]
-              for i in splits.get("train", [])]
-    if damp_h and damp_t:
-        # 逐个值判，不比区间端点：留出区间是**训练区间两侧各一段**，
-        # 两段的凸包当然把训练区间包在里面，比端点会得到假的 FAIL。
-        lo, hi = min(damp_t), max(damp_t)
-        inside = [v for v in damp_h if lo <= v <= hi]
-        check(not inside, "没有留出样本落在训练的物理参数区间内",
-              f"训练 [{lo:.1f}, {hi:.1f}]，留出 {len(inside)} 个落在区间内；"
-              f"留出取值 [{min(damp_h):.1f}, {max(damp_h):.1f}]")
+    has_var = [i for i in ids_all
+               if by_id[i]["meta"].get("physics_variant", "nominal") != "nominal"]
+    hold_phys = splits.get("unseen_physics_test", [])
+    if has_var:
+        phys_hold = {by_id[i]["meta"].get("physics_variant") for i in hold_phys}
+        check("nominal" not in phys_hold and phys_hold,
+              "unseen_physics_test 只含非名义物理参数", f"{sorted(phys_hold)}")
+        check(set(hold_phys) == set(has_var) - set(splits.get("failed", [])),
+              "所有成功的物理变体 episode 都进了 unseen_physics_test",
+              f"变体 {len(has_var)} 条，留出 {len(hold_phys)} 条")
+        damp_h = [by_id[i]["meta"]["physics"].get("joint_damping",
+                  by_id[i]["meta"]["physics"].get("drawer_joint_damping", 0.0))
+                  for i in hold_phys]
+        damp_t = [by_id[i]["meta"]["physics"].get("joint_damping",
+                  by_id[i]["meta"]["physics"].get("drawer_joint_damping", 0.0))
+                  for i in splits.get("train", [])]
+        if damp_h and damp_t and max(damp_t) > 0:
+            # 逐个值判，不比区间端点：留出区间是**训练区间两侧各一段**，
+            # 两段的凸包当然把训练区间包在里面，比端点会得到假的 FAIL。
+            lo, hi = min(damp_t), max(damp_t)
+            inside = [v for v in damp_h if lo <= v <= hi]
+            check(not inside, "没有留出样本落在训练的物理参数区间内",
+                  f"训练 [{lo:.2f}, {hi:.2f}]，留出 {len(inside)} 个落在区间内；"
+                  f"留出取值 [{min(damp_h):.2f}, {max(damp_h):.2f}]")
+    else:
+        check(not hold_phys, "没有物理变体样本，unseen_physics_test 应为空",
+              f"却有 {len(hold_phys)} 条")
+        print("[INFO] 本数据集没有可变的物理参数（自由刚体无关节阻尼）")
+    check(all(by_id[i]["meta"].get("physics_variant", "nominal") == "nominal"
+              for i in splits.get("train", [])),
+          "训练集只含名义物理参数")
 
     check(len(splits.get("calibration", [])) > 0,
           "校准集非空（conformal 阈值要用，D-17）",
@@ -141,11 +172,15 @@ def main() -> int:
     print(f"\n成功率 {100 * ok_rate:.1f}%，各家族成功轨迹数：")
     for k in sorted(fam):
         print(f"  {k:<16}{fam[k]:>5}")
-    check(sum(fam.values()) >= 450, "抽屉成功轨迹总数 ≥450（`plan/03` §6）",
-          f"{sum(fam.values())}")
-    check(sum(1 for v in fam.values() if v >= 150) >= 3,
-          "至少 3 个策略家族各有 ≥150 条成功轨迹（`plan/03` §6）",
-          f"达标家族 {sum(1 for v in fam.values() if v >= 150)} 个")
+    if a.min_total:
+        check(sum(fam.values()) >= a.min_total,
+              f"成功轨迹总数 ≥{a.min_total}（`plan/03` §6）", f"{sum(fam.values())}")
+    n_ok = sum(1 for v in fam.values() if v >= a.min_per_family)
+    check(n_ok >= a.min_families,
+          f"至少 {a.min_families} 个家族各有 ≥{a.min_per_family} 条成功轨迹"
+          f"（`plan/03` §6）",
+          f"达标 {n_ok} 个，未达标 "
+          f"{sorted(k for k, v in fam.items() if v < a.min_per_family)}")
 
     print()
     if FAIL:

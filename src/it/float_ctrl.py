@@ -55,13 +55,20 @@ class FloatingPD:
         self.mass = asset.data.default_mass.sum(dim=-1).to(asset.device)
 
     def compute(self, target_pos_w, target_quat_w=None, ff_force=None, ff_torque=None,
-                force_mask=None):
+                force_mask=None, force_dir=None):
         """返回 (force, torque)，形状均为 (N, 1, 3)，可直接喂给
         ``set_external_force_and_torque``。
 
         Args:
             force_mask: (N, 3) bool。为 True 的轴走**纯力控**——输出直接取
-                ``ff_force``（外加重力补偿），不做位置 PD。
+                ``ff_force``（外加重力补偿），不做位置 PD。只能表达
+                **与世界轴对齐**的力控方向。
+            force_dir: (N, 3)。给定时改用**沿任意方向**的混合控制：
+                沿 ``force_dir`` 力控，其正交补里仍然位置 PD。
+                探针物体上的接触面法向千奇百怪，用 ``force_mask`` 只能整轴
+                切换——实测把三个轴全设成力控之后，切向的位置指令完全失效，
+                "捏住物体挪走"这类原语的物体位移恒等于 0。
+                两个参数同时给时以 ``force_dir`` 为准。
 
         为什么需要混合控制：位置 PD 和前馈压力会互相抵消。PD 把物体牢牢固定
         在目标位姿，压不进接触面，接触力只有 ``kp·m·穿透量``——实测把推子
@@ -82,7 +89,18 @@ class FloatingPD:
         else:
             tq = -self.kd_rot * m * d.root_ang_vel_w
 
-        if ff_force is not None:
+        if ff_force is not None and force_dir is not None:
+            n = force_dir / force_dir.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+            grav = torch.zeros_like(f)
+            if self.compensate_gravity:
+                grav[:, 2] = self.g * m.squeeze(-1)
+            # 位置 PD 只保留切向分量，法向换成力控 + 法向速度阻尼
+            f_tan = f - (f * n).sum(-1, keepdim=True) * n
+            f_nrm = ((ff_force * n).sum(-1, keepdim=True)
+                     + (grav * n).sum(-1, keepdim=True)
+                     - self.kd_force * m * (d.root_lin_vel_w * n).sum(-1, keepdim=True)) * n
+            f = f_tan + f_nrm
+        elif ff_force is not None:
             if force_mask is None:
                 f = f + ff_force
             else:

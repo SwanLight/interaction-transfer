@@ -148,6 +148,24 @@ class PlateCfg:
 
 
 @dataclass
+class RollerCfg:
+    """探针物体集：卧倒的滚柱。plan/03 §2.4，原语 P7 roll / P2 push / P1 press / P12 poke。
+
+    轴线水平躺在台面上的圆柱，推它就滚。
+
+    立着的 `column` 提供不了这一格：竖直圆柱受侧推只会**倒**，不会滚
+    （实测 roll 那一档 97.7% 的操作步脱手、物体跑出 2 米）。滚动是接触点
+    在物体表面上移动而不打滑的那一类接触（Huang 把它归在 sticking 里），
+    与滑移是不同的格，必须有能真滚的物体。
+    """
+
+    radius: float = 30 * MM
+    length: float = 140 * MM
+    mass: float = 0.35
+    friction: float = 0.8
+
+
+@dataclass
 class SliderCfg:
     """预训练物体集：滑块导轨。plan/03 §2.4。"""
 
@@ -155,10 +173,12 @@ class SliderCfg:
     rail_w: float = 40 * MM
     rail_h: float = 20 * MM
     block: tuple[float, float, float] = (60 * MM, 50 * MM, 40 * MM)
-    #: 块顶部的凸缘。**必须有**：没有它，滑块只能被"推"，而钩杆的留出任务
-    #: 是抽屉——那是"勾住某个凸出结构往外拉"。预训练集若只有推没有拉，
-    #: 钩杆等于从没做过留出任务所需的那类接合方式（D-39）。
-    flange: tuple[float, float, float] = (10 * MM, 70 * MM, 12 * MM)
+    #: 块顶上竖起来的挡片。**必须有**：没有它滑块只能被"推"。挡片高出块顶，
+    #: 于是它的**两个面都够得到**——从一侧压是推，绕到另一侧压就是拉。
+    #: P11 hook-pull 这一格靠的就是"压一个背向自己的面"，与抽屉手指压把手
+    #: 背面是同一件事（`plan/03` §2.4.4）。
+    #: 早先做成侧向凸缘，与块的侧面齐平，根本没有可够到的台肩。
+    tab: tuple[float, float, float] = (10 * MM, 70 * MM, 34 * MM)
     travel: float = 150 * MM
     mass: float = 0.4
     friction: float = 0.5
@@ -176,7 +196,10 @@ class BlockCfg:
 
     size: tuple[float, float, float] = (60 * MM, 45 * MM, 40 * MM)
     mass: float = 0.25
-    friction: float = 0.6
+    #: 0.6 -> 0.9。P6 pivot（撬翻）要求"先翻不先滑"，条件是 μ·h > 半宽，
+    #: 而规则 9 规定摩擦按 **min** 组合——地面设成 0.9 而方块留 0.6 的话，
+    #: 实际接触摩擦仍是 0.6，方块只会被推着滑走。两边都得是 0.9。
+    friction: float = 0.9
 
 
 @dataclass
@@ -189,7 +212,11 @@ class ColumnCfg:
     """
 
     radius: float = 28 * MM
-    height: float = 120 * MM
+    #: 120 -> 80 mm。先倒不先滑的条件是 μ·h > 半径：h=120 时推中部就已经
+    #: μ·h = 0.7×0.06 = 0.042 > 0.028，怎么推都是推倒，push/roll 全部失效。
+    #: h=80 之后，推低处（h=25 mm）是推移，推高处（h=70 mm）才是撬翻，
+    #: 同一个物体上两种原语都成立。
+    height: float = 80 * MM
     mass: float = 0.30
     friction: float = 0.7
 
@@ -221,23 +248,77 @@ class DialCfg:
 
 
 @dataclass
-class WipeBoardCfg:
-    """预训练物体集：擦板。plan/03 §2.4 的**新增项**，理由见 D-39。
+class SlabCfg:
+    """探针物体集：斜板。plan/03 §2.4，原语 P1 press / P4 rub / P5 shear / P12 poke。
 
-    固定（kinematic）平面，可带倾角。它覆盖**在固定面上带法向力持续滑移**
-    这一档——垫头杆、夹爪、Allegro 的留出任务都是擦拭，而擦拭的核心交互
-    就是这个。预训练集若没有它，那三个执行器等于从没做过留出任务所需的
-    那类动作。
+    固定（kinematic）平板，可带倾角。它是 **E5（物体不动）× M2（持续 sliding）**
+    这一格最简单的实现之一。
 
-    **与擦拭任务的平面刻意不同**：400×300 vs 600×500、可倾斜、
-    没有 dirt grid、没有黑板擦。同样是"在面上滑"，但不是那个任务。
+    ⚠️ **这一格不由它独占**：`block` 被压住时它的顶面同样是静止表面，
+    `ridge` 也提供固定曲面。冗余规则（`plan/03` §2.4.5）要求每条原语
+    至少两个几何不同的物体承载——删掉本物体，P1/P4/P5 仍然被覆盖。
+    这一点是"物体集不是照着擦拭任务反推的"的可检验依据。
+
+    200×150 是**探针**尺度，不是工作台尺度；无 dirt grid、无黑板擦、
+    可倾斜。它不产生 envelope，只产生 interaction record。
 
     规则 7：必须是 kinematic 刚体而不是静态碰撞体，否则 filter 通道失效（P-17）。
     """
 
-    size: tuple[float, float, float] = (400 * MM, 300 * MM, 20 * MM)
-    tilt_deg: float = 0.0
+    size: tuple[float, float, float] = (200 * MM, 150 * MM, 20 * MM)
+    tilt_deg: float = 15.0
     friction: float = 0.45
+
+
+@dataclass
+class FlapCfg:
+    """探针物体集：立板门。plan/03 §2.4，原语 P9 crank / P4 rub / P1 press / P12 poke。
+
+    竖直立着、沿一条**竖直边**铰接的板，推它的板面使其绕立柱转开。
+
+    ⚠️ 最初设计成"平放在底座上、沿水平边铰接的翻板"，**几何上做不到**：
+    平板执行器没法伸到板底下把它掀起来，只能压，而压是被底座挡住的。
+    改成立着的门之后，"推板面"就是最自然的动作，而且**接触点离转轴多远**
+    直接改变所需力矩——P9 crank 的力臂含义因此是真的，不是名义上的。
+
+    与 `dial` 同属 E4（受约束转动）但几何完全不同：转轴在物体边缘而非中心、
+    接触面是平板而非圆柱凸耳、力臂随接触位置连续变化。
+    """
+
+    base: tuple[float, float, float] = (120 * MM, 120 * MM, 16 * MM)
+    post_radius: float = 12 * MM
+    panel: tuple[float, float, float] = (10 * MM, 150 * MM, 120 * MM)
+    mass: float = 0.20
+    friction: float = 0.6
+    #: 0.05 -> 2.0。推力矩约 0.5~1.4 N·m，阻尼 0.05 时角速度 10 rad/s，
+    #: 门 0.08 s 就甩到限位，采集板追不上（44% 的步脱手）。
+    #: 2.0 对应 0.27~0.7 rad/s，开满 45° 要 1~3 s，正好是一个 manipulate 阶段。
+    joint_damping: float = 2.0
+    #: ±45°：开到 ±100° 时板绕铰链扫过的弧长太大，采集板的位置 PD 跟不上，
+    #: 实测 crank 有 45% 的操作步是脱手的。
+    joint_limit_deg: tuple[float, float] = (-45.0, 45.0)
+
+
+@dataclass
+class PlungerCfg:
+    """探针物体集：柱塞。plan/03 §2.4，原语 P10 slide-along / P11 hook-pull / P1 / P12。
+
+    圆柱在固定套筒里滑动，外端带一个比杆粗的帽——帽的背面提供可勾的台肩。
+    与 `slider` 同属 E3（受约束平移）但几何完全不同：圆柱 vs 方块、
+    套筒约束 vs 导轨约束、端帽台肩 vs 侧向凸缘。
+    冗余规则要求 E3 与 P11 这两格不能只有一个物体。
+    """
+
+    sleeve_radius: float = 26 * MM
+    sleeve_len: float = 90 * MM
+    rod_radius: float = 16 * MM
+    rod_len: float = 200 * MM
+    cap_radius: float = 30 * MM
+    cap_len: float = 14 * MM
+    travel: float = 110 * MM
+    mass: float = 0.25
+    friction: float = 0.5
+    joint_damping: float = 1.5
 
 
 @dataclass
@@ -268,8 +349,11 @@ class BuildCfg:
     plate: PlateCfg = field(default_factory=PlateCfg)
     block: BlockCfg = field(default_factory=BlockCfg)
     column: ColumnCfg = field(default_factory=ColumnCfg)
+    roller: RollerCfg = field(default_factory=RollerCfg)
     dial: DialCfg = field(default_factory=DialCfg)
-    wipeboard: WipeBoardCfg = field(default_factory=WipeBoardCfg)
+    slab: SlabCfg = field(default_factory=SlabCfg)
+    flap: FlapCfg = field(default_factory=FlapCfg)
+    plunger: PlungerCfg = field(default_factory=PlungerCfg)
     ridge: RidgeCfg = field(default_factory=RidgeCfg)
     slider: SliderCfg = field(default_factory=SliderCfg)
 
@@ -323,7 +407,9 @@ COLOR = {
     "column":  (0.35, 0.70, 0.45),
     "dial":    (0.80, 0.70, 0.30),
     "lug":     (0.95, 0.45, 0.20),
-    "wipe":    (0.30, 0.45, 0.60),
+    "slab":    (0.30, 0.45, 0.60),
+    "flap":    (0.55, 0.60, 0.35),
+    "plunger": (0.60, 0.40, 0.55),
     "ridge":   (0.75, 0.55, 0.35),
     "plate0":  (0.90, 0.55, 0.15),   # 橙板
     "plate1":  (0.15, 0.55, 0.90),   # 蓝板
@@ -654,9 +740,9 @@ def build_slider(path: str, cfg: SliderCfg) -> str:
     block = _xform(stage, "/Slider/Block", pos=(-cfg.travel / 2, 0.0, cfg.rail_h + bh / 2))
     _rigid(block.GetPrim(), mass=cfg.mass)
     _box(stage, "/Slider/Block/geom", (bw, bd, bh), mat=mat, vis=v_blk)
-    fw, fd, fh = cfg.flange
-    _box(stage, "/Slider/Block/flange", (fw, fd, fh),
-         pos=(bw / 2 + fw / 2, 0.0, bh / 2 - fh / 2), mat=mat, vis=v_blk)
+    tw, td, th = cfg.tab
+    _box(stage, "/Slider/Block/tab", (tw, td, th),
+         pos=(bw / 2 - tw / 2 - 6 * MM, 0.0, bh / 2 + th / 2 - 6 * MM), mat=mat, vis=v_blk)
 
     _joint(
         stage, "/Slider/BlockJoint", "prismatic", "/Slider/Rail", "/Slider/Block",
@@ -689,6 +775,19 @@ def build_column(path: str, cfg: ColumnCfg) -> str:
     mat = _phys_material(stage, "/Column/PhysMat", cfg.friction, cfg.friction)
     vis = _vis_material(stage, "/Column/Vis", COLOR["column"])
     _cyl(stage, "/Column/geom", cfg.radius, cfg.height, axis="Z", mat=mat, vis=vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_roller(path: str, cfg: RollerCfg) -> str:
+    """探针物体集：卧倒的自由滚柱，轴线沿 Y。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Roller")
+    _rigid(root.GetPrim(), mass=cfg.mass)
+    mat = _phys_material(stage, "/Roller/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/Roller/Vis", COLOR["column"])
+    _cyl(stage, "/Roller/geom", cfg.radius, cfg.length, axis="Y", mat=mat, vis=vis)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -737,21 +836,94 @@ def build_dial(path: str, cfg: DialCfg) -> str:
     return path
 
 
-def build_wipeboard(path: str, cfg: WipeBoardCfg) -> str:
-    """预训练物体集：固定擦板，可带倾角。
+def build_slab(path: str, cfg: SlabCfg) -> str:
+    """探针物体集：固定斜板。
 
     规则 7：kinematic 刚体，不是静态碰撞体——静态碰撞体会让 filter 通道
     静默失效，region 和 mode 两个字段直接作废（P-17）。
     """
     stage = _new_stage(path)
-    root = _xform(stage, "/WipeBoard")
-    mat = _phys_material(stage, "/WipeBoard/PhysMat", cfg.friction, cfg.friction)
-    vis = _vis_material(stage, "/WipeBoard/Vis", COLOR["wipe"])
+    root = _xform(stage, "/Slab")
+    mat = _phys_material(stage, "/Slab/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/Slab/Vis", COLOR["slab"])
     half = math.radians(cfg.tilt_deg) / 2.0
-    board = _xform(stage, "/WipeBoard/Board", pos=(0.0, 0.0, 0.0),
+    board = _xform(stage, "/Slab/Board", pos=(0.0, 0.0, 0.0),
                    rot_wxyz=(math.cos(half), 0.0, math.sin(half), 0.0))
     _rigid(board.GetPrim(), mass=100.0, kinematic=True)
-    _box(stage, "/WipeBoard/Board/geom", cfg.size, mat=mat, vis=vis)
+    _box(stage, "/Slab/Board/geom", cfg.size, mat=mat, vis=vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_flap(path: str, cfg: FlapCfg) -> str:
+    """探针物体集：竖直铰接的立板门。转轴在板的一条竖边上。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Flap")
+    mat = _phys_material(stage, "/Flap/PhysMat", cfg.friction, cfg.friction)
+    v_base = _vis_material(stage, "/Flap/VisBase", COLOR["base"])
+    v_pan = _vis_material(stage, "/Flap/VisPanel", COLOR["flap"])
+
+    bw, bd, bh = cfg.base
+    pw, pd, ph = cfg.panel
+    base = _xform(stage, "/Flap/Base", pos=(0.0, 0.0, bh / 2))
+    _rigid(base.GetPrim(), mass=20.0)
+    UsdPhysics.ArticulationRootAPI.Apply(base.GetPrim())
+    _box(stage, "/Flap/Base/geom", (bw, bd, bh), mat=mat, vis=v_base)
+    _cyl(stage, "/Flap/Base/post", cfg.post_radius, ph + bh,
+         pos=(0.0, 0.0, (ph + bh) / 2), axis="Z", mat=mat, vis=v_base)
+
+    # 板竖着立在立柱旁边，铰链轴过立柱中心、沿 Z
+    panel = _xform(stage, "/Flap/Panel", pos=(0.0, pd / 2 + cfg.post_radius, bh + ph / 2))
+    _rigid(panel.GetPrim(), mass=cfg.mass)
+    _box(stage, "/Flap/Panel/geom", (pw, pd, ph), mat=mat, vis=v_pan)
+
+    _joint(stage, "/Flap/PanelJoint", "revolute", "/Flap/Base", "/Flap/Panel", "Z",
+           (0.0, 0.0, bh / 2 + ph / 2), (0.0, -pd / 2 - cfg.post_radius, 0.0),
+           limits=cfg.joint_limit_deg, damping=cfg.joint_damping)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
+def build_plunger(path: str, cfg: PlungerCfg) -> str:
+    """探针物体集：圆柱在固定套筒内滑动，外端带帽，帽背面是可勾的台肩。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Plunger")
+    mat = _phys_material(stage, "/Plunger/PhysMat", cfg.friction, cfg.friction)
+    v_slv = _vis_material(stage, "/Plunger/VisSleeve", COLOR["base"])
+    v_rod = _vis_material(stage, "/Plunger/VisRod", COLOR["plunger"])
+
+    # 轴线高度必须让**端帽**离地：帽半径 30 mm 比套筒半径还大，
+    # 按套筒半径 26 mm 放轴线的话帽子有 4 mm 埋进台面，杆被地面卡住，
+    # 实测 slide_along / hook_pull 的关节位移恒为 0。
+    z = cfg.cap_radius + 6 * MM
+    sleeve = _xform(stage, "/Plunger/Sleeve", pos=(0.0, 0.0, z))
+    _rigid(sleeve.GetPrim(), mass=20.0)
+    UsdPhysics.ArticulationRootAPI.Apply(sleeve.GetPrim())
+    # 套筒做成 U 形槽，**不能是实心圆柱**——实心的话杆推进去就是两个实体
+    # 互相穿插，PhysX 直接把关节卡死，实测 slide_along 的关节位移恒为 0。
+    # 约束本来就由 prismatic joint 提供，套筒只负责"看起来像个导向"。
+    gap = cfg.rod_radius + 4 * MM
+    wall = 8 * MM
+    _box(stage, "/Plunger/Sleeve/bottom", (cfg.sleeve_len, 2 * (gap + wall), wall),
+         pos=(0.0, 0.0, -gap - wall / 2), mat=mat, vis=v_slv)
+    for sgn, nm in ((1, "l"), (-1, "r")):
+        _box(stage, f"/Plunger/Sleeve/side_{nm}", (cfg.sleeve_len, wall, 2 * gap),
+             pos=(0.0, sgn * (gap + wall / 2), 0.0), mat=mat, vis=v_slv)
+
+    rod_x = cfg.sleeve_len / 2 + cfg.rod_len / 2 - 30 * MM
+    rod = _xform(stage, "/Plunger/Rod", pos=(rod_x, 0.0, z))
+    _rigid(rod.GetPrim(), mass=cfg.mass)
+    _cyl(stage, "/Plunger/Rod/geom", cfg.rod_radius, cfg.rod_len,
+         axis="X", mat=mat, vis=v_rod)
+    _cyl(stage, "/Plunger/Rod/cap", cfg.cap_radius, cfg.cap_len,
+         pos=(cfg.rod_len / 2 - cfg.cap_len / 2, 0.0, 0.0), axis="X", mat=mat, vis=v_rod)
+
+    # 行程对称：杆停在中点，推得进也拉得出（同 slider 的 joint_init）
+    _joint(stage, "/Plunger/RodJoint", "prismatic", "/Plunger/Sleeve", "/Plunger/Rod",
+           "X", (rod_x, 0.0, 0.0), (0.0, 0.0, 0.0),
+           limits=(-cfg.travel / 2, cfg.travel / 2), damping=cfg.joint_damping)
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
     return path
@@ -788,8 +960,11 @@ BUILDERS = {
     "slider": (build_slider, "slider"),
     "block": (build_block, "block"),
     "column": (build_column, "column"),
+    "roller": (build_roller, "roller"),
     "dial": (build_dial, "dial"),
-    "wipeboard": (build_wipeboard, "wipeboard"),
+    "slab": (build_slab, "slab"),
+    "flap": (build_flap, "flap"),
+    "plunger": (build_plunger, "plunger"),
     "ridge": (build_ridge, "ridge"),
 }
 

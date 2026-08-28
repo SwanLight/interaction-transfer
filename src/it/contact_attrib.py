@@ -64,27 +64,38 @@ def to_local(points_w: torch.Tensor, origin_w: torch.Tensor,
 PLATE_PARTS = ("work_face", "back_face", "edge")
 
 
-def classify_plate_face(normals_local: torch.Tensor,
+def classify_plate_face(normals_local: torch.Tensor, pos_local: torch.Tensor,
+                        weights: torch.Tensor, valid: torch.Tensor,
                         face_align: float = 0.7) -> torch.Tensor:
     """判定接触落在板的哪个面，返回 (N, K) int8：0=工作面 / 1=背面 / 2=侧边。
 
-    **按接触法向判，不按接触点的位置判。** 板只有 3 mm 厚，而 PhysX 报的接触点
-    在两个表面之间浮动——实测一次正常的工作面接触，点的局部 z 在 0.3~1.7 mm
-    之间摆（板半厚才 1.5 mm）。用"离哪个面近"去判，会把一半的正常接触判成侧边，
-    于是验收表上凭空多出 36% 的"拿边角蹭"，而那是分类器的错，不是物理的错。
+    分两步，两步都**不依赖 PhysX 报法向的正负约定**：
 
-    法向就干净得多：实测 100% 的工作面接触满足 ``|n_z| > 0.7``，且法向在板局部系
-    里恒指向**工作面朝外**的方向（+Z）。真正的边缘接触，法向躺在板平面内，
-    ``|n_z|`` 会明显小于 1。
+    1. **面还是棱**，看法向与板面法向的夹角。板只有 3 mm 厚，接触点位置在
+       两个表面之间浮动（实测正常的工作面接触，局部 z 在 0.3~1.7 mm 之间摆，
+       而板半厚才 1.5 mm），用位置判会把一半正常接触判成侧边——那是 P-35。
+       法向就干净：实测 100% 的面接触满足 ``|n_z| > 0.7``。
+    2. **哪一面**，看接触点整体落在板的哪一侧，用**法向力加权的局部 z 均值**。
+
+    ⚠️ 第 2 步**不能用法向的正负号**。PhysX 报的接触法向指向哪一侧取决于
+    这一对刚体在内部的先后次序，**同一份代码换个场景就会翻**：抽屉场景里
+    工作面接触的局部法向是 +Z，探针方块场景里是 −Z，于是同样的判据把
+    100% 的正常接触判成了"用背面接触"。位置是几何量，没有这个问题；
+    对整块板取加权均值也压掉了单点位置的抖动。
 
     Args:
-        normals_local: (N, K, 3)，已转进**板局部系**的接触法向。
-        face_align: 认定为"面接触"的 ``|n_z|`` 下限。
+        normals_local: (N, K, 3) 板局部系的接触法向。
+        pos_local: (N, K, 3) 板局部系的接触点位置。
+        weights: (N, K) 加权用的法向力幅值。
+        valid: (N, K) 有效位掩码。
     """
     nz = normals_local[..., 2]
-    mode = torch.full(nz.shape, 2, dtype=torch.int8, device=nz.device)
-    mode[nz > face_align] = 0
-    mode[nz < -face_align] = 1
+    w = weights.abs() * valid
+    z_bar = (pos_local[..., 2] * w).sum(dim=1) / w.sum(dim=1).clamp_min(1e-9)
+    work = (z_bar >= 0.0).unsqueeze(1).expand_as(nz)
+    mode = torch.where(work, torch.zeros_like(nz, dtype=torch.int8),
+                       torch.ones_like(nz, dtype=torch.int8))
+    mode[nz.abs() <= face_align] = 2
     return mode
 
 
@@ -164,3 +175,55 @@ def bar_span_fraction(pts_local: torch.Tensor, post_half_spacing: float,
     要盯住这一点——柱外末端不是正常的操作部位。
     """
     return pts_local[..., 1].abs() < (post_half_spacing - post_radius)
+
+
+def quat_from_frame(z_axis: torch.Tensor, x_hint: torch.Tensor) -> torch.Tensor:
+    """由"局部 +Z 指向哪、局部 +X 大致指向哪"构造姿态四元数 (N, 4)。
+
+    采集板的工作面法向是局部 +Z，所以"把板正对某个表面"这件事，
+    自然的写法就是给定 z 轴；``x_hint`` 决定板绕自身法向的那一个自由度
+    （板是长方形，长边朝哪不是无所谓的）。
+
+    比逐个轴角相乘可靠：`plan/03` §2.4 的探针物体上有几十个接触位点，
+    法向千奇百怪，用轴角拼会在某些朝向上碰到万向锁式的分支错误。
+
+    Args:
+        z_axis: (N, 3) 期望的局部 +Z 世界方向，不必归一化。
+        x_hint: (N, 3) 期望的局部 +X 大致方向；会被正交化到垂直于 z_axis。
+    """
+    z = z_axis / z_axis.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+    x = x_hint - (x_hint * z).sum(dim=-1, keepdim=True) * z
+    bad = x.norm(dim=-1) < 1e-6
+    if bad.any():
+        # x_hint 与 z 共线时随便换一个不共线的参考方向
+        alt = torch.zeros_like(x)
+        alt[:, 0] = 1.0
+        alt[z[:, 0].abs() > 0.9, 0] = 0.0
+        alt[z[:, 0].abs() > 0.9, 1] = 1.0
+        x = torch.where(bad.unsqueeze(-1),
+                        alt - (alt * z).sum(dim=-1, keepdim=True) * z, x)
+    x = x / x.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+    y = torch.cross(z, x, dim=-1)
+    m = torch.stack([x, y, z], dim=-1)                       # 列向量即局部轴
+
+    t = m[:, 0, 0] + m[:, 1, 1] + m[:, 2, 2]
+    q = torch.zeros(z.shape[0], 4, device=z.device, dtype=z.dtype)
+    big = t > 0
+    s = torch.sqrt((t + 1.0).clamp_min(1e-12)) * 2.0
+    q[big, 0] = 0.25 * s[big]
+    q[big, 1] = (m[big, 2, 1] - m[big, 1, 2]) / s[big]
+    q[big, 2] = (m[big, 0, 2] - m[big, 2, 0]) / s[big]
+    q[big, 3] = (m[big, 1, 0] - m[big, 0, 1]) / s[big]
+    # 迹为负时按最大对角元分支，避免除以接近零的数
+    for i in range(3):
+        j, k = (i + 1) % 3, (i + 2) % 3
+        sel = ~big & (m[:, i, i] >= m[:, j, j]) & (m[:, i, i] >= m[:, k, k])
+        if not sel.any():
+            continue
+        si = torch.sqrt((1.0 + m[sel, i, i] - m[sel, j, j] - m[sel, k, k])
+                        .clamp_min(1e-12)) * 2.0
+        q[sel, 0] = (m[sel, k, j] - m[sel, j, k]) / si
+        q[sel, 1 + i] = 0.25 * si
+        q[sel, 1 + j] = (m[sel, j, i] + m[sel, i, j]) / si
+        q[sel, 1 + k] = (m[sel, k, i] + m[sel, i, k]) / si
+    return q / q.norm(dim=-1, keepdim=True).clamp_min(1e-9)

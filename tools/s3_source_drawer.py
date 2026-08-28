@@ -633,8 +633,12 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
                         panel_t=C.panel_t),
                     torch.full_like(buf.part[frame, p], -1))
                 nrm_plate = rotate_inverse(plate.data.root_quat_w, cp["normals"])
+                pos_plate = to_local(cp["positions"], plate.data.root_pos_w,
+                                     plate.data.root_quat_w)
                 buf.face[frame, p] = torch.where(
-                    cp["valid"], classify_plate_face(nrm_plate),
+                    cp["valid"],
+                    classify_plate_face(nrm_plate, pos_plate,
+                                        cp["normal_forces"], cp["valid"]),
                     torch.full_like(buf.face[frame, p], -1))
                 buf.inspan[frame, p] = cp["valid"] & bar_span_fraction(
                     pos_l, C.post_spacing / 2, C.post_radius)
@@ -916,7 +920,8 @@ def main() -> int:
                                    holdout_strategy_family=_a.holdout_family)
     write_manifest(records, out_dir / "manifest.json", dataset_name="s3_drawer_source",
                    generator_git_sha=git_sha, splits=splits,
-                   extra={"task": "drawer", "families": list(families)})
+                   extra={"task": "drawer", "families": list(families),
+                          "holdout_strategy_family": _a.holdout_family})
     report(out_dir, records, splits)
     return 0
 
