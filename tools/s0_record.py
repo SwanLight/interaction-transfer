@@ -33,6 +33,8 @@ _ap.add_argument("--out", default="/tmp/s0")
 _ap.add_argument("--width", type=int, default=960)
 _ap.add_argument("--height", type=int, default=540)
 _ap.add_argument("--fps", type=int, default=30)
+_ap.add_argument("--force", type=float, default=None,
+                 help="接触法向力(N)。默认用安全上限；录像建议给接近实际需求的值")
 _args, _ = _ap.parse_known_args()
 
 from isaaclab.app import AppLauncher  # noqa: E402
@@ -180,7 +182,10 @@ def _rec_knob_case(out, W, H, fps, case):
     pusher: RigidObject = scene["pusher"]
     rec = Recorder(sim, scene, scene["cam"], out, f"knob_{case}", fps)
     dt = rec.dt
-    FN = A.MAX_NORMAL_FORCE
+    # 自检顶到安全上限（问「上限内轮缘行不行」）；录像用接近实际需求的力度。
+    # τ_need = 阻尼 × ω = 0.28 × 1.5 = 0.42 N·m，销钉力臂 52 mm → 最小 8.1 N。
+    # 用 3 倍于需求的 25 N 录像，推子像被憋着然后弹飞，反而干扰理解。见 D-29。
+    FN = _args.force if _args.force is not None else A.MAX_NORMAL_FORCE
     half = 0.015
 
     zero = torch.zeros(1, 1, device=sim.device)
@@ -240,7 +245,7 @@ def _rec_knob_case(out, W, H, fps, case):
 
     dq = knob.data.joint_pos[0, 0].item()
     verdict = "转进目标区间 1.0–2.2" if dq >= 1.0 else "推不动（低于目标下限 1.0）"
-    print(f"RESULT {case}: Δθ={dq:+.4f} rad -> {verdict}", flush=True)
+    print(f"RESULT {case}: 法向力 {FN:.1f} N, Δθ={dq:+.4f} rad -> {verdict}", flush=True)
     return rec.save()
 
 

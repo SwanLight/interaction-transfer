@@ -168,7 +168,7 @@ ssh root@10.0.6.98 'cd /workspace/isaaclab && git diff --numstat upstream-v2.3.1
 - [x] headless 渲染可用（**需 `AppLauncher(enable_cameras=True)`**，不是裸 SimulationApp）
 - [x] 能录 mp4（6 个场景，`tools/s0_record.py` + `tools/s0_all.sh`）
 - [x] `report.html` 可生成（`tools/make_report.py`）
-- [ ] WebRTC 串流 —— **未做**，本轮用离线录像替代，够用且更适合归档
+- [x] ~~WebRTC 串流~~ —— **已取消**（D-28）：服务器与开发机不同网络；且 `plan/06` §7 要的是回看归档，不是实时监看
 
 重新生成：
 
@@ -196,6 +196,23 @@ python3 tools/make_report.py out/s0 log/s1/s1_report.txt out/report.html
 1. 必须用 `AppLauncher(headless=True, enable_cameras=True)`。裸 `SimulationApp({"enable_cameras": True})` **无效**——Camera 检查的是 carb 键 `/isaaclab/cameras_enabled`，只有 AppLauncher 会写，它还负责选 `headless.rendering.kit`。
 2. `sim.step(render=True)` 即使开了 cameras **仍然卡死**。物理走 `step(render=False)`，出图时单独调 `sim.render()` + `cam.update()`。
 3. `cam.set_world_poses_from_view()` **会卡死**。相机位姿必须在 `CameraCfg.OffsetCfg` 里静态给定（`tools/s0_record.py::look_at_quat`）。
+
+### ⚠ 开环转角对推力非单调（P-26）
+
+用户质疑「是不是阻力太大」后扫了一遍推力，结果非单调：
+
+| 法向力 | Δθ |
+|---:|---:|
+| 10 N | +0.234 rad |
+| 15 N | +0.392 rad |
+| 20 N | **+0.217 rad** |
+| 25 N | +1.516 rad |
+
+结果不由「力够不够」决定，而由**接触维持多久**决定——开环直线推时力越大推子加速越快、越早脱离销钉。**S0 录像里的转角是示意，不能引用。**
+
+不影响 S1 结论：D-14 的判据是接触期间传递到轴的**力矩**（τ_rim=0.170 / τ_need=0.420 / τ_pin=23.5），在接触瞬间测量，与接触持续多久无关。也不是任务设计问题——RL 学出的策略闭环、会维持接触。
+
+我最初的解析估算（τ_need/r = 8.1 N）是**错的**，实测 10 N 远远不够。**质疑值得认真扫一遍，不能拿解析式糊过去。**
 
 ### 录像本身暴露的三个问题（都是数字发现不了的）
 
