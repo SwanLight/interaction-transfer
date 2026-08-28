@@ -380,6 +380,10 @@ class Buffers:
         self.fm_force = torch.zeros(N_FRAMES, 2, n, device=device)
         self.pd_sat = torch.zeros(N_FRAMES, 2, n, device=device)
         self.rot_err = torch.zeros(N_FRAMES, 2, n, device=device)
+        self.nz = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, device=device)
+        self.pz = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, device=device)
+        self.z_side = torch.zeros(2, n, device=device)
+        self.nz_abs = torch.zeros(2, n, device=device)
         self.foreign = torch.zeros(N_FRAMES, 2, device=device)
         self.dropped = torch.zeros(N_FRAMES, 2, device=device)
         self.raw_count = torch.zeros(N_FRAMES, 2, device=device)
@@ -632,14 +636,10 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
                         post_half_spacing=C.post_spacing / 2, post_radius=C.post_radius,
                         panel_t=C.panel_t),
                     torch.full_like(buf.part[frame, p], -1))
-                nrm_plate = rotate_inverse(plate.data.root_quat_w, cp["normals"])
-                pos_plate = to_local(cp["positions"], plate.data.root_pos_w,
-                                     plate.data.root_quat_w)
-                buf.face[frame, p] = torch.where(
-                    cp["valid"],
-                    classify_plate_face(nrm_plate, pos_plate,
-                                        cp["normal_forces"], cp["valid"]),
-                    torch.full_like(buf.face[frame, p], -1))
+                buf.nz[frame, p] = rotate_inverse(
+                    plate.data.root_quat_w, cp["normals"])[..., 2]
+                buf.pz[frame, p] = to_local(cp["positions"], plate.data.root_pos_w,
+                                            plate.data.root_quat_w)[..., 2]
                 buf.inspan[frame, p] = cp["valid"] & bar_span_fraction(
                     pos_l, C.post_spacing / 2, C.post_radius)
 
@@ -671,6 +671,20 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
                 preview.append(camera.data.output["rgb"][0, ..., :3]
                                .detach().cpu().numpy().astype(np.uint8))
             frame += 1
+
+    # 面归属在**整条 episode 上**判一次，不逐帧判（P-37）：
+    # 「面还是棱」由 |n_z| 定，稳；「哪一面」由接触点的加权 z 均值定，
+    # 而逐帧的那个均值在轻接触时会在零附近抖，同一次贴合被判得一半正面
+    # 一半背面。脚本化的板在一条 episode 里只贴同一个面，整条判一次才对。
+    w_all = buf.fn.abs() * buf.cvalid
+    denom = w_all.sum(dim=(0, 3)).clamp_min(1e-9)
+    buf.z_side = (buf.pz * w_all).sum(dim=(0, 3)) / denom
+    buf.nz_abs = (buf.nz.abs() * w_all).sum(dim=(0, 3)) / denom
+    work = (buf.z_side >= 0).unsqueeze(0).unsqueeze(-1)
+    buf.face[:] = torch.where(work, torch.zeros_like(buf.face),
+                              torch.ones_like(buf.face))
+    buf.face[buf.nz.abs() <= 0.7] = 2
+    buf.face[~buf.cvalid] = -1
 
     n_far, n_cut = float(buf.foreign.sum()), float(buf.dropped.sum())
     n_kept = float(buf.raw_count.sum())
@@ -754,6 +768,9 @@ def episode_diagnostics(buf: Buffers, e: int) -> dict[str, Any]:
             (buf.net_force[:, :, e].sum() / max(fn.sum().item(), 1e-6)).item()),
         "drawer_part_force_share": share(part, DRAWER_PARTS),
         "plate_face_force_share": share(face, PLATE_PARTS),
+        # 真正要防的是"拿边角在蹭"（D-34 那类），它由法向与板面法向的夹角判，
+        # 稳；"正面还是背面"在轻接触下测不出来（P-37），只作参考。
+        "face_normal_align": float(buf.nz_abs[:, e].max().item()),
         "bar_inside_posts_share": float(
             (fn * buf.inspan[:, :, e, :]).sum().item() / total) if total > 0 else 0.0,
         # 四种 mode 都报（`plan/02` §3.4）。只报 stick 比例会掩盖"接触其实是
@@ -936,7 +953,7 @@ def report(out_dir: Path, records, splits) -> None:
         f"({100.0 * len(ok) / max(len(metas), 1):.1f}%)")
     add("")
     add(f"{'家族':<16}{'条数':>5}{'成功':>6}{'开度mm':>9}{'脱手%':>8}"
-        f"{'受力向%':>9}{'杆背面%':>9}{'工作面%':>9}{'柱间%':>8}{'力N':>7}")
+        f"{'受力向%':>9}{'杆背面%':>9}{'面接触度':>9}{'工作面%':>9}{'柱间%':>8}{'力N':>7}")
     for fam in sorted({m["strategy_family"] for m in metas}):
         sub = [m for m in metas if m["strategy_family"] == fam]
         s = [m for m in sub if m["success"]]
@@ -945,6 +962,7 @@ def report(out_dir: Path, records, splits) -> None:
             f"{g('max_open_mm'):>9.1f}{100 * g('manip_no_contact_fraction'):>8.1f}"
             f"{100 * g('pull_direction_ok_fraction'):>9.1f}"
             f"{100 * np.mean([m['diagnostics']['drawer_part_force_share']['bar_back'] for m in sub]):>9.1f}"
+            f"{float(np.mean([m['diagnostics']['face_normal_align'] for m in sub])):>9.3f}"
             f"{100 * np.mean([m['diagnostics']['plate_face_force_share']['work_face'] for m in sub]):>9.1f}"
             f"{100 * g('bar_inside_posts_share'):>8.1f}{g('mean_contact_force_N'):>7.2f}")
     add("")
@@ -962,7 +980,7 @@ def report(out_dir: Path, records, splits) -> None:
     for key in ("peak_point_force_N", "invalid_frame_fraction", "pd_saturation_fraction",
                 "unfiltered_force_ratio", "mean_contacts_per_frame",
                 "mean_orientation_error_deg", "max_orientation_error_deg",
-                "mean_pull_force_x_N", "substep_contact_fraction",
+                "mean_pull_force_x_N", "face_normal_align", "substep_contact_fraction",
                 "matrix_contact_fraction", "points_contact_fraction"):
         add(f"  {key:<28}{np.mean([m['diagnostics'][key] for m in metas]):>9.4f}")
     add("")
