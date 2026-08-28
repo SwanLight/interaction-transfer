@@ -130,6 +130,8 @@ class DrawerEnv(DirectRLEnv):
         self.prev_dist = torch.zeros(n, device=dev)
         self.prev_gap = torch.zeros(n, device=dev)
         self._far_buf = torch.zeros(n, dtype=torch.bool, device=dev)
+        self.term_opening = torch.zeros(n, device=dev)
+        self.term_steps = torch.zeros(n, dtype=torch.long, device=dev)
         self.actions = torch.zeros(n, 6, device=dev)
         # reset 会先调 _get_observations，那时 _pre_physics_step 还没跑过，
         # 目标位姿必须在这里就有值，否则 AttributeError。
@@ -235,6 +237,11 @@ class DrawerEnv(DirectRLEnv):
         # 执行器跑太远 = 失败（reward 里有显式惩罚，见 _get_rewards 第 5 项）
         far = (self.executor.data.root_pos_w - self.scene.env_origins).norm(dim=-1) > 1.2
         self._far_buf = far
+        # 终止时的诊断量必须在这里存下来。DirectRLEnv 在 step() 内部会自动
+        # 重置终止的 env，评估脚本在 step() 返回后再读 joint_pos / episode_length_buf
+        # 读到的是**重置后的 0**，不是终止时的值。
+        self.term_opening = opening.clone()
+        self.term_steps = self.episode_length_buf.clone()
         if self.cfg.disable_termination:
             z = torch.zeros_like(far)
             self.success_buf = success
