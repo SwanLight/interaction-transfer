@@ -568,3 +568,63 @@ sim_utils.RigidBodyPropertiesCfg(
 ---
 
 <!-- 从 P-29 开始追加实际踩到的坑 -->
+## P-29 · 不 pin GPU 时，第一次施加外力就 CUDA illegal memory access ⭐
+
+**日期**：2026-08-28（S3 起步，卡了整整一轮）
+
+**现象**：任何往浮动刚体上施加外力的脚本，在第一次
+`scene.write_data_to_sim()` 真正提交非零力时直接崩：
+
+```
+[Error] [omni.physx.tensors.plugin] CUDA error: an illegal memory access was
+        encountered: .../gpu/GpuRigidBodyView.cpp: 810
+RuntimeError: copy_if failed on 2nd step: cudaErrorIllegalAddress
+```
+
+有时报在 `CudaKernels.cu:1498` / `Failed to submit rigid body forces`，
+是同一个东西的不同暴露点。
+
+**原因**：**服务器有 8 张卡，启动时没有 pin `CUDA_VISIBLE_DEVICES`。**
+Isaac Sim 启动日志里 8 张卡全是 `Active: Yes`，PhysX 的 GPU 管线和
+tensor API 的缓冲不在同一个设备上，提交外力时越界。
+
+**注意 `SimulationCfg(device="cuda:0")` 挡不住**——那只设 Isaac Lab 侧的
+torch 设备，不改 PhysX 选卡。
+
+**解法**：所有 Isaac 脚本一律 pin 单卡：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src /isaac-sim/python.sh tools/xxx.py
+```
+
+`tools/run_remote.sh` 已内置（`IT_GPU`，默认 0）。顺带好处：8 张卡可以
+同时跑 8 个互不干扰的实验，`IT_GPU=3 ./tools/run_remote.sh ...`。
+
+**实测对照（13 次运行，单变量）**：
+
+| 条件 | 传感器 | track_pose | 板数 | 结果 |
+|---|---|---|---|---|
+| 8 张全可见 | 有 / 无 | 开 / 关 | 1 / 2 | **全部崩** |
+| `CUDA_VISIBLE_DEVICES=0` | 有 | 开 | 2 | 通过 |
+| `=1` / `=2` / `=4` | 有/无 | 开/关 | 1/2 | 通过 |
+
+**同一张物理 GPU0，不 pin 就崩、pin 上就过**——所以不是坏卡。
+
+**未解释的残留**：`tools/s2_scripted.py` 在 8 张卡全可见时**不崩**，
+S2 全程就是这么跑的。所以「多卡可见」是必要条件不是充分条件，
+还有一个与 `DirectRLEnv` 相关的因素没定位。**但 pin 卡对两者都有效，
+不再往下追**。若将来又冒出同类崩溃，先确认这条。
+
+**代价与教训**：
+
+这个坑烧掉了一整轮工作。另一个 agent 在它上面连试十几个变体、
+改废了 `s3_source_drawer.py`，全程在改**本来就没错的代码**。
+
+1. **崩溃不一定在代码里。** 换一台机器/换张卡/换个启动参数能过，
+   就说明不是代码。这个对照应该**第一个**做，不是最后一个。
+2. **`torch.cuda.synchronize()` 抓不到 PhysX 内部的 CUDA 错误。**
+   分阶段打 OK 会给出**假的**定位——前 8 个 stage 全 OK，
+   实际问题在别处。P-27 说「别猜，去测」，但测的方法本身也得先验证。
+3. `CUDA_LAUNCH_BLOCKING=1` 在这里既没帮上忙也没添乱，与崩溃无关。
+
+---
