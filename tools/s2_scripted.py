@@ -28,6 +28,8 @@ def P(*x): print(*x, file=log)
 C, H = CabinetCfg(), HookCfg()
 cfg = DrawerEnvCfg()
 cfg.scene.num_envs = _a.envs
+cfg.disable_termination = True   # 一条完整轨迹跑完再统计
+cfg.episode_length_s = 20.0
 env = DrawerEnv(cfg)
 obs, _ = env.reset()
 dev = env.device
@@ -84,16 +86,24 @@ def phase_target(i):
     return t
 
 
-# 直接用 FloatingPD 驱动（绕过 policy 动作），验证几何可行性
-from it.float_ctrl import FloatingPD
-pd = FloatingPD(env.executor, kp_pos=700.0, kd_pos=55.0, kp_rot=70.0, kd_rot=9.0,
-                max_force=250.0, max_torque=25.0)
+# **通过 policy 的动作接口驱动**，不直接调底层控制器。
+#
+# 这一点很重要：直接调 PD 只能验证「几何上做得到」，验证不了「策略能不能
+# 用它的动作表达出这个动作」。动作是位姿增量、每步有幅度上限，如果脚本
+# 要求的运动超过上限，策略再聪明也做不到——那就是动作空间设计的问题，
+# 必须在这里暴露，而不是等训练不收敛了再回头猜。
+#
+# 转换：action = (期望目标位姿 - 当前目标位姿) / 每步上限，再 clamp 到 [-1,1]。
+# clamp 生效的比例就是「动作空间够不够快」的直接度量。
+clamp_hits = torch.zeros(env.num_envs, device=dev)
+n_steps_done = 0
 
 st = env.executor.data.default_root_state.clone()
 st[:, :3] = phase_target(0)
 st[:, 3:7] = quat
 st[:, 7:] = 0.0
 env.executor.write_root_state_to_sim(st)
+env.act.reset(st[:, :3], st[:, 3:7])
 for _ in range(10):
     env.scene.write_data_to_sim(); env.sim.step(render=False); env.scene.update(cfg.sim.dt)
 
@@ -105,13 +115,15 @@ max_open = torch.zeros(env.num_envs, device=dev)
 max_fn = torch.zeros(env.num_envs, device=dev)
 
 for i in range(400):
-    tgt = phase_target(i)
-    for _ in range(cfg.decimation):
-        f, tq = pd.compute(tgt, quat)
-        env.executor.set_external_force_and_torque(f, tq)
-        env.scene.write_data_to_sim()
-        env.sim.step(render=False)
-        env.scene.update(cfg.sim.dt)
+    want = phase_target(i)
+    # 位姿增量 -> 归一化动作
+    dpos = (want - env.act.target_pos) / env.act.pos_scale
+    a = torch.zeros(env.num_envs, cfg.action_space, device=dev)
+    a[:, :3] = dpos
+    clamp_hits += (a[:, :3].abs() > 1.0).any(dim=-1).float()
+    n_steps_done += 1
+    a = a.clamp(-1.0, 1.0)
+    env.step(a)          # 走完整的环境接口：动作 -> 目标位姿 -> PD -> wrench
 
     op = env.cabinet.data.joint_pos[:, env._dj[0]]
     max_open = torch.maximum(max_open, op)
@@ -136,6 +148,9 @@ P(f"  峰值接触力 = {max_fn.mean():.2f} N（安全上限 {cfg.max_contact_fo
 ok = (max_open >= cfg.goal_range[0]).float().mean().item()
 P(f"  达到任务下限的比例 = {ok*100:.0f}%")
 P(f"  判定：{'钩杆几何上能完成抽屉任务' if ok > 0.5 else '❌ 钩杆够不到/拉不开，需改初始位姿或几何'}")
+rate = (clamp_hits / max(n_steps_done, 1)).mean().item()
+P(f"\n  动作空间是否够用：{rate*100:.1f}% 的步需要超过单步幅度上限")
+P(f"  判定：{'够用' if rate < 0.15 else '❌ 动作空间太慢，策略表达不出这个动作，需放大 pos_scale'}")
 
 P(f"\nreward 量纲标定（一条成功轨迹上各项的累计值，未乘权重）：")
 for k, v in terms.items():

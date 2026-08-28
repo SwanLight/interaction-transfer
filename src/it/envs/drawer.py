@@ -70,6 +70,9 @@ class DrawerEnvCfg(DirectRLEnvCfg):
     goal_range: tuple[float, float] = (0.100, 0.160)    # plan/01 §4 目标开度
     goal_tol: float = 0.010
     hold_steps: int = 10                                # 达标需保持的控制步数
+    # 脚本化验证专用：关掉提前终止，让一条完整轨迹跑完再统计。
+    # 否则 env 会在中途自动重置，reward 标定会跨多个 episode，数字没意义。
+    disable_termination: bool = False
 
     # --- 随机化（Curriculum B，`plan/04` §10）---
     randomize: bool = False
@@ -85,11 +88,12 @@ class DrawerEnvCfg(DirectRLEnvCfg):
     # （从没成功过），最优解就是「不动」。
     # 现按标定值重配，成功轨迹总分约 +79，其中稠密项占 ~30%：
     #     progress +18 / reach +5 / success +60 / action -4
-    w_progress: float = 100.0
-    w_success: float = 4.0
-    w_reach: float = 40.0
+    w_progress: float = 150.0     # × 初始差距 0.13 m ≈ +20
+    w_success: float = 4.0        # × 保持 15 步 ≈ +60
+    w_reach: float = 22.0         # × 初始距离 0.23 m ≈ +5
     w_force: float = 0.05
-    w_action: float = 0.001
+    w_action: float = 0.001       # × ~10/步 × 400 步 ≈ -4
+    w_fail: float = 30.0          # 飞出边界的一次性惩罚，必须大于放弃任务的收益
     max_contact_force: float = A.MAX_NORMAL_FORCE
 
 
@@ -124,6 +128,8 @@ class DrawerEnv(DirectRLEnv):
         self.prev_open = torch.zeros(n, device=dev)
         self.prev_act = torch.zeros(n, 6, device=dev)
         self.prev_dist = torch.zeros(n, device=dev)
+        self.prev_gap = torch.zeros(n, device=dev)
+        self._far_buf = torch.zeros(n, dtype=torch.bool, device=dev)
         self.actions = torch.zeros(n, 6, device=dev)
         # reset 会先调 _get_observations，那时 _pre_physics_step 还没跑过，
         # 目标位姿必须在这里就有值，否则 AttributeError。
@@ -182,9 +188,13 @@ class DrawerEnv(DirectRLEnv):
         opening = cab.joint_pos[:, self._dj[0]]
         d = self.executor.data
 
-        # 1) 开度朝目标推进（主项）
-        progress = (opening - self.prev_open).clamp(min=-0.02, max=0.02)
-        r = self.cfg.w_progress * progress * torch.sign(self.goal - self.prev_open + 1e-6)
+        # 1) 朝目标开度收敛（主项），**势函数式**：只奖励「与目标的差距」的减少量。
+        # 早期写成 progress × sign(goal - opening)，开度一超过目标符号就翻转，
+        # 奖励出现悬崖，训练曲线剧烈震荡（52 → -90 → +17 → -51）。
+        # 用差距的差分则处处连续，且求和 telescope 到「初始差距 - 最终差距」。
+        gap = (self.goal - opening).abs()
+        r = self.cfg.w_progress * (self.prev_gap - gap).clamp(-0.02, 0.02)
+        self.prev_gap = gap.clone()
 
         # 2) 靠近把手：**势函数式塑形**（只奖励距离的减少量）。
         # 早期用 exp(-4d) 直接给分，随机策略每步就能拿 +0.29、累计 +31.65，
@@ -204,6 +214,12 @@ class DrawerEnv(DirectRLEnv):
         r = r - self.cfg.w_force * over
         r = r - self.cfg.w_action * (self.actions - self.prev_act).pow(2).sum(dim=-1)
 
+        # 5) 失败终止的显式惩罚。
+        # 没有它就有一个致命漏洞：每步 reward 可能为负，而策略只要让执行器
+        # 飞出边界就能立刻结束 episode——**主动自杀比继续做任务划算**。
+        # 实测表现为 episode 长度掉到 250 左右而 reward 一路走低。
+        r = r - self.cfg.w_fail * self._far_buf.float()
+
         self.prev_open = opening.clone()
         self.prev_act = self.actions.clone()
         return r
@@ -216,8 +232,13 @@ class DrawerEnv(DirectRLEnv):
         self.hold = torch.where(reached, self.hold + 1, torch.zeros_like(self.hold))
         success = self.hold >= self.cfg.hold_steps
 
-        # 执行器跑太远 = 失败
-        far = (self.executor.data.root_pos_w - self.scene.env_origins).norm(dim=-1) > 2.0
+        # 执行器跑太远 = 失败（reward 里有显式惩罚，见 _get_rewards 第 5 项）
+        far = (self.executor.data.root_pos_w - self.scene.env_origins).norm(dim=-1) > 1.2
+        self._far_buf = far
+        if self.cfg.disable_termination:
+            z = torch.zeros_like(far)
+            self.success_buf = success
+            return z, self.episode_length_buf >= self.max_episode_length - 1
         timeout = self.episode_length_buf >= self.max_episode_length - 1
         self.success_buf = success
         return success | far, timeout
@@ -261,6 +282,8 @@ class DrawerEnv(DirectRLEnv):
         self.prev_open[env_ids] = 0.0
         self.prev_act[env_ids] = 0.0
         self.prev_dist[env_ids] = (self._handle_pos_w()[env_ids] - st[:, :3]).norm(dim=-1)
+        self.prev_gap[env_ids] = self.goal[env_ids].abs()
+        self._far_buf[env_ids] = False
 
     # ------------------------------------------------------------ 杂项
 
