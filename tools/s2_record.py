@@ -7,7 +7,7 @@
 用法::
 
     PYTHONPATH=src /isaac-sim/python.sh tools/s2_record.py \\
-        --run expert_drawer_hook_s0 --ckpt model_100.pt --out /tmp/s2vid
+        --run expert_drawer_hook_v2 --ckpt model_100.pt --out /tmp/s2vid
 """
 import argparse, math, os, sys
 

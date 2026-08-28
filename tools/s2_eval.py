@@ -8,7 +8,7 @@ Gate A（`plan/05` §10）A2：固定环境 ≥95%，随机环境 ≥85%。
 用法::
 
     PYTHONPATH=src /isaac-sim/python.sh tools/s2_eval.py \\
-        --run expert_drawer_hook_s0 --ckpt model_final.pt --episodes 200
+        --run expert_drawer_hook_v2 --ckpt model_final.pt --episodes 200
 """
 import argparse, os, sys
 

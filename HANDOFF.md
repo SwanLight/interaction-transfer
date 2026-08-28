@@ -52,7 +52,7 @@
 |---|---|---|
 | **S0** | 把画面录出来的能力（渲染管线、HTML 报告） | ✅ |
 | **S1** | 资产做得对不对（尺寸、碰撞、摩擦、够不够得着） | ✅ |
-| **S2** | 每个执行器物理上能不能完成任务 | 🟡 |
+| **S2** | 每个执行器物理上能不能完成任务 | 抽屉×钩杆 ✅，其余按需 |
 | S3 | 双板采集器模拟人，产生多样示教 | ⬜ |
 | S4 | 从示教里提取交互信息 | ⬜ |
 | S4.5 | 表示分辨率该定多少 | ⬜ |
@@ -103,7 +103,7 @@ out/
 ```bash
 # 抽屉×钩杆 Expert，2048 env，600 轮
 ssh root@10.0.6.98 'grep -E "Mean reward|Mean episode length" /tmp/s2run.log | tail -6'
-ssh root@10.0.6.98 'ls /workspace/interaction_transfer/runs/expert_drawer_hook_s0/'
+ssh root@10.0.6.98 'ls /workspace/interaction_transfer/runs/expert_drawer_hook_v2/'
 ```
 
 ⚠️ **训练曲线仍不稳定。** 最近一次观察（第 30 轮）：`15 → -217 → -180 → -16`，
