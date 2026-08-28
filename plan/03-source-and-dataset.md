@@ -145,24 +145,33 @@ E-I 需要覆盖**交互指令空间**，而三个任务的 envelope 只是这�
 | `ridge` 棱台 | 固定台面 + Ø20 横棱 | 无（固定） | P1 P4 P5 P12 |
 | `slab` 斜板 | 200×150 固定板，倾角 0/15/30° | 无（固定） | P1 P4 P5 P12 |
 
-冗余核对（每条原语的承载物体数，**实测通过的**）：
+冗余核对（**实测**，8040 条 episode / 7023 成功，`out/s3_probe/coverage.txt`）：
 
 ```
-P1  press        6  ✓    P2  push          2  ✓    P3  slide-push    1  ⚠️
-P4  rub          2  ✓    P5  shear         3  ✓    P6  pivot         2  ✓
-P7  roll         0  ❌   P8  twist         2  ✓    P9  crank         2  ✓
-P10 slide-along  2  ✓    P11 hook-pull     2  ✓    P12 poke          9  ✓
-P13 pinch-hold   1  ⚠️   P14 pinch-move    1  ⚠️   P15 pinch-turn    2  ✓
+OK press        1234 成功 / 6 物体      OK slide_along  420 / 2
+OK push          235 / 2                OK hook_pull    407 / 2
+!! slide_push    204 / 1                XX twist        191 / 1
+OK rub           420 / 2                !! pinch_hold   204 / 1
+OK shear         624 / 3                !! pinch_move   204 / 1
+OK poke         1859 / 9                OK pinch_turn   401 / 2
+OK pivot         210 / 2                XX roll           0 / 0
+OK crank         410 / 2
+                                        两条判据都满足：10 / 15
 ```
 
-**三条未满足冗余、一条完全未实现，如实列在这里**（`log/decisions.md` D-43）：
+**五条未满足的格，如实列在这里**（`log/decisions.md` D-43）：
 
-- **P7 rolling contact = 0 个物体。** `roller` 已建、`poke` 在它上面 9/9 通过，
+- **P7 rolling contact = 0。** `roller` 已建、`poke` 在它上面通过，
   但 `roll` 全部失败：自由圆柱的滚动阻力接近零，PhysX 也不建模滚阻，
-  位置控制的推板追不上它。已试过角阻尼 + 线阻尼 + 推进方向锁定 + 速度控制，
-  都不足以留住接触。**在做成之前不得声称原语库已张满。**
-- **P3 / P13 / P14 各只有 1 个物体**（都在 `block` 上）。立柱上的对捏会让
-  圆柱从两板间挤出去、自由体上的 slide-push 会把物体推翻，两者都是几何决定的。
+  位置控制的推板追不上它。已试过角阻尼 + 线阻尼 + 推进方向锁定 + 速度控制。
+- **P8 twist 数量 191 < 200 且只有 1 个物体**（立柱）。转盘上的对捏被薄轮缘
+  卡住、门的开合方向恰好就是对捏轴，两条替代路线都被几何否掉了。
+- **P3 slide_push / P13 pinch_hold / P14 pinch_move 各只有 1 个物体**（都在方块上）。
+  立柱上的对捏会让圆柱从两板间挤出去，自由体上的 slide-push 会把物体推翻。
+
+**这五格不得因为不好看就从分类学里删掉。** 删掉等于把分类学改成
+"我们做得到的那些"，而分类学独立于我们的实现正是它全部的意义（D-41）。
+`tools/s3_coverage.py` 在它们全部满足之前**返回非零退出码**。
 
 **物体是按"最简单地实现某一格"选的，不是按"像哪个任务"选的。** 例如 E5
 （物体不动）这一格由 `block`（压住不动时顶面就是静止表面）、`ridge`、`slab`
