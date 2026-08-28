@@ -12,12 +12,17 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 
 | 目录 | 内容 |
 |---|---|
+| `HANDOFF.md` | **接手先读**：当前状态、服务器用法、已知的坑 |
 | `plan/` | 实验计划。**唯一权威**，按 `00` → `07` 顺序读 |
 | `log/` | 工程日志：进度、踩坑、技术决策 |
-| `tools/` | 环境工具与验证脚本 |
+| `src/it/` | 资产生成、控制器、接触工具、任务环境 |
+| `tools/` | 环境工具、自检、录像、训练脚本 |
 | `idea/` | 原始 idea 与 PPT。**已被 `plan/` 取代**，仅作背景保留 |
 
 ## 从哪开始读
+
+> **接手这个项目？先读 [`HANDOFF.md`](HANDOFF.md)** —— 当前进度、
+> 服务器怎么用、哪些坑会浪费你半天，都在那里。
 
 1. [`plan/00-positioning.md`](plan/00-positioning.md) — 定位、相对 KITE/ART-Glove/CHORD 的差异、可声称的边界
 2. [`plan/README.md`](plan/README.md) — 系统结构、两个执行器、五个信息条件、步骤与闸门

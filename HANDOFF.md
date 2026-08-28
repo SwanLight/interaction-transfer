@@ -1,0 +1,229 @@
+# 交接说明
+
+**如果你是接手这个项目的新 agent 或新人，从这份文件开始读。**
+
+本文件回答：这个项目在做什么、现在做到哪、下一步做什么、怎么在服务器上跑东西、
+以及哪些坑会浪费你半天。
+
+最后更新：2026-08-28
+
+---
+
+## 1. 一句话说清项目
+
+不迁移人的动作，而迁移动作所实现的**功能性交互**，再由不同末端执行器
+根据自身形态各自重新实现。
+
+```text
+双板采集器（脚本控制，模拟人采集）
+        ↓  多样示教
+提取交互信息（哪里接触 / 什么接触状态 / 需要什么机械作用 / 物体怎么变）
+        ↓
+不同执行器各自学「怎么实现这份交互」→ 各自的动作
+```
+
+**本轮只做仿真算法验证。** 真实触觉硬件、RGB-D、sim-to-real 都不在范围内。
+
+主张是：**执行器是任务无关的**——在任务 A、B 上训练的执行器，
+能对**留出任务 C** 零样本执行，不需要 C 的奖励、不需要微调。
+
+---
+
+## 2. 必读文档，按顺序
+
+| 顺序 | 文件 | 为什么必读 |
+|---|---|---|
+| 1 | `plan/00-positioning.md` | 相对 KITE / ART-Glove / CHORD 的差异；**能声称什么、不能声称什么** |
+| 2 | `plan/README.md` | 系统结构、两个执行器、五个信息条件、步骤与闸门 |
+| 3 | `log/decisions.md` | **31 条技术决策及其被否决的备选**。改任何设计前先查这里，否则会重新提出已经被否决过的方案 |
+| 4 | `log/pitfalls.md` | 26 条坑。**第 3 节「已知会静默失败的坑」尤其重要**，那些不报错、只让结论作废 |
+| 5 | `log/progress.md` | 环境版本表 + 每一步的实测数据 |
+| 6 | `plan/01`–`plan/07` | 具体设计 |
+
+`idea/` 目录是**原始构想，已被 `plan/` 取代**，只作背景，不要照它执行。
+
+---
+
+## 3. 现在做到哪
+
+| 步骤 | 状态 | 说明 |
+|---|---|---|
+| S0 可视化 | ✅ 通过 | 6 段录像 + 自包含 HTML 报告。WebRTC 已取消（D-28） |
+| S1 资产自检 | ✅ 通过 | 33 项 PASS / 0 FAIL。**D-14 摩擦标定实测通过**，旋钮任务可用 |
+| **S2 Expert** | 🟡 **进行中** | 抽屉×钩杆的第一个 Expert 正在训练，见下 |
+| S3 及之后 | ⬜ 未开始 | |
+
+### S2 的当前状态（接手时先看这里）
+
+**已完成**：
+
+- 抽屉环境（`src/it/envs/drawer.py`），50 Hz 控制，39 维特权观测，无 NaN
+- PPO 训练管线（`tools/s2_train.py`），rsl-rl 3.x
+- **脚本可行性验证**（`tools/s2_scripted.py`）：钩杆能拉开抽屉，100%；动作空间够用（0.0% 触上限）
+- reward 权重已在成功轨迹上标定：progress +27 / success +90 / reach +2.8 / 合计 +120
+
+**进行中**：
+
+```bash
+# 抽屉×钩杆 Expert，2048 env，600 轮
+ssh root@10.0.6.98 'grep -E "Mean reward|Mean episode length" /tmp/s2run.log | tail -6'
+ssh root@10.0.6.98 'ls /workspace/interaction_transfer/runs/expert_drawer_hook_s0/'
+```
+
+⚠️ **训练曲线仍不稳定。** 最近一次观察（第 30 轮）：`15 → -217 → -180 → -16`，
+episode 长度 `109 → 308 → 274 → 399`。奖励已修过四个洞（D-31），但可能还有问题。
+接手时**先看曲线是否收敛**，不收敛就继续查 reward，不要急着往下推。
+
+**下一步**：
+
+1. 等这个 Expert 跑完，看成功率，判断 Gate A 的 95%/85% 门槛现实不现实
+2. 按 `plan/01` §0 的顺序推进：抽屉 → **擦拭（主任务）** → 旋钮
+3. 每个新组合**必须先跑 `tools/s2_scripted.py`**，确认可行 + 标定 reward，再开训
+
+---
+
+## 4. 怎么在服务器上跑东西
+
+服务器 `root@10.0.6.98`，8 × RTX 4090。免密登录已配好
+（本地 `~/.ssh/id_rsa`，需要 `ssh-add --apple-use-keychain ~/.ssh/id_rsa`）。
+
+### 标准流程
+
+```bash
+cd "/Users/swanny/Desktop/Interaction Transfer"
+
+# 1) 同步代码到服务器（服务器无 rsync，走 tar over ssh）
+./tools/sync.sh
+
+# 2) 后台跑 + 轮询到结束（避免 ssh 前台超时）
+./tools/run_remote.sh "PYTHONPATH=src /isaac-sim/python.sh tools/xxx.py" 标签
+
+# 3) 看结果
+ssh root@10.0.6.98 'cat /tmp/标签.log'
+ssh root@10.0.6.98 'test -f /tmp/标签.done && cat /tmp/标签.done'   # 退出码
+```
+
+**必须用 `/isaac-sim/python.sh`**，不是系统 python。
+系统 python 是 3.12，Isaac Sim 的是 3.11.13，两者不通。
+
+### 服务器上的关键路径
+
+| 路径 | 内容 |
+|---|---|
+| `/workspace/interaction_transfer/` | 代码同步目标 |
+| `/workspace/interaction_transfer/assets_gen/` | 生成的 6 个 USD 资产 |
+| `/workspace/interaction_transfer/runs/` | 训练输出 |
+| `/workspace/isaaclab/` | Isaac Lab（**已 git init 做快照**，见 D-22） |
+| `/isaac-sim/` | Isaac Sim 5.1.0-rc.19 |
+| `/mnt/isaacsim_assets/` | 内置资产（308 MB，由 `tools/fetch_assets.py` 拉取） |
+
+---
+
+## 5. 代码结构
+
+```text
+src/it/
+  build_assets.py   从代码生成 6 个参数化 USD（禁止手工编辑 USD / 导 URDF，见 D-07）
+  assets.py         Isaac Lab 资产配置，固化硬规则 7–11
+  float_ctrl.py     浮动底座 PD 控制 + 混合力/位控
+  contact_utils.py  逐接触点提取、stick/slide 判定、绕轴力矩重建
+  envs/
+    base.py         增量动作接口 + 定长接触摘要
+    drawer.py       抽屉任务环境
+
+tools/
+  sync.sh                 同步代码
+  run_remote.sh           后台跑 + 轮询
+  fetch_assets.py         拉 Isaac 内置资产
+  check_contact_sensor.py 接触传感器验证（改接触相关代码后必跑）
+  s0_record.py / s0_all.sh  录像
+  make_report.py          生成自包含 HTML 报告
+  s1_check.py / s1_all.sh   资产几何与动力学自检
+  s2_scripted.py          **任务可行性验证 + reward 标定（开训前必跑）**
+  s2_smoke.py             环境冒烟
+  s2_train.py             PPO 训练
+```
+
+---
+
+## 6. 会浪费你半天的坑（全部实测踩过）
+
+### 6.1 会**静默失败**的（不报错，只让结论作废）
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| **P-17** filter 目标不是刚体 | `net_forces_w` 照常工作，但接触位置/摩擦力全失效 | 不动的物体也要用 `kinematic_enabled=True` |
+| **规则 9** 摩擦组合模式 | PhysX 默认 `average`，低摩擦区碰高摩擦执行器就失效 | 所有材质设 `friction_combine_mode="min"` |
+| **P-21** 关节力矩指令残留 | `set_joint_effort_target` 会一直保持，物体被持续驱动，几何全错 | 换阶段时显式清零，且每步都清 |
+| **P-11** region 可从 effect 推出 | 消融显示"没有增量价值"，实际是任务设计问题 | 跑可推导性探针 |
+| **P-26** 开环转角对推力非单调 | 数字看着对，但对参数极敏感 | 引用任何数字前先扫一遍参数 |
+
+### 6.2 会让你卡住的
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| **P-19** headless 渲染 | `sim.step(render=True)` **静默卡死**（0% CPU、显存已占） | 一律 `render=False`；要出图单独调 `sim.render()` |
+| **P-19** 关闭挂起 | `SimulationApp.close()` 挂起，进程变僵尸占显存 | 脚本末尾用 `os._exit()` |
+| **规则 11** 仿真上下文 | 一个进程内第二次创建 `SimulationContext` 即挂起 | 一个进程只跑一项，用 shell 脚本串联 |
+| **P-20** `pkill -f` | 匹配到自己的 shell，把自己杀了，后续命令全不执行 | 用 `pgrep -f "[x]xx"` 字符类；或拆成两条 ssh |
+| **P-24** 相机 | `SimulationApp({"enable_cameras":True})` 无效 | 必须用 `AppLauncher(headless=True, enable_cameras=True)` |
+| **P-24** 相机位姿 | `cam.set_world_poses_from_view()` 卡死 | 在 `CameraCfg.OffsetCfg` 里静态给定 |
+
+### 6.3 reward 设计的四个洞（D-31）
+
+每个新任务都会遇到，**开训前跑 `tools/s2_scripted.py` 就能提前发现**：
+
+1. 塑形项可以靠悬停刷分 → 用势函数式（只奖励差距的减少量）
+2. 量纲失衡，最优解是"不动" → 在成功轨迹上标定权重，不要拍
+3. **提前终止可以自杀刷分** → 失败终止必须有显式惩罚
+4. `sign()` 造成奖励悬崖 → 改成差距的势函数式差分
+
+---
+
+## 7. 绝对不能做的事
+
+这三件都会让数字变好看，也都会让结论作废。**任何一件发生了必须记进 `decisions.md`，不得静默处理。**
+
+1. **留出任务不通过后，把它加进训练**（P-13）——数字立刻好看，主张立刻归零
+2. **为了制造条件间差距而调任务参数**（P-11）——那是"调到 baseline 失败为止"
+3. **跨形态结果里对某个执行器单独改写 envelope**（P-15）——四宫格必须来自同一个文件，且标 hash
+
+还有一条 D-30 的硬规则：
+
+> **在没有为某个组合训练过 Expert 之前，绝不允许把该组合的失败归因于"表示信息不够"。**
+
+---
+
+## 8. 环境版本（已锁定，不要升级）
+
+| 项 | 版本 |
+|---|---|
+| Isaac Sim | `5.1.0-rc.19`（**是 RC 不是正式版**） |
+| Isaac Lab | `2.3.1` = upstream `v2.3.1 (5c2ec81)` + 一处 `assets.py` 补丁；快照 commit `2ab57ade` |
+| Python | 3.11.13（`/isaac-sim/python.sh`） |
+| PyTorch | 2.7.0+cu128 |
+| RL | rsl-rl-lib 3.0.1 |
+
+**冻结时点**（D-21）：S2 开始训练后环境冻结。此前允许修复，此后任何变更
+必须新增 D-xx 记录并说明已产出的 checkpoint 是否作废。
+
+不升级 Isaac Lab 的理由见 D-20——upstream 新版的摩擦力接口是**聚合求和**的，
+把空间分布抹掉了，而 `plan/02` §3.2 要的正是逐接触点数据。
+
+复查 Isaac Lab 有没有被人改过：
+
+```bash
+ssh root@10.0.6.98 'cd /workspace/isaaclab && git status --short'   # 有输出=被改过
+```
+
+---
+
+## 9. 工作方式（这个项目踩出来的）
+
+1. **动手前先查 `decisions.md`**，看这个方案是不是已经被否决过。
+2. **跑 RL 之前先跑脚本验证。** 三分钟省几个 GPU 小时，而且训练失败时能分清
+   是"奖励配错了"还是"任务本来就做不到"。
+3. **数字对了不等于对。** S1 出现过多次假 PASS（推子被卡住却报"推不动"）。
+   **录像看一眼就能发现，数字发现不了。** `plan/06` §7 因此把人工看视频列为必经步骤。
+4. **引用任何数字前先问它对参数敏不敏感。** 扫一遍成本很低（P-26 就是这么发现的）。
+5. **踩到坑当场记 `pitfalls.md`**，改设计当场记 `decisions.md`，包括被否决的方案。
