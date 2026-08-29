@@ -212,13 +212,28 @@ ROLLER_CFG = RigidObjectCfg(
         usd_path=_usd("roller"), activate_contact_sensors=True,
         # 滚动阻力：PhysX 不建模滚阻，自由圆柱一推就无限加速——实测被推着
         # 跑出 2.9 m、94% 的操作步脱手。角阻尼是滚阻的标准替代，
-        # 4.0 对应约 0.25 s 的衰减时间常数，滚柱只在被推时滚。
-        rigid_props=_rigid_props(angular_damping=4.0, linear_damping=3.0)),
+        # 8.0 对应约 0.12 s 的衰减时间常数——低于这个值滚柱会带着动量滑出去，
+        # 实测 3.0 时它冲过推板 3 倍的行程。滚柱只在被推时滚。
+        rigid_props=_rigid_props(angular_damping=8.0, linear_damping=8.0)),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.03)),
 )
 """卧倒的自由滚柱：原语 P7 roll / P2 push / P1 press / P12 poke。
 
 冗余规则要求 P7 不能只有一个物体，而立着的 `column` 受侧推只会倒不会滚。
+"""
+
+
+BALL_CFG = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Ball",
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=_usd("ball"), activate_contact_sensors=True,
+        # 滚阻替代，同 roller：PhysX 不建模滚阻，自由球一推就无限加速
+        rigid_props=_rigid_props(angular_damping=8.0, linear_damping=8.0)),
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.035)),
+)
+"""自由球：P7 rolling contact 的第二个承载物体（冗余规则）。
+
+圆柱只能绕一根轴滚，球在任意方向都滚；接触拓扑也不同（线接触 vs 点接触）。
 """
 
 

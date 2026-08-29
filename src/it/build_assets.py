@@ -166,6 +166,19 @@ class RollerCfg:
 
 
 @dataclass
+class BallCfg:
+    """探针物体集：自由球。plan/03 §2.4，原语 P7 roll / P1 press / P12 poke。
+
+    P7 rolling contact 的第二个承载物体（冗余规则）。圆柱只能绕一根轴滚，
+    球在任意方向都滚——两者的接触拓扑也不同（线接触 vs 点接触）。
+    """
+
+    radius: float = 35 * MM
+    mass: float = 0.30
+    friction: float = 0.8
+
+
+@dataclass
 class SliderCfg:
     """预训练物体集：滑块导轨。plan/03 §2.4。"""
 
@@ -350,6 +363,7 @@ class BuildCfg:
     block: BlockCfg = field(default_factory=BlockCfg)
     column: ColumnCfg = field(default_factory=ColumnCfg)
     roller: RollerCfg = field(default_factory=RollerCfg)
+    ball: BallCfg = field(default_factory=BallCfg)
     dial: DialCfg = field(default_factory=DialCfg)
     slab: SlabCfg = field(default_factory=SlabCfg)
     flap: FlapCfg = field(default_factory=FlapCfg)
@@ -793,6 +807,25 @@ def build_roller(path: str, cfg: RollerCfg) -> str:
     return path
 
 
+def build_ball(path: str, cfg: BallCfg) -> str:
+    """探针物体集：自由球。P7 的第二个承载物体。"""
+    stage = _new_stage(path)
+    root = _xform(stage, "/Ball")
+    _rigid(root.GetPrim(), mass=cfg.mass)
+    mat = _phys_material(stage, "/Ball/PhysMat", cfg.friction, cfg.friction)
+    vis = _vis_material(stage, "/Ball/Vis", COLOR["lug"])
+    sph = UsdGeom.Sphere.Define(stage, "/Ball/geom")
+    sph.CreateRadiusAttr(cfg.radius)
+    sph.CreateExtentAttr([Gf.Vec3f(-cfg.radius, -cfg.radius, -cfg.radius),
+                          Gf.Vec3f(cfg.radius, cfg.radius, cfg.radius)])
+    UsdPhysics.CollisionAPI.Apply(sph.GetPrim())
+    _bind_material(sph.GetPrim(), mat)
+    _bind_visual(sph.GetPrim(), vis)
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    return path
+
+
 def build_dial(path: str, cfg: DialCfg) -> str:
     """预训练物体集：转盘。底座固定，圆盘绕 Z 转，三个均布凸耳供推动。
 
@@ -961,6 +994,7 @@ BUILDERS = {
     "block": (build_block, "block"),
     "column": (build_column, "column"),
     "roller": (build_roller, "roller"),
+    "ball": (build_ball, "ball"),
     "dial": (build_dial, "dial"),
     "slab": (build_slab, "slab"),
     "flap": (build_flap, "flap"),

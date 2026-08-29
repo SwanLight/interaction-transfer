@@ -247,6 +247,7 @@ _DI = B.DialCfg()
 _FL = B.FlapCfg()
 _RI = B.RidgeCfg()
 _RO = B.RollerCfg()
+_BA = B.BallCfg()
 _SB = B.SlabCfg()
 
 _bx, _by, _bz = (v / 2 for v in _BL.size)
@@ -308,6 +309,14 @@ OBJECTS: dict[str, ObjectSpec] = {
         # 与 roll 是同一件事——分成两个名字只会让标签自相矛盾。
         prims={"roll": ("side",), "poke": ("side",)},
         cam_eye=(0.34, -0.32, 0.20), cam_at=(0.0, 0.0, 0.03),
+    ),
+    "ball": ObjectSpec(
+        cfg=A.BALL_CFG, articulated=False, body=None, body_path="Ball",
+        init_pos=(0.0, 0.0, _BA.radius),
+        sites={"side": _s((_BA.radius, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 0)),
+               "top":  _s((0, 0, _BA.radius), (0, 0, 1), (1, 0, 0), (0, 1, 0))},
+        prims={"roll": ("side",), "press": ("top",), "poke": ("side",)},
+        cam_eye=(0.32, -0.30, 0.20), cam_at=(0.0, 0.0, 0.035),
     ),
     # --- 受约束平移 E3 ---
     "slider": ObjectSpec(
@@ -697,12 +706,21 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
                     b = min(max((kk + 1 - RISE_STEPS)
                                 / max(CLOSE_STEPS - RISE_STEPS, 1), 0.0), 1.0)
                     tgt[:] = p_safe[:, k] + (p_eng[:, k] - p_safe[:, k]) * b
-                    engage[:, k] = TOUCH_FRAC * min(
+                    touch = TOUCH_FRAC * min(
                         max((kk + 1 - CLOSE_STEPS) / max(phase_len - CLOSE_STEPS, 1),
                             0.0), 1.0)
+                    # 速度控制档全程不加力：贴合那一下的冲量正是把滚柱打飞的
+                    # 原因（0.5 m/s 的初速在 1.05 N·s/m 阻尼下能滑 165 mm，
+                    # 而推板整个 manipulate 才前进 105 mm）。
+                    engage[:, k] = torch.where(vel_mode,
+                                               torch.zeros_like(engage[:, k]), touch)
                 elif phase_id == 2:                     # manipulate：执行原语
                     if kk == 0:
-                        anchor[:, k] = p_eng[:, k]
+                        # 速度档从**板实际所在**位置起算推进，不从名义贴合点，
+                        # 否则残余的位置误差会在第一步变成一个阶跃指令。
+                        anchor[:, k] = torch.where(
+                            vel_mode.unsqueeze(-1),
+                            plates[k].data.root_pos_w, p_eng[:, k])
                         anchor_dir[:, k] = d_swp[:, k]
                         anchor_nrm[:, k] = d_nrm[:, k]
                     full = TOUCH_FRAC + (1 - TOUCH_FRAC) * min((kk + 1) / RAMP_STEPS, 1.0)
@@ -909,14 +927,18 @@ def diagnostics(buf: Buffers, m: dict, e: int, prim: str) -> dict[str, Any]:
     fn = buf.fn[:, :, e, :].abs()
     total = float(fn.sum().item())
     manip = buf.phase[:, e] == 2
-    # 「有没有接到该接的地方」在 **establish 阶段**量——那正是建立接触的阶段，
-    # 此时物体还没被推动。放到 manipulate 里量，一个被撬翻 150° 的物体
-    # 必然让接触点在自己表面上迁移，罚的是物理不是做法。
-    idx = manip.nonzero().flatten()
-    eng = buf.phase[:, e] == 1
-    if idx.numel():
-        eng = eng | torch.zeros_like(manip).index_fill_(
-            0, idx[: max(1, int(0.2 * idx.numel()))], True)
+    # 「有没有接到该接的地方」只在**最初建立接触的那几帧**上量。
+    #
+    # 拿整段去量是错的，而且错法与原语有关：撬翻会把物体翻 150°、
+    # 滚动更是**按定义**让接触点在物体表面上连续迁移——那是 P7 这一格
+    # 的全部内容，不是做法不对。用"最初接触的 10 帧"既能抓住"接错地方"，
+    # 又不会把物理本身当成错误。
+    first = (fn.sum(dim=(1, 2)) > 0.05).nonzero().flatten()
+    eng = torch.zeros_like(manip)
+    if first.numel():
+        eng[first[:10]] = True
+    else:
+        eng = buf.phase[:, e] == 1
     in_contact = fn.sum(dim=(1, 2)) > 0.05
 
     def share(codes, table):
