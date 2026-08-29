@@ -94,7 +94,7 @@ DECIMATION = 6
 CONTROL_DT = DT * DECIMATION
 MAX_CONTACTS = 24
 PHASE_NAMES = ("approach", "establish", "manipulate", "release")
-PHASE_STEPS = (50, 55, 160, 45)
+PHASE_STEPS = (50, 55, 155, 45)
 N_FRAMES = sum(PHASE_STEPS)
 
 _K = B.KnobCfg()
@@ -102,13 +102,30 @@ _P = B.PlateCfg()
 #: 圆盘上表面高度、销钉中段高度（旋钮局部系，销钉是圆盘的子几何）
 DISC_TOP = _K.disc_thickness / 2
 PIN_Z = DISC_TOP + _K.pin_length * 0.55
-GOAL_RANGE = (1.0, 2.2)
 #: 指令角速度。**必须落在设计点附近**（`plan/01` §3.1 按 1.5 rad/s 标定），
 #: 转得慢 τ_need 会掉下来，轮缘反而推得动，rim_only 就失去了对照意义。
 OMEGA_RANGE = (1.2, 1.8)
-#: 1.2 mm。3 mm 时接触力被顶到 25~96 N，远超 25 N 安全上限——
-#: 板面 35×25 压进刚体的深度必须小，力才留得住。
-GRIP_INTERF = 1.2 * MM
+#: 目标角**由角速度导出**：goal = ω × T_PUSH。
+#: 初版独立采 goal 和 ω，于是驱动时长在 0.5~1.8 s 之间变，而 manipulate
+#: 相位固定 3.2 s——转到位之后板就撤力，剩下的两秒全是空转，
+#: "操作阶段脱手" 因此高达 63%，判据把本来干净的 episode 全判失败。
+T_PUSH = 1.55
+GOAL_RANGE = (OMEGA_RANGE[0] * T_PUSH, OMEGA_RANGE[1] * T_PUSH)
+#: 跟随板留的缝。它只在需要时挡一下，不吃力矩（见 `arc` 的说明）。
+FOLLOW_GAP = 6.0 * MM
+#: 推力上限。25 N 是 `plan/01` §3.2 的硬约束。
+#: 18 N 时 `pin_push_dual` 实测合力均值 16.6 N、有 6.6% 的操作帧越过 25 N——
+#: 它两块板上下夹住销钉，指令力几乎全部落到物体上，而单板家族只落到四成多。
+#: 上限对所有家族一律取 13 N：压得比允许的轻永远是合规的，
+#: 按家族分别放宽才是把上限当成可调参数。
+MAX_PUSH_FORCE = 13.0
+#: 位置 PD 的等效接触刚度 kp_pos × 质量 = 3000 × 0.5 = 1500 N/m。
+#: 干涉深度 δ 与推力的换算全靠它。
+K_CONTACT = 1500.0
+#: 轮缘家族的切向领先角。轮缘靠摩擦拖，必须有相对滑移才有拖力。
+RIM_LEAD = 0.08
+#: 轮缘家族的径向位置干涉，见 `press_full` 处的实测说明。
+RIM_PRESS = 6.5 * MM
 PRE_GAP = 1.5 * MM
 STANDOFF = 0.12
 SAFE_R = 0.055
@@ -161,32 +178,34 @@ def _u(rng, lo, hi, n):
 def sample_family(fam: str, rng, n: int, device) -> dict:
     """逐 env 参数。
 
+    **板站哪一侧不写死，由转向决定。** 圆盘往 ``turn_dir`` 转时，能推的那一侧
+    是 ``-turn_dir``；写死成 -1 的话，转向为 -1 的那一半 episode 里推的板
+    会被判成"跟随板"而留缝，根本碰不到销钉——实测 `pin_push_single`
+    正好约一半的操作步零接触。
+
     Returns:
-        ``on`` (n,2) 哪块板参与；``side`` (n,2) 板在销钉切向的哪一侧（±1）；
-        ``radius`` (n,) 接触半径（销钉 or 轮缘）；``on_pin`` (n,) 是否接销钉；
-        ``regrasp`` (n,) 是否中途松开重抓。
+        ``role`` (n,2)：+1 = 推、-1 = 跟随（留缝）、0 = 不参与；
+        ``on_pin`` (n,) 接销钉还是接轮缘；``regrasp`` (n,) 是否中途松开重抓。
     """
-    on = torch.ones(n, 2)
-    side = torch.zeros(n, 2)
+    role = torch.zeros(n, 2)
     on_pin = torch.ones(n)
     regrasp = torch.zeros(n)
     if fam == "pin_pinch":
-        side[:, 0], side[:, 1] = -1.0, +1.0        # 切向两侧对捏销钉
+        role[:, 0], role[:, 1] = 1.0, -1.0         # 一推一跟，形成对捏
     elif fam == "pin_push_single":
-        side[:, 0] = -1.0                          # 只用一块板推
-        on[:, 1] = 0.0
+        role[:, 0], role[:, 1] = 1.0, 0.0          # 只用一块板推
     elif fam == "pin_push_dual":
-        side[:, :] = -1.0                          # 两块板同侧推，分担载荷
+        role[:, :] = 1.0                           # 两块板同侧推，沿销钉轴向错开
     elif fam == "pin_regrasp":
-        side[:, 0], side[:, 1] = -1.0, +1.0
+        role[:, 0], role[:, 1] = 1.0, -1.0
         regrasp = torch.ones(n)
     elif fam == "rim_only":
-        side[:, 0], side[:, 1] = -1.0, +1.0
+        role[:, 0], role[:, 1] = 1.0, 1.0          # 径向对置压轮缘，靠摩擦拖
         on_pin = torch.zeros(n)
     else:
         raise ValueError(f"未知策略家族：{fam}")
     return {k: v.to(device) for k, v in
-            dict(on=on, side=side, on_pin=on_pin, regrasp=regrasp).items()}
+            dict(role=role, on_pin=on_pin, regrasp=regrasp).items()}
 
 
 def _git_sha() -> str:
@@ -239,7 +258,7 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     jid = knob.find_joints("DiscJoint")[0][0]
     bid = knob.body_names.index("Disc")
 
-    par = {k: torch.zeros(n, 2, device=device) for k in ("on", "side")}
+    par = {"role": torch.zeros(n, 2, device=device)}
     par.update({k: torch.zeros(n, device=device) for k in ("on_pin", "regrasp")})
     for fam in sorted(set(fam_of)):
         idx = [i for i, f in enumerate(fam_of) if f == fam]
@@ -247,12 +266,17 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
         sel = torch.tensor(idx, device=device, dtype=torch.long)
         for k in par:
             par[k][sel] = sub[k]
-    on, side, on_pin, regrasp = par["on"], par["side"], par["on_pin"], par["regrasp"]
+    role, on_pin, regrasp = par["role"], par["on_pin"], par["regrasp"]
 
-    goal = _u(rng, *GOAL_RANGE, n).to(device)
     omega = _u(rng, *OMEGA_RANGE, n).to(device)
-    turn_dir = torch.from_numpy(
-        rng.choice(np.array([-1.0, 1.0], dtype=np.float32), size=n)).to(device)
+    goal = omega * T_PUSH
+    # **只能往正方向转。** 旋钮的 revolute 关节限位是 -10°~+200°
+    # （`build_assets.KnobCfg.joint_limit_deg`），它是个带死挡的单向旋钮。
+    # 初版把转向做成随机 ±1，于是**一半 episode 一上来就顶在 -10° 死挡上**，
+    # 目标角 1.0~2.2 rad 在那个方向根本不存在——两次控制方案完全不同的实验里
+    # 转角均值却几乎一模一样（0.780 vs 0.782、0.814 vs 0.813），
+    # 正是因为这一半 episode 与控制无关地钉死在限位上。见 P-43。
+    turn_dir = torch.ones(n, device=device)
     # 接触半径：销钉家族接销钉侧面，轮缘家族接圆盘外缘
     radius = torch.where(on_pin > 0,
                          torch.full((n,), _K.pin_offset, device=device),
@@ -261,6 +285,10 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     height = torch.where(on_pin > 0,
                          torch.full((n,), PIN_Z, device=device),
                          torch.zeros(n, device=device))
+    if os.environ.get("IT_PIN_SWEEP"):
+        # 诊断用：把接触高度沿销钉从下到上扫一遍，量销钉碰撞体的实际竖直范围
+        height = torch.linspace(0.004, 0.058, n, device=device)
+        print("SWEEP 高度(mm):", [round(float(h) * 1000, 1) for h in height], flush=True)
     # 贴合面到接触中心的距离
     surf = torch.where(on_pin > 0,
                        torch.full((n,), _K.pin_radius, device=device),
@@ -283,56 +311,86 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     scene.update(DT)
     axis = knob.data.body_pos_w[:, bid, :]
 
-    # 推的那块板压进去，跟的那块板留缝。
-    #
-    # 两块板都用位置控制压住销钉时，**跟随的那块变成刹车**：它被销钉推着走，
-    # 而位置指令不让它走，于是销钉被夹在"推"和"刹"之间——实测内力 40 N、
-    # 净力矩只有 0.06 N·m。留缝之后跟随板只在需要时挡一下，不吃力矩。
-    push_side = -turn_dir
-    interf = torch.where(side * push_side.unsqueeze(-1) > 0,
-                         torch.full_like(side, GRIP_INTERF),
-                         torch.full_like(side, -6.0 * MM))
-    # 跟随板留 6 mm 缝：3 mm 时它仍然被销钉顶上，pin_pinch 的内力
-    # 一直卡在 27 N（净力矩只有 0.10 N·m）。
     #: **同侧两块板必须沿销钉轴向错开**，否则被指到同一个点上互相穿插——
     #: pin_push_dual 实测 66% 的操作步脱手、力矩上不去，与 P-32 同类。
-    same_side = (side[:, 0] * side[:, 1] > 0) & (on[:, 0] > 0) & (on[:, 1] > 0)
-    z_stag = torch.stack([-0.012 * same_side.float(), 0.012 * same_side.float()], dim=-1)
+    #:
+    #: 错开量由几何定死，不是调出来的：板横放时竖直方向占 25 mm，销钉可用段
+    #: 是 z ∈ [7.5, 55.5] mm（盘面之上到销钉顶）。两块 25 mm 高的板放进 48 mm
+    #: 里，中心只能取 22.0 与 48.0 mm——下缘 9.5 mm 高于盘面 2 mm，两板之间
+    #: 留 1 mm。初版按 PIN_Z ± 12 mm 放，下缘落到 4.4 mm，**低于盘面**，
+    #: 一直在蹭圆盘顶面：`pin_push_dual` 的"接触在销钉上"因此只有 67%。
+    both_push = (role[:, 0] > 0) & (role[:, 1] > 0) & (on_pin > 0)
+    _zc = (DISC_TOP + _P.size[1] / 2 + 2 * MM,
+           DISC_TOP + _P.size[1] / 2 + 2 * MM + _P.size[1] + 1 * MM)
+    z_stag = torch.stack([(_zc[k] - PIN_Z) * both_push.float() for k in (0, 1)], dim=-1)
 
-    def arc(theta, k):
-        """给定指令角，返回第 k 块板的世界目标位置与姿态。
+    def arc(theta, k, dl):
+        """给定圆盘的**实际**角度，返回第 k 块板的目标位姿与**推力方向**。
 
-        板贴在接触体的**切向**一侧：销钉靠法向力直接给力矩（与 μ 无关），
-        轮缘只能靠摩擦——这正是 D-14 要检验的差别。
+        参考系挂在**销钉当前所在的位置**上，板贴在该处的切向一侧，
+        推力方向恒为"从板指向销钉"——也就是纯切向。力全部转成力矩。
 
-        ⚠️ 轮缘家族两块板必须**径向对置**（θ 与 θ+π）。第一版把 side 乘了 0，
-        两块板被指到同一个点上，直接互相穿插，接触力 34 N 而力矩为零——
-        与 P-32 是同一类错误。
+        ⚠️ 第一版把参考系挂在"领先角"上：板既沿弧提前了 r·lead、又沿切向
+        偏了 off，两个偏移叠加，板跑到销钉的**斜前方**。实测领先角 0.20 rad
+        时接触法向偏离切向 42°，三分之一的力顶着销钉往圆心推、不产生任何
+        力矩；为了补偿又要更大的力，正反馈直到 PD 饱和（力恒定在 49.9 N，
+        圆盘停在 1.709 rad 转不动）。见 P-42。
+
+        侧向由**转向**决定，不能写死：圆盘往 ``turn_dir`` 转时能推的是
+        ``-turn_dir`` 那一侧。写死成 -1 的话，转向为 -1 的那一半 episode 里
+        推板会被当成跟随板留缝，全程零接触——`pin_push_single` 正是如此。
+
+        轮缘家族两块板**径向对置**（θ 与 θ+π），推力沿径向向内，并沿切向
+        领先 ``RIM_LEAD``：摩擦拖动必须有相对滑移才有拖力。
         """
-        th_k = theta + (0.0 if k == 0 else math.pi)
-        th_use = torch.where(on_pin > 0, theta, th_k)
+        s_k = torch.where(role[:, k] > 0, -turn_dir, turn_dir)
+        gap = torch.where(role[:, k] > 0, -dl,
+                          torch.full((n,), FOLLOW_GAP, device=device))
+        # 轮缘板与销钉在角度上**永远差 90°**。初版只领先圆盘 RIM_LEAD=0.08 rad
+        # (4.6°)，在 r≈62 mm 处离销钉才 5 mm，而板宽 25 mm——两块板全程压在
+        # 销钉上，"接触在销钉上"高达 92%，这一档就不再是"不用销钉"的对照了。
+        th_rim = (theta + turn_dir * RIM_LEAD + math.pi / 2
+                  + (0.0 if k == 0 else math.pi))
+        th_use = torch.where(on_pin > 0, theta, th_rim)
         c, s_ = torch.cos(th_use), torch.sin(th_use)
         rad = torch.stack([c, s_, torch.zeros_like(c)], dim=-1)          # 径向
         tan = torch.stack([-s_, c, torch.zeros_like(c)], dim=-1)         # 切向
         h_k = height + z_stag[:, k] * (on_pin > 0).float()
         center = axis + rad * radius.unsqueeze(-1) \
             + torch.stack([torch.zeros_like(c), torch.zeros_like(c), h_k], dim=-1)
-        off_pin = (surf + _P.size[2] / 2 - interf[:, k]).unsqueeze(-1)
-        pin_pos = center + tan * off_pin * side[:, k].unsqueeze(-1)
-        rim_pos = center + rad * (_P.size[2] / 2 - GRIP_INTERF)
+        off_pin = (surf + _P.size[2] / 2 + gap).unsqueeze(-1)
+        pin_pos = center + tan * off_pin * s_k.unsqueeze(-1)
+        rim_pos = center + rad * (_P.size[2] / 2 + gap).unsqueeze(-1)
         pos = torch.where(on_pin.unsqueeze(-1) > 0, pin_pos, rim_pos)
-        z_ax = torch.where(on_pin.unsqueeze(-1) > 0,
-                           -tan * side[:, k].unsqueeze(-1), -rad)
-        q = quat_from_frame(z_ax, torch.tensor([[0.0, 0.0, 1.0]], device=device)
-                            .expand(n, 3))
-        return pos, q
+        # 从板指向接触体的方向：销钉家族是切向，轮缘家族是径向朝内。
+        # 它同时是板的局部 +Z（工作面法向，见 `contact_attrib.quat_from_frame`）
+        # 和力控方向。
+        n_push = torch.where(on_pin.unsqueeze(-1) > 0,
+                             -tan * s_k.unsqueeze(-1), -rad)
+        # **板的长边必须与销钉轴平行**（竖放，35 mm 沿销钉）。
+        #
+        # 实测：把同一块板横过来（25 mm 沿销钉、35 mm 沿径向），切向力控下
+        # 板会**径直从 Ø20 的销钉里穿过去**，接触点数全程为零。沿销钉高度
+        # 扫一遍，横放时纯销钉段的接触力是 0.0~0.4 N，竖放时是 3.7~13.3 N，
+        # 而**静态**位置控制下两种朝向都正常（2 mm 干涉都量到 3 N）——
+        # 所以这是动态接触问题，不是几何摆错。见 P-46。
+        #
+        # 唯一的例外是 `pin_push_dual`：两块板要沿销钉上下错开，而销钉可用段
+        # 只有 48 mm，放不下两块 35 mm 的竖板（需要 71 mm）。那一档只能横放，
+        # 而横放对它是可行的——两块板上下夹着销钉互相约束，实测能稳定推转。
+        _up = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
+        # 轮缘家族同样横放：竖放时 35 mm 的板跨在只有 15 mm 厚的盘缘上，
+        # 实测操作阶段全程脱手；横放实测稳定压住、法向力 19.5 N。
+        vert = ((on_pin > 0) & ~both_push).unsqueeze(-1)
+        x_hint = torch.where(vert, _up, torch.cross(_up, n_push, dim=-1))
+        return pos, quat_from_frame(n_push, x_hint), n_push
 
     pds = [FloatingPD(pl, kp_pos=3000.0, kd_pos=110.0, kp_rot=6.0, kd_rot=0.025,
-                      max_force=45.0, max_torque=4.0, kd_force=15.0) for pl in plates]
+                      max_force=45.0, max_torque=4.0, kd_force=40.0) for pl in plates]
 
     targets, quats = [], []
     for k, pl in enumerate(plates):
-        p0, q0 = arc(th0, k)
+        p0, q0, _ = arc(th0, k, torch.zeros(n, device=device))
         st = pl.data.default_root_state.clone()
         st[:, :3] = p0 + torch.tensor([0.0, 0.0, STANDOFF], device=device)
         st[:, 3:7] = q0
@@ -355,48 +413,105 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     every = max(1, round(1.0 / (CONTROL_DT * _a.fps)))
     mu_pin = min(_P.friction, _K.pin_friction)
     mu_rim = min(_P.friction, _K.rim_friction)
-    # 领先角由目标角速度反推：ω = τ/阻尼 = (k·lead·r)·r/阻尼
-    #   -> lead = ω · 阻尼 / (k · r²)，k = kp_pos·m = 1500 N/m，r = 销钉偏心距
+    # **切向走力控，压力不再靠位置干涉换。**
+    #
+    # 位置干涉的等效刚度只有 kp_pos×质量 = 1500 N/m：要推出 10 N 得压进
+    # 6.7 mm，而销钉半径才 10 mm——板等于插进销钉里去了。实测单板推力
+    # 只有 2.45 N（设计值 11 N），圆盘转到一半就停。
+    #
+    # 力控方向是**销钉当前位置的切向**，每个控制步重算，随圆盘一起转
+    # （`FloatingPD` 的 ``force_dir``，P-39）；正交补里仍走位置 PD，
+    # 板的半径与高度因此被稳稳按住。
+    #
+    #   需要的力矩 τ = 阻尼 × ω，力臂是接触半径 -> F = 阻尼·ω / r（×1.15 余量）
     r_eff = torch.where(on_pin > 0, torch.full((n,), _K.pin_offset, device=device),
                         torch.full((n,), _K.disc_radius, device=device))
-    # ×2.2 是补板自己的跟踪滞后。板要以 ω·r ≈ 0.078 m/s 追一个动目标，
-    # 位置 PD 的稳态滞后 kd·v/kp ≈ 2.9 mm，而领先角本身只折合 5.4 mm——
-    # 一多半被吃掉了，实测推力只有 2.3 N 而不是模型说的 8 N，圆盘转不到目标角。
-    lead_ang = (2.2 * omega * damp / (1500.0 * r_eff * r_eff)).clamp(0.02, 0.30)
+    n_push_plates = (role > 0).float().sum(dim=1).clamp_min(1.0)
+    f_total = ((damp * omega / r_eff) * 1.35).clamp(max=MAX_PUSH_FORCE)
+    # 轮缘家族直接给到上限：μ 只有 0.10，即便如此也拖不动——D-14 要验的正是
+    # 这个。τ_rim = μ·F·R = 0.10 × 18 × 0.070 = 0.126 N·m ≪ τ_need ≈ 0.42。
+    f_total = torch.where(on_pin > 0, f_total,
+                          torch.full_like(f_total, MAX_PUSH_FORCE))
+    # **两块板一起推时按块平分**。25 N 安全上限（`plan/01` §3.2）是对被操作
+    # 物体上的合力判的，不能因为多加一块板就翻倍——那是把上限放宽来让数据
+    # 过关。平分之后力矩不变、合力不变。
+    f_share = f_total / n_push_plates
+    if os.environ.get("IT_PIN_STATIC"):
+        f_share = torch.zeros_like(f_share)          # 只留位置控制，测静态几何
+    # 板要跟着销钉一起以 v = ω·r 走，而力控轴的阻尼是**对地**的（P-33）：
+    # 不补的话稳态时白白扣掉 kd·m·v。
+    v_follow = omega * r_eff
+    #: 销钉家族在 establish 相位先用**位置干涉**压出 0.8 mm 的实接触，
+    #: 再把切向交给力控。直接从"贴着但零穿透"起步时接触力是零，前馈力让板
+    #: 自由加速——实测一个控制步就冲进销钉 5~7 mm，随后整块板从 Ø20 的销钉里
+    #: 穿过去撞在另一块板背上（接触点数全程 0，因为板与板的接触不在传感器
+    #: 过滤名单里）。见 P-45。
+    PIN_ENGAGE = 2.0 * MM if os.environ.get("IT_PIN_STATIC") else 0.8 * MM
+    PIN_HOLD = 2.0 * MM
+    # **轮缘家族不走力控，走位置干涉。**
+    # 径向力控在光滑柱面上没有任何位置反馈拦着板：实测板压进轮缘 8 mm 之后
+    # 顺着 15 mm 厚的边带滑下去，钻到圆盘底下卡在立柱上，接触力 1229 N
+    # 而力矩为零（见 P-44）。位置干涉是自限的——r 和 z 都被位置 PD 按住。
+    # 干涉量取安全上限对应的深度：这就是轮缘能被公平地压到的最大程度。
+    # 干涉量按**实测**力定：12 mm 时量到 32 N，超过 25 N 安全上限，
+    # 6.5 mm 折合约 17 N。这是轮缘能被公平地压到的最大程度，不是为了让它
+    # 转不动而调小的——D-14 的对照必须给足力才算数。
+    press_full = torch.where(on_pin > 0,
+                             torch.full((n,), PIN_ENGAGE, device=device),
+                             torch.full((n,), RIM_PRESS, device=device))
+    # 操作阶段的干涉量。切向走力控时它不起作用（那个轴被投影掉了），
+    # 只在**转到位、撤掉推力之后**决定"把住旋钮"的接触深度：
+    # 0.8 mm 只有 1.2 N，量到的接触时有时无，2 mm 稳定在 3 N。
+    press_manip = torch.where(on_pin > 0,
+                              torch.full((n,), PIN_HOLD, device=device),
+                              torch.full((n,), RIM_PRESS, device=device))
 
     frame = 0
     for phase_id, plen in enumerate(PHASE_STEPS):
         for kk in range(plen):
+            # 参考角**永远取圆盘的实际角度**，板始终骑在销钉当前位置上。
+            th_cmd = knob.data.joint_pos[:, jid]
+            reached = (th_cmd - th0) * turn_dir >= goal
+            # 推力前 15 步线性加载，避免板一落位就是满力；转到位就撤力，
+            # 让圆盘靠关节阻尼自己停住。
             if phase_id == 2:
-                # **跟着圆盘走、领先一个固定角度**，而不是开环走一条预定的弧。
-                #
-                # 开环推进时圆盘一旦跟不上，板与销钉的位置差就一直累积，
-                # PD 力按 1500 N/m × 滞后 涨上去——实测滞后到 36 mm、接触力
-                # 54 N，远超 25 N 安全上限，而其中大部分是两块板隔着销钉
-                # 互相顶的**内力**，对绕轴力矩毫无贡献。
-                #
-                # 领先角直接决定推力：F = k·lead·r，τ = F·r，ω = τ/阻尼。
-                # lead 由目标 ω 反推（见上面 lead_ang），力自然落在安全区内。
-                th_now = knob.data.joint_pos[:, jid]
-                th_end = th0 + turn_dir * goal
-                th_cmd = th_now + turn_dir * lead_ang
-                th_cmd = torch.where(turn_dir > 0,
-                                     torch.minimum(th_cmd, th_end),
-                                     torch.maximum(th_cmd, th_end))
+                ramp = min((kk + 1) / 25.0, 1.0)
+                push_on = torch.where(reached, torch.zeros_like(f_share),
+                                      f_share * ramp)
+                # **转到位之后停止推进，但仍轻轻把住旋钮**（保持 press_full 的
+                # 微干涉），而不是撒手。撒手时剩下的窗口全是空转，
+                # "操作阶段脱手" 会因此报到 30% 以上——那是"转完了"，
+                # 不是"脱手"。把住旋钮既符合操作常识，也不用去动判据。
+                press = press_manip
+            elif phase_id == 1:
+                push_on = torch.zeros(n, device=device)
+                press = press_manip * min((kk + 1) / max(plen - 8, 1), 1.0)
             else:
-                th_cmd = th0.clone()
+                push_on = torch.zeros(n, device=device)
+                press = torch.zeros(n, device=device)
             back = torch.zeros(n, device=device)
             if phase_id == 2 and bool((regrasp > 0).any()):
                 r_ph = (kk / plen)
                 if 0.45 < r_ph < 0.60:
                     back = regrasp * SAFE_R * math.sin(
                         math.pi * (r_ph - 0.45) / 0.15)
-                    # 松开期间不再驱动，让圆盘自己停下
-                    th_cmd = torch.where(regrasp > 0, knob.data.joint_pos[:, jid], th_cmd)
+                    # 松开期间不再推，让圆盘靠阻尼自己停下
+                    push_on = torch.where(regrasp > 0, torch.zeros_like(push_on),
+                                          push_on)
+                    press = torch.where(regrasp > 0, torch.zeros_like(press), press)  # 重抓时确实松开
 
+            ff_f = [None, None]
+            dir_f = [None, None]
             for k in range(2):
-                p, q = arc(th_cmd, k)
+                p, q, n_push = arc(th_cmd, k, press)
                 quats[k] = q
+                # 只有"推"的板走力控；不推的板 force_dir 取零向量，
+                # `FloatingPD` 会退回纯位置 PD（法向分量为零）。
+                act = ((role[:, k] > 0) & (push_on > 0)
+                       & (on_pin > 0)).float().unsqueeze(-1)
+                dir_f[k] = n_push * act
+                ff_f[k] = n_push * ((push_on + pds[k].kd_force * pds[k].mass
+                                     * v_follow) * act.squeeze(-1)).unsqueeze(-1)
                 tgt = targets[k]
                 lift = torch.zeros(n, 3, device=device)
                 if phase_id == 0:
@@ -412,7 +527,7 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                 rad = torch.stack([c, s, torch.zeros_like(c)], dim=-1)
                 tgt[:] = p + lift + rad * back.unsqueeze(-1)
                 # 不参与的板停在远处
-                tgt[:] = torch.where(on[:, k].unsqueeze(-1) > 0, tgt,
+                tgt[:] = torch.where(role[:, k].unsqueeze(-1) != 0, tgt,
                                      p + torch.tensor([0.0, 0.0, STANDOFF],
                                                       device=device))
                 buf.src_cmd[frame, k, :, :3] = tgt - prev_tgt[k]
@@ -424,7 +539,8 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                 # P-21：力矩指令会一直保持，每步都要显式清零
                 knob.set_joint_effort_target(z1, joint_ids=[jid])
                 for k, pl in enumerate(plates):
-                    f, tq = pds[k].compute(targets[k], quats[k])
+                    f, tq = pds[k].compute(targets[k], quats[k],
+                                           ff_force=ff_f[k], force_dir=dir_f[k])
                     pl.set_external_force_and_torque(f, tq, is_global=True)
                 scene.write_data_to_sim()
                 sim.step(render=False)
@@ -478,7 +594,7 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                 r_c = pl_loc[..., :2].norm(dim=-1)
                 buf.on_pin_c[frame, k] = cp["valid"] & (
                     (pl_loc[..., :2] - torch.tensor([_K.pin_offset, 0.0], device=device)
-                     ).norm(dim=-1) < _K.pin_radius + 0.012)
+                     ).norm(dim=-1) < _K.pin_radius + 0.005)
                 # 绕轴力矩：接触力对圆盘轴的 Z 分量（作用在圆盘上 = 取负）
                 f_w = -(cp["normal_forces"].unsqueeze(-1) * cp["normals"]
                         + cp["friction_forces"])
@@ -499,6 +615,27 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
             buf.valid[frame] = ok & torch.isfinite(th) & (
                 buf.fn[frame].abs().sum(dim=(0, 2)) <= MAX_VALID_FORCE)
 
+            if os.environ.get("IT_KNOB_DEBUG") and frame % 10 == 0:
+                for e_ in range(min(2, n)):
+                    row = [f"f{frame:3d} ph{phase_id} e{e_} th{float(th[e_]):+.3f}"
+                           f" tau{float(tau[e_]):+.3f}"]
+                    row.append(f"push{float(push_on[e_]):5.2f}")
+                    for k, pl in enumerate(plates):
+                        d_ = pl.data.root_pos_w[e_] - o_pos[e_]
+                        err = targets[k][e_] - pl.data.root_pos_w[e_]
+                        lc = to_local(pl.data.root_pos_w[e_].view(1, 1, 3),
+                                      o_pos[e_].view(1, 3), o_quat[e_].view(1, 4))[0, 0]
+                        row.append(f"| P{k} loc({float(lc[0])*1000:6.1f},"
+                                   f"{float(lc[1])*1000:6.1f},{float(lc[2])*1000:6.1f})"
+                                   f" r{float(d_[:2].norm())*1000:6.1f}"
+                                   f" z{float(d_[2])*1000:+6.1f}"
+                                   f" err{float(err.norm())*1000:6.1f}"
+                                   f" dirN{float(dir_f[k][e_].norm()):4.1f}"
+                                   f" ff{float(ff_f[k][e_].norm()):5.1f}"
+                                   f" np{int(buf.cvalid[frame, k, e_].sum())}"
+                                   f" F{float(buf.fn[frame, k, e_].abs().sum()):6.1f}")
+                    print(" ".join(row), flush=True)
+
             if camera is not None and frame % every == 0:
                 sim.render()
                 camera.update(CONTROL_DT)
@@ -506,6 +643,11 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                                .detach().cpu().numpy().astype(np.uint8))
             frame += 1
 
+    if os.environ.get("IT_PIN_SWEEP"):
+        mf = buf.fn[:, :, :, :].abs().sum(dim=(1, 3))          # (F, N)
+        mm_ = buf.phase[:, 0] == 2
+        print("SWEEP 力(N) :", [round(float(v), 2) for v in mf[mm_].mean(dim=0)],
+              flush=True)
     n_cut, n_keep = float(buf.dropped.sum()), float(buf.cvalid.sum())
     print(f"  接触点：保留 {n_keep:.0f}，离所有板都远而丢弃 "
           f"{float(buf.foreign.sum()):.0f}，超上限截掉 {n_cut:.0f}", flush=True)
@@ -520,6 +662,13 @@ def diagnostics(buf: Buffers, m: dict, e: int) -> dict[str, Any]:
     total = float(fn.sum().item())
     manip = buf.phase[:, e] == 2
     in_contact = fn.sum(dim=(1, 2)) > 0.05
+    # **"脱手"只在驱动段判。** 转到目标角之后板就不再推、只轻轻把住，
+    # 那段窗口里接触时有时无是"转完了"，不是"脱手"。把它算进去时同一批
+    # 干净轨迹会因为窗口留得长而被判失败（实测窗口 130→155 步，脱手率
+    # 27%→38%，而驱动段本身没有任何变化）。保持段的接触率单独报，不藏。
+    drive = manip & (buf.progress[:, e] < 1.0)
+    if int(drive.sum().item()) < 30:
+        drive = manip                       # 没真正驱动过，退回整段判
     ang = buf.angle[:, e] * m["turn_dir"][e]
 
     def share(codes, table):
@@ -533,7 +682,11 @@ def diagnostics(buf: Buffers, m: dict, e: int) -> dict[str, Any]:
         "on_pin_force_share": float(
             (fn * buf.on_pin_c[:, :, e, :]).sum().item() / total) if total > 0 else 0.0,
         "manip_no_contact_fraction": float(
-            ((manip & ~in_contact).sum() / max(int(manip.sum().item()), 1)).item()),
+            ((drive & ~in_contact).sum() / max(int(drive.sum().item()), 1)).item()),
+        "drive_frames": int(drive.sum().item()),
+        "hold_contact_fraction": float(
+            ((manip & ~drive & in_contact).sum()
+             / max(int((manip & ~drive).sum().item()), 1)).item()),
         "mean_torque_Nm": float((buf.tau[:, e] * m["turn_dir"][e])[manip].mean().item()),
         "peak_torque_Nm": float((buf.tau[:, e] * m["turn_dir"][e]).max().item()),
         "mean_contact_force_N": float(fn.sum(dim=(1, 2))[manip].mean().item()),
@@ -622,8 +775,11 @@ def report(out_dir: Path, records, splits) -> None:
     add(f"S3 旋钮双板 source · {len(metas)} episode，成功 {len(ok)} "
         f"({100.0 * len(ok) / max(len(metas), 1):.1f}%)")
     add("")
+    add("「脱手%」只统计**驱动段**（转到目标角之前）；转到位之后板不再推、"
+        "只轻轻把住，那段的接触率单独列在「保持接触%」。")
+    add("")
     add(f"{'家族':<18}{'条数':>5}{'成功':>6}{'转角rad':>9}{'目标rad':>9}{'脱手%':>8}"
-        f"{'销钉上%':>9}{'力矩Nm':>9}{'力N':>7}{'峰值N':>8}")
+        f"{'销钉上%':>9}{'力矩Nm':>9}{'力N':>7}{'峰值N':>8}{'驱动帧':>7}{'保持接触%':>10}")
     for fam in sorted({m["strategy_family"] for m in metas}):
         sub = [m for m in metas if m["strategy_family"] == fam]
         g = lambda k: float(np.mean([m["diagnostics"][k] for m in sub]))  # noqa: E731
@@ -631,7 +787,8 @@ def report(out_dir: Path, records, splits) -> None:
             f"{g('max_angle_rad'):>9.3f}{g('goal_rad'):>9.3f}"
             f"{100 * g('manip_no_contact_fraction'):>8.1f}"
             f"{100 * g('on_pin_force_share'):>9.1f}{g('mean_torque_Nm'):>9.3f}"
-            f"{g('mean_contact_force_N'):>7.2f}{g('peak_point_force_N'):>8.2f}")
+            f"{g('mean_contact_force_N'):>7.2f}{g('peak_point_force_N'):>8.2f}"
+            f"{g('drive_frames'):>7.0f}{100 * g('hold_contact_fraction'):>10.1f}")
     add("")
     add("⚠️ `rim_only` **预期失败**：D-14 的低摩擦轮缘在安全力上限内传不出所需力矩。")
     add("   它的 episode 进 failed 桶，用作 D-14 的操作级证据与 `plan/05` 实验五的反事实。")
@@ -683,7 +840,9 @@ def main() -> int:
 
     records: list[tuple[str, EpisodeRecord]] = []
     for b in range(_a.batches):
-        fam_of = [fams[(b * _a.envs + i) % len(fams)] for i in range(_a.envs)]
+        # 用 (b + i) 而不是 (b*envs + i)：录像只录 env 0，而 envs 是 5 的倍数时
+        # env 0 永远落在同一个家族上，25 个批次只能拍到一个家族。
+        fam_of = [fams[(b + i) % len(fams)] for i in range(_a.envs)]
         print(f"\n=== knob batch {b + 1}/{_a.batches} · {_a.envs} env ===", flush=True)
         buf, m, preview = run_batch(scene, sim, camera, fam_of, rng, device, b)
         if camera is not None:

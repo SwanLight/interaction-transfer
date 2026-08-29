@@ -292,7 +292,11 @@ OBJECTS: dict[str, ObjectSpec] = {
             "side_b": _s((-_CO.radius, 0, 0), (-1, 0, 0), (0, 1, 0), (0, 0, 1)),
             "top":    _s((0, 0, _CO.height / 2), (0, 0, 1), (1, 0, 0)),
         },
-        prims={"press": ("top",), "push": ("side_low",), "poke": ("side_a",),
+        # slide_push 与 push 用同一个低位点：把它推到打滑（M3 stick->slip）
+        # 与稳定推移是同一处接触的两种力学状态，正是这两条原语的区别所在。
+        # 加它是为了让 P3 不再只挂在方块一个物体上（冗余硬规则）。
+        prims={"press": ("top",), "push": ("side_low",),
+               "slide_push": ("side_low",), "poke": ("side_a",),
                "pivot": ("side_high",), "twist": ("side_a", "side_b"),
                "pinch_turn": ("side_a", "side_b")},
         cam_eye=(0.40, -0.34, 0.26), cam_at=(0.0, 0.0, 0.08),
@@ -304,9 +308,24 @@ OBJECTS: dict[str, ObjectSpec] = {
             # 推侧面中心高度 -> 滚；压顶 -> 压住；戳侧面 -> 通断
             "side":  _s((_RO.radius, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 0)),
             "top":   _s((0, 0, _RO.radius), (0, 0, 1), (1, 0, 0), (0, 1, 0)),
+            # **两个平端面**（Ø60 的圆盘面，轴线沿 Y）。捏住两端沿轴向力封闭，
+            # 是几何上与方块完全不同的一副对捏面：方块是两个平行的矩形侧面，
+            # 这里是一根曲面柱体的两个圆端面。
+            # 提起来 -> pinch_move；原地夹住 -> pinch_hold。
+            "end_a": _s((0, _RO.length / 2, 0), (0, 1, 0), (0, 0, 1), (1, 0, 0)),
+            "end_b": _s((0, -_RO.length / 2, 0), (0, -1, 0), (0, 0, 1), (1, 0, 0)),
+            # 同样是两端面，但切向取水平、两块板反向 -> 绕**竖直轴**偏转
+            # （力臂是 140 mm 的端面间距，靠端面摩擦传力，F2/E2）。
+            # 绕自身轴转在这个物体上就是 roll，不能拿来当 twist。
+            "yaw_a": _s((0, _RO.length / 2, 0), (0, 1, 0), (1, 0, 0), (0, 0, 1)),
+            "yaw_b": _s((0, -_RO.length / 2, 0), (0, -1, 0), (1, 0, 0), (0, 0, 1)),
         },
-        # 只做 roll 和 poke。压顶会让圆柱侧向滑走、推侧面就是滚，
+        # 侧面只做 roll 和 poke：压顶会让圆柱侧向滑走、推侧面就是滚，
         # 与 roll 是同一件事——分成两个名字只会让标签自相矛盾。
+        # 端面对捏（`end_*` / `yaw_*` 位点）**实测不成立**，已撤回：
+        # 自由卧柱在两块板夹上来之前就先滚跑了，1020 条里 pinch_hold 只成功 2 条、
+        # pinch_move 与 twist 各 0 条，物体位移 215~1399 mm。位点留在表里
+        # 是为了让下一个人不必重试一遍。
         prims={"roll": ("side",), "poke": ("side",)},
         cam_eye=(0.34, -0.32, 0.20), cam_at=(0.0, 0.0, 0.03),
     ),
@@ -314,8 +333,14 @@ OBJECTS: dict[str, ObjectSpec] = {
         cfg=A.BALL_CFG, articulated=False, body=None, body_path="Ball",
         init_pos=(0.0, 0.0, _BA.radius),
         sites={"side": _s((_BA.radius, 0, 0), (1, 0, 0), (0, 1, 0), (0, 1, 0)),
-               "top":  _s((0, 0, _BA.radius), (0, 0, 1), (1, 0, 0), (0, 1, 0))},
-        prims={"roll": ("side",), "press": ("top",), "poke": ("side",)},
+               "top":  _s((0, 0, _BA.radius), (0, 0, 1), (1, 0, 0), (0, 1, 0)),
+               # 两侧对置、切向反向 -> 绕**竖直轴**搓转（F2 摩擦驱动）。
+               # 立柱之外的第二个 twist 承载物体：立柱是竖直柱面，
+               # 球是球面，几何上确实不同（冗余硬规则要的就是这个）。
+               "side_a": _s((_BA.radius, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)),
+               "side_b": _s((-_BA.radius, 0, 0), (-1, 0, 0), (0, 1, 0), (0, 0, 1))},
+        prims={"roll": ("side",), "press": ("top",), "poke": ("side",),
+               "twist": ("side_a", "side_b")},
         cam_eye=(0.32, -0.30, 0.20), cam_at=(0.0, 0.0, 0.035),
     ),
     # --- 受约束平移 E3 ---
@@ -332,9 +357,24 @@ OBJECTS: dict[str, ObjectSpec] = {
                              _SL.block[2] / 2 + _SL.tab[2] / 2),
                             (1, 0, 0), (0, 1, 0), None, (0, 0, 1)),
             "top":       _s((-0.012, 0, _SL.block[2] / 2), (0, 0, 1), (0, 1, 0)),
+            # 挡片的**两个窄侧面**（10 mm 厚 × 34 mm 高，比块本身宽 10 mm，
+            # 从两侧都够得到）。捏住它再沿导轨推 -> 力封闭的对捏 + 受约束平移，
+            # 正是 P14 pinch-move 的 E3 那一支。
+            # 挡片的 ±X 面不能拿来做 pinch_move：那两个面的法向就是导轨方向，
+            # 捏住之后要移动的方向与法向重合，几何上不成立。
+            "tab_side_a": _s((_SL.block[0] / 2 - 6 * MM - _SL.tab[0] / 2,
+                              _SL.tab[1] / 2,
+                              _SL.block[2] / 2 + _SL.tab[2] / 2),
+                             (0, 1, 0), (1, 0, 0), (0, 0, 1)),
+            "tab_side_b": _s((_SL.block[0] / 2 - 6 * MM - _SL.tab[0] / 2,
+                              -_SL.tab[1] / 2,
+                              _SL.block[2] / 2 + _SL.tab[2] / 2),
+                             (0, -1, 0), (1, 0, 0), (0, 0, 1)),
         },
         prims={"slide_along": ("tab_front",), "hook_pull": ("tab_back",),
-               "press": ("top",), "poke": ("tab_front",)},
+               "press": ("top",), "poke": ("tab_front",),
+               "pinch_hold": ("tab_side_a", "tab_side_b"),
+               "pinch_move": ("tab_side_a", "tab_side_b")},
         cam_eye=(0.34, -0.40, 0.26), cam_at=(-0.02, 0.0, 0.05),
     ),
     "plunger": ObjectSpec(
@@ -1020,7 +1060,11 @@ def judge(d: dict, prim: str) -> tuple[bool, list[str]]:
                 or d["joint_change"] > 0.05):
             fails.append("物体本不该明显移动")
     elif exp == "move":
-        if d["object_translation_mm"] < 8.0:
+        # 与 "turn" 分支同理：受约束平移的物体（滑轨块、柱塞）沿导轨走了
+        # 46 mm，而它的**世界位姿**是常量——只查 translation 会把一条完全
+        # 正确的"捏住沿导轨推"判成"物体没有被推动"。`02` §3.1 把 E3
+        # （受约束平移）和 E1（自由平移）都算作"物体被移动"。
+        if d["object_translation_mm"] < 8.0 and d["joint_change"] < 0.02:
             fails.append("物体没有被推动")
         # 推移应当是**推着走**，不是把它推翻。翻掉了接触拓扑完全变样，
         # 那条轨迹不该被当成 push/slide_push 的示教。
