@@ -5,7 +5,7 @@
 本文件回答：这个项目在做什么、现在做到哪、下一步做什么、怎么在服务器上跑东西、
 以及哪些坑会浪费你半天。
 
-最后更新：2026-08-29
+最后更新：2026-08-29（S4 完成）
 
 ---
 
@@ -54,8 +54,8 @@
 | **S1** | 资产做得对不对（尺寸、碰撞、摩擦、够不够得着） | ✅ |
 | **S2** | 每个执行器物理上能不能完成任务 | 抽屉×钩杆 ✅，其余按需 |
 | S3 | 双板采集器模拟人，产生多样示教 | ✅ 抽屉 / 旋钮 / 擦拭 / 探针集 15/15 / 多样性 |
-| **S4** | **从示教里提取交互信息 ← 下一步** | ⬜ |
-| S4.5 | 表示分辨率该定多少 | ⬜ |
+| **S4** | 从示教里提取交互信息 | ✅ |
+| **S4.5** | **表示分辨率该定多少 ← 下一步** | ⬜ |
 | S5 | 从多条示教归纳出共享的交互要求 | ⬜ |
 | S6 | 训练「实现任意交互规格」的执行器 | ⬜ |
 | **S7** | **留出任务零样本 ← 本工作的主张** | ⬜ |
@@ -77,6 +77,7 @@ out/
   s3_probe/        探针物体集：原语库覆盖核对 + 六条原语录像
   s3_wipe/         擦拭：dirt 覆盖图 + 三个家族录像 + 验收
   s3_knob/         旋钮：接触部位与受力方向核对 + 五个家族截图 + 验收
+  s4_records/      Oracle Interaction Record：提取/验收/泄漏检查三套报告
 ```
 
 - **`out/`** = 产物，给别人看
@@ -92,7 +93,29 @@ out/
 | S1 资产自检 | ✅ 通过 | 33 项 PASS / 0 FAIL；预训练物体集另加 12 项（D-39） |
 | S2 Expert | ✅ 收尾 | 抽屉×钩杆，固定 43.1% / 随机 49.3%，Gate A 按 D-32 通过 |
 | **S3 Source** | ✅ **完成** | 抽屉 ✅ 探针集 ✅（15/15 格）擦拭 ✅ **旋钮 ✅** 多样性 ✅ |
-| S4 及之后 | ⬜ 未开始 | **下一步从这里开始** |
+| **S4 提取** | ✅ **完成** | 16 640 条全部提取；验收全通过；泄漏检查 7/9（2 条留 S5，1 条待做） |
+| S4.5 及之后 | ⬜ 未开始 | **下一步从这里开始** |
+
+### S4 的当前状态（接手时先看这里）
+
+四份数据集的 Oracle Interaction Record 在服务器
+`/tmp/s4_{drawer,wipe,knob,probe}`，产物摘要在 `out/s4_records/`（先读那份 README）。
+
+**与 S3 独立对拍的接触部位**：抽屉横杆背面 92.89%（S3 90.22%）、
+旋钮销钉 99.83%（S3 100%）、擦拭工作面 99.68%。
+**动力学一致性**：旋钮重建的绕轴力矩与仿真器记的 `object/axis_torque`
+相关 **0.931**、幅值比 0.90；抽屉 0.824 / 2.37；擦拭平面是 kinematic，N/A。
+
+⚠️ **三件接手前必须知道的**：
+
+1. **P-52**：采集板的角速度在抽屉 96.9%、旋钮 100% 的操作帧顶在 PhysX 的
+   100 rad/s 上限，**接触点相对速度整体不可信**（积出来 59 mm 滑移，
+   而接触点在物体系里一动没动）。mode 因此改由"接触斑块位移"判（D-49），
+   判据在擦拭数据上交叉验证过（相关 0.95）。位置量与力不受影响。
+2. **泄漏检查第 4、8、9 条没有通过，是"本步做不完"**——第 4、8 条要 envelope
+   （S5 的产物），第 9 条的探针脚本还没写。**不得引用成通过。**
+3. 抽屉上**从 Oracle Record 认策略比从原始动作还准**（0.933 vs 0.717）。
+   这给 S5 定了硬指标：envelope 聚合后必须显著低于 0.717。
 
 ### S3 的当前状态（接手时先看这里）
 
@@ -101,9 +124,9 @@ out/
 ```bash
 ./tools/sync.sh
 ./tools/run_remote.sh "PYTHONPATH=src /isaac-sim/python.sh \
-    tools/s3_source_drawer.py --envs 80 --batches 10 --out /tmp/s3_drawer_full" s3full
+    tools/s3_source_drawer.py --envs 80 --batches 10 --out /tmp/s3_drawer_v3" s3full
 ssh root@10.0.6.98 'cd /workspace/interaction_transfer && PYTHONPATH=src \
-    /isaac-sim/python.sh tools/s3_verify_dataset.py /tmp/s3_drawer_full --sample 60'
+    /isaac-sim/python.sh tools/s3_verify_dataset.py /tmp/s3_drawer_v3 --sample 60'
 ```
 
 - 五个策略家族，739/800 成功（92.4%）
@@ -114,7 +137,7 @@ ssh root@10.0.6.98 'cd /workspace/interaction_transfer && PYTHONPATH=src \
 - 独立验收 15 项全通过（`tools/s3_verify_dataset.py`）
 - 录像与摘要在 `out/s3_source/`，五个家族各一条
 
-数据集在服务器 `/tmp/s3_drawer_full`（36 MB），按 D-23 不进版本控制。
+数据集在服务器 **`/tmp/s3_drawer_v3`**，按 D-23 不进版本控制。
 
 **已完成 —— 探针物体集（交互原语库），10740 条 / 9250 成功（86.1%）**
 
@@ -152,8 +175,8 @@ pinch_hold / pinch_move 加了滑轨块挡片的两个窄侧面。
 
 ```bash
 PYTHONPATH=src /isaac-sim/python.sh tools/s3_source_wipe.py \
-    --envs 60 --batches 45 --out /tmp/s3_wipe
-PYTHONPATH=src /isaac-sim/python.sh tools/s3_dirt_map.py /tmp/s3_wipe --out dirt.png
+    --envs 60 --batches 45 --out /tmp/s3_wipe_v4
+PYTHONPATH=src /isaac-sim/python.sh tools/s3_dirt_map.py /tmp/s3_wipe_v4 --out dirt.png
 ```
 
 ⚠️ **验收擦拭必须同时看 dirt 覆盖图。** 录像看得到动作、**看不到污渍**，
@@ -175,8 +198,8 @@ PYTHONPATH=src /isaac-sim/python.sh tools/s3_dirt_map.py /tmp/s3_wipe --out dirt
 
 ```bash
 IT_GPU=0 ./tools/run_remote.sh "PYTHONPATH=src /isaac-sim/python.sh \
-    tools/s3_source_knob.py --envs 60 --batches 40 --video --out /tmp/s3_knob" knob
-PYTHONPATH=src /isaac-sim/python.sh tools/s3_knob_contact.py /tmp/s3_knob
+    tools/s3_source_knob.py --envs 60 --batches 40 --video --out /tmp/s3_knob_v4" knob
+PYTHONPATH=src /isaac-sim/python.sh tools/s3_knob_contact.py /tmp/s3_knob_v4
 ```
 
 ⚠️ **验收旋钮必须同时看 `tools/s3_knob_contact.py` 的输出。** 录像看得出板在
@@ -255,6 +278,9 @@ src/it/
   float_ctrl.py     浮动底座 PD 控制 + 混合力/位控
   contact_utils.py  逐接触点提取、stick/slide 判定、绕轴力矩重建
   contact_attrib.py 接触点归到"物体的哪个部位""执行器的哪个面"
+  geom_cfg.py       **几何参数（不依赖 pxr，本机可读）**，build_assets 原样再导出
+  surfaces.py       **物体表面采样**：点+法向+部件标签，嵌套多分辨率，hash 冻结（D-50）
+  interaction.py    **Oracle Interaction Record 提取器**（纯 numpy）
   records.py        episode 数据契约（npz + manifest，前缀隔离，fail-closed）
   envs/
     base.py         增量动作接口 + 定长接触摘要
@@ -282,6 +308,19 @@ tools/
   s3_verify_dataset.py    数据集独立验收（划分/留出集/哈希/字段隔离）
   s3_coverage.py          交互原语库的张满与冗余核对，未张满时非零退出
   s3_check_padded.py      两种接触提取实现对拍。**静态通过不代表对**，见 P-30
+  s4_extract.py           **S4 批量提取**（多进程，纯 numpy，不需要 Isaac）
+  s4_verify_records.py    S4 独立验收：结构/划分/hash/**动力学一致性**
+  s4_leak_checks.py       `plan/02` §7 九条泄漏检查，两条如实标 DEFER
+  test_surfaces.py        本机单元测试（表面采样）
+  test_interaction.py     本机单元测试（提取器：法向定向/等变/mode/合并）
+```
+
+⚠️ **本机三套单元测试不依赖 Isaac，改完立刻验**：
+
+```bash
+PYTHONPATH=src python3 tools/test_surfaces.py
+PYTHONPATH=src python3 tools/test_interaction.py
+PYTHONPATH=src python3 tools/test_records.py
 ```
 
 ---
@@ -317,6 +356,7 @@ tools/
 | **P-49** 闭环里每步重算的目标含离散选择 ⭐ | 目标四元数在两个**等价解**之间随机横跳，夹持力腰斩、物体被甩出一米 | 离散选择（符号/分支）必须在回路**外面**算一次；点积判正负前先问它会不会正好是零 |
 | **P-50** 只录 env 0 而家族分配周期与 envs 同步 | 45 个批次只录到一个家族；拷产物时通配符又把服务器上的旧文件带了回来 | 家族按 `(b + i) % len(fams)` 轮换；产物**先清空再生成再逐个显式拷**，最后查文件数与内容重复 |
 | **P-51** 夹持三个动作同时给 ⭐ | 直上直下落 -> 工具被楔飞；先张开落到位再夹 -> 压力归零（位置误差被消掉） | 顺序必须是**张开落下 → 夹拢 → 再下压**；位置控制里"压力"就是位置误差的产物 |
+| **P-52** 板角速度顶在 PhysX 上限 ⭐ | 接触点相对速度整体虚高：积出来 59 mm 滑移，而接触点在物体系里一动没动；**姿态误差均值看着正常** | 用几何量（间隙、接触点坐标）卡速度；mode 改判斑块位移（D-49）。下轮采集显式设 `max_angular_velocity` |
 
 ### 7.2 会让你卡住的
 

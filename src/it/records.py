@@ -29,12 +29,27 @@ from typing import Any, Iterable, Mapping
 import numpy as np
 
 SCHEMA_VERSION = "s3-episode-v1"
+#: S4 的 Oracle Interaction Record（`it.interaction`）。同一套读写与划分逻辑，
+#: 只是允许的字段前缀不同——它已经是物体中心的表示，不再有 `contact/<板>/` 这层。
+IR_SCHEMA_VERSION = "s4-record-v1"
 MANIFEST_VERSION = "s3-manifest-v1"
 META_KEY = "__meta__"
 
 #: 前缀白名单故意写死。宁可 loader 报错，也不要把审计字段当特征喂进去。
 SOURCE_PREFIX = "source/"
 MODEL_INPUT_PREFIXES = ("object/", "contact/", "phase", "progress", "valid_")
+
+#: 每个 schema：(允许进模型输入的前缀, 只作追查/诊断而被丢弃的前缀)。
+#: 两个集合都写出来，是为了让"新加字段忘了归类"落到 `model_arrays` 的异常上，
+#: 而不是被默默放行——S3 那条 fail-closed 规则对 S4 同样适用。
+SCHEMA_PREFIXES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    SCHEMA_VERSION: (MODEL_INPUT_PREFIXES, (SOURCE_PREFIX,)),
+    IR_SCHEMA_VERSION: (
+        ("effect/", "region/", "engage/", "mode/", "mech/",
+         "phase", "progress", "valid_"),
+        (SOURCE_PREFIX, "aux/"),
+    ),
+}
 
 
 class RecordError(ValueError):
@@ -51,9 +66,9 @@ class EpisodeRecord:
     def validate(self) -> None:
         if not isinstance(self.meta, dict):
             raise RecordError("meta 必须是 dict")
-        if self.meta.get("schema_version") != SCHEMA_VERSION:
+        if self.meta.get("schema_version") not in SCHEMA_PREFIXES:
             raise RecordError(
-                f"schema_version 必须是 {SCHEMA_VERSION!r}，"
+                f"schema_version 必须是 {sorted(SCHEMA_PREFIXES)} 之一，"
                 f"实际是 {self.meta.get('schema_version')!r}"
             )
         for key in ("episode_id", "task", "strategy_family"):
@@ -102,16 +117,17 @@ class EpisodeRecord:
         ``source/*`` 按构造排除；未知前缀直接报错，防止新字段静默泄漏。
         """
         self.validate()
+        allowed, dropped = SCHEMA_PREFIXES[self.meta["schema_version"]]
         result: dict[str, np.ndarray] = {}
         for name, value in self.arrays.items():
-            if name.startswith(SOURCE_PREFIX):
+            if name.startswith(dropped):
                 continue
-            if name.startswith(MODEL_INPUT_PREFIXES):
+            if name.startswith(allowed):
                 result[name] = value
             else:
                 raise RecordError(
-                    f"数组 {name!r} 没有归类：要么改名到 source/*，"
-                    "要么加进 MODEL_INPUT_PREFIXES，不许含糊"
+                    f"数组 {name!r} 没有归类：要么改名到被丢弃的前缀 {dropped}，"
+                    f"要么加进 SCHEMA_PREFIXES[{self.meta['schema_version']!r}]，不许含糊"
                 )
         return result
 
@@ -209,8 +225,10 @@ def write_manifest(
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     entries: list[dict[str, Any]] = []
+    schema = SCHEMA_VERSION
     for episode_path, record in records:
         record.validate()
+        schema = record.meta["schema_version"]
         p = Path(episode_path).resolve()
         try:
             rel = os.path.relpath(p, destination.parent.resolve())
@@ -220,7 +238,7 @@ def write_manifest(
     entries.sort(key=lambda item: str(item["episode_id"]))
     manifest: dict[str, Any] = {
         "manifest_version": MANIFEST_VERSION,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema,
         "dataset_name": dataset_name,
         "generator_git_sha": generator_git_sha,
         "num_episodes": len(entries),
@@ -245,8 +263,9 @@ def read_manifest(path: str | os.PathLike[str]) -> dict[str, Any]:
         manifest = json.load(handle)
     if manifest.get("manifest_version") != MANIFEST_VERSION:
         raise RecordError("manifest_version 缺失或不支持")
-    if manifest.get("schema_version") != SCHEMA_VERSION:
-        raise RecordError("manifest 的 schema 与 episode schema 不一致")
+    if manifest.get("schema_version") not in SCHEMA_PREFIXES:
+        raise RecordError(
+            f"manifest 的 schema_version {manifest.get('schema_version')!r} 不认识")
     episodes = manifest.get("episodes")
     if not isinstance(episodes, list):
         raise RecordError("manifest.episodes 必须是 list")
