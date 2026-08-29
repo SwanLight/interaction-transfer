@@ -69,7 +69,7 @@
 
 ```
 out/
-  report.html      总报告，双击就能看（视频内嵌，单文件）
+  report.html      总报告，双击就能看（33 段视频内嵌，单文件 671 KB，覆盖 S0–S3）
   s0_pipeline/     可视化管线
   s1_assets/       资产与场景录像 + 35 项自检
   s2_expert/       训练好的策略录像

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 S0/S1 的自包含 HTML 报告（`plan/06` §1 要求）。
+"""生成 S0–S3 的自包含 HTML 报告（`plan/06` §1 要求）。
 
 视频以 base64 data URI 内嵌，**整个报告是单个文件**——直接双击、在 IDE 预览、
 发给别人都能播。早期版本用相对路径引用 mp4，在 VSCode 预览的沙箱里只显示
@@ -267,12 +267,118 @@ S2_SCENES = [
 ]
 
 
+# ---------------------------------------------------------------- S3
+S3_TASKS = [
+    ("抽屉 × 双板", "drawer", "800 条 / 739 成功（92.4%）",
+     ["pinch_center", "pinch_offset", "hook_both", "asym_primary", "single_finger"],
+     "五个策略家族。接触 <b>90.2% 落在把手横杆背面</b>、9.8% 在正面（拇指该在的地方），"
+     "横杆上下表面 / 支撑柱 / 面板全为 0；<b>100% 落在两根支撑柱之间</b>。"
+     "<code>single_finger</code> 只用一块板——<code>plan/02</code> §7 第 3 条"
+     "「改变 source 板数量后表示维度不变」这条泄漏检查，只有它能提供数据。"),
+    ("旋钮 × 双板", "knob", "2400 条 / 1693 成功（70.5%）",
+     ["pin_pinch", "pin_push_single", "pin_push_dual", "pin_regrasp", "rim_only"],
+     "销钉是竖直插在盘面上的拨杆，所以<b>推力方向必须随圆盘一起转</b>：参考系挂在"
+     "销钉<b>当前的实际角度</b>上，力控方向取该处切向，每个控制步重算。"
+     "实测力 <b>100% 打在销钉柱面</b>、<b>96.9~100% 打在推进方向的后侧</b>、"
+     "接触法向只偏离圆盘切向 <b>2.5~11.6°</b>（挂在「领先角」上的错版本偏 42°，"
+     "三分之一的力顶着销钉往圆心推）。"
+     "<code>rim_only</code> 是<b>故意会失败</b>的对照：压足 19.5 N（安全上限 25 N 之内）"
+     "只转到 0.019 rad，而销钉家族转到 2.3~2.8 rad —— τ_rim = 0.137 ≪ τ_need = 0.42 N·m。"
+     "这是 D-14 第一次有<b>操作级</b>证据。"),
+    ("擦拭 × 双板（主任务）", "wipe", "2700 条 / 2606 成功（96.5%）",
+     ["tool_center", "tool_offset", "tool_tilt", "tool_heavy_slow",
+      "tool_light_fast", "direct_wipe"],
+     "六个家族，含<b>不用工具的直擦</b>——<code>plan/02</code> §7 第 8 条"
+     "「envelope 与是否使用工具无关」只有它能验。两块板夹黑板擦的"
+     "<b>两个 90×25 长侧面</b>（不是 45×25 的短端面）：扫掠沿 Y、长侧面的法向也是 Y，"
+     "推力由<b>法向力直接传</b>；夹短端面时只能靠摩擦传，工具跟不住路径"
+     "（滑脱 13 mm、路径区域内 68%；改完 0.6 mm / 92.5%，成功率 82.7% → 96.5%）。"
+     "<b>录像里的褐色格子就是 dirt</b>，擦掉一格就消失一格。"),
+    ("探针物体集（交互原语库）", "probe", "10740 条 / 9250 成功（86.1%）· 15/15 格",
+     ["dial_crank", "flap_crank", "plunger_hook_pull", "ridge_rub", "roller_poke",
+      "slider_hook_pull", "ball_roll", "ball_twist", "slider_pinch_move"],
+     "E-I 执行器要学的是「我这个形态能实现哪些交互」，不是「怎么做这三个任务」。"
+     "物体集从一套<b>独立于本项目三个任务</b>的交互分类学推出（Huang 的接触模式枚举 + "
+     "Bullock/Ma/Dollar 的手中心描述子 + Lynch &amp; Mason 的非抓握原语谱系），"
+     "判据是<b>是否张满该分类学</b>，不是「是否覆盖留出任务」。另加一条硬规则："
+     "<b>每条原语至少两个几何不同的物体承载</b>——满足它之后，"
+     "「你是照着任务 X 设计物体 Y 的」这句指控就失去力量：删掉 Y，那一格照样在。"
+     "10 个物体、15 条原语，<b>15/15 全部满足两条判据</b>。"),
+]
+
+
+def s3_section(web_dir):
+    P = ["<h2>S3 · 模拟人采集示教</h2>",
+         "<p class=lead>双板采集器扮演「人」，产生<b>多样的</b>示教。多样性不是装饰："
+         "S5 要从多条不同做法里归纳出<b>共享的</b>交互要求，"
+         "如果所有示教本来就一样，归纳就没有内容。</p>",
+         "<div class=note><b>为什么每个任务都要另配一张核对图。</b>"
+         "录像能看出板在动、在推、在擦，<b>看不出力打在物体的哪一侧、方向偏了多少</b>。"
+         "旋钮的全部力学就在这两件事上——所以 <code>s3_knob_contact.py</code> 在物体局部系里"
+         "统计「打在销钉哪一侧 / 法向偏离切向多少度」；擦拭的 effect 只有 dirt 变化，"
+         "所以有 dirt 覆盖图（现在录像里也直接画出来了）。"
+         "<b>这些都是数字发现不了、也是单看录像发现不了的，两者缺一不可。</b></div>"]
+    for title, key, vol, fams, blurb in S3_TASKS:
+        P.append(f"<h3 style='font-size:17px;margin:26px 0 6px'>{title}</h3>")
+        P.append(f"<p class=sub>{vol}</p><p class=lead>{blurb}</p>")
+        P.append("<div class=pair>")
+        for f in fams:
+            pre = {"drawer": "drawer_", "knob": "knob_", "wipe": "wipe_"}.get(key, "")
+            path = os.path.join(web_dir, f"{pre}{f}.mp4")
+            if not os.path.exists(path):
+                continue
+            P.append(f"<div class=card><h3 style='font-size:14px'>{f}</h3>"
+                     f"<video controls loop muted playsinline preload=metadata "
+                     f"src='data:video/mp4;base64,{b64(path)}'></video></div>")
+        P.append("</div>")
+
+    P.append("<h3 style='font-size:17px;margin:26px 0 6px'>数据划分</h3>")
+    P.append("<p class=lead><code>plan/03</code> §7 要一个校准集 + <b>五个</b>冻结测试集。"
+             "校准集必须独立于训练集和所有测试集——用训练集标定 conformal 阈值会让"
+             "覆盖率保证失效。划分一律<b>按 episode</b>，不按帧。</p>")
+    P.append("""<table><tr><th>划分</th><th>旋钮</th><th>擦拭</th><th>抽屉</th></tr>
+<tr><td>train</td><td>652</td><td>856</td><td>323</td></tr>
+<tr><td>calibration</td><td>87</td><td>127</td><td>43</td></tr>
+<tr><td>in_distribution_test</td><td>130</td><td>190</td><td>64</td></tr>
+<tr><td><b>unseen_geometry_test</b></td><td><b>204</b></td><td><b>297</b></td><td><b>83</b></td></tr>
+<tr><td>unseen_physics_test</td><td>173</td><td>219</td><td>66</td></tr>
+<tr><td>unseen_strategy_test</td><td>447</td><td>450</td><td>160</td></tr>
+<tr><td><b>unseen_implementation_test</b></td><td>—</td><td><b>373</b></td><td>—</td></tr>
+<tr><td>failed</td><td>707</td><td>94</td><td>61</td></tr></table>
+<p class=lead style="margin-top:14px"><b>失败样本单独存、不进任何测试集。</b>
+一条失败的示教不是示教，把它放进 <code>unseen_strategy_test</code>
+会让那个集合的泛化数字失去意义。<code>rim_only</code> 那 480 条是<b>设计上就该失败</b>的对照。</p>
+<div class=cav><b>⚠ 注意</b> — 几何变体靠 <code>MultiUsdFileCfg</code> 按 env 轮转混采，
+而它<b>要求 <code>replicate_physics=False</code></b>：为 True 时 Isaac Lab 把 env_0 的物理
+整体复制给所有 env，多资产被抹平。实测 24 个 env 全部拿到名义几何，
+<b>而代码以为其中 4 个是变体，标签会照常写出来、全是假的</b>。
+改完实测接触半径 47.9 / 50.6 / 59.6 mm 随三档销钉偏心清楚分开。</div>""")
+
+    P.append("<h3 style='font-size:17px;margin:26px 0 6px'>验收</h3>")
+    P.append("""<table><tr><th>判据</th><th>出处</th><th>实测</th></tr>
+<tr><td>数据集独立验收（划分不重不漏 / 留出集干净 / SHA-256 / 字段隔离）</td>
+<td><code>03</code> §6–§7</td><td><span class='tag p'>PASS</span> 旋钮 18 · 擦拭 21 · 抽屉 18 项，0 FAIL</td></tr>
+<tr><td>策略分类器在<b>原始 source 动作</b>上显著高于随机</td><td><code>03</code> §4</td>
+<td><span class='tag p'>PASS</span> 旋钮 1.000 / 擦拭 0.987 / 抽屉 0.742（随机 0.25 / 0.17 / 0.20）</td></tr>
+<tr><td>原语库张满 + 每条原语 ≥2 个几何不同的承载物体</td><td><code>03</code> §2.4</td>
+<td><span class='tag p'>PASS</span> 15/15</td></tr>
+<tr><td>两块板的朝向标记一致（录像可读）</td><td><code>06</code> §7</td>
+<td><span class='tag p'>PASS</span> 62 个家族/原语，矛盾 0 个</td></tr>
+<tr><td>旋钮接触部位与受力方向</td><td><code>03</code> §4</td>
+<td><span class='tag p'>PASS</span> 销钉 100% · 推进后侧 96.9~100% · 法向偏切向 2.5~11.6°</td></tr>
+</table>
+<p class=lead style="margin-top:14px">⚠️ 分类器这一项只证明<b>动作层面确实不同</b>。
+<code>plan/02</code> §7 第 4 条要的是「从 envelope 预测策略身份<b>显著更难</b>」，
+要等 S4/S5 有了 envelope 才能做，届时两个数并排报，一高一低才说明表示抹掉了策略特异性。</p>""")
+    return "".join(P)
+
+
 def main(vid_dir, s1_txt, out_path):
     P = [f"<!doctype html><html lang=zh><meta charset=utf-8>",
-         "<title>S0/S1/S2 验证报告 · Functional Interaction Transfer</title>",
+         "<title>S0–S3 验证报告 · Functional Interaction Transfer</title>",
          "<meta name=viewport content='width=device-width,initial-scale=1'>",
          f"<style>{CSS}</style><div class=wrap>",
-         "<h1>S0 / S1 / S2 验证报告</h1>",
+         "<h1>S0 / S1 / S2 / S3 验证报告</h1>",
          "<p class=sub>Functional Interaction Transfer —— 资产可行性自检、可视化链路、"
          "与第一个 Privileged Expert</p>",
          "<p class='sub env'>Isaac Sim <code>5.1.0-rc.19</code> + Isaac Lab <code>2.3.1</code>"
@@ -329,6 +435,8 @@ def main(vid_dir, s1_txt, out_path):
 <p class=lead style="margin-top:14px">抽屉沿 +X 打开。作用在它身上的力若是 +X 才是正常推开；
 若无接触仍在运动，那是惯性滑行。<b>这项检查是数字发现不了的，
 只能逐控制步记录接触力与速度。</b></p>""")
+
+    P.append(s3_section(os.path.join(os.path.dirname(vid_dir), "s3_web")))
 
     P.append("<h2>S1 自检完整结果</h2>")
     P.append("<p class=lead>共 35 项，33 项 PASS、2 项 INFO（仅记录测量值，无判据）、0 项 FAIL。"

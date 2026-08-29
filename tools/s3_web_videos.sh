@@ -7,14 +7,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 n=0
+mkdir -p out/s3_web
 for d in out/s3_source out/s3_knob out/s3_wipe out/s3_probe; do
   for f in "$d"/videos/*.mp4; do
     [ -e "$f" ] || continue
-    case "$f" in *_web.mp4) continue;; esac
-    o="${f%.mp4}_web.mp4"
+    o="out/s3_web/$(basename "$f")"
     ffmpeg -loglevel error -y -i "$f" -vf "scale=480:-2,fps=12" \
            -c:v libx264 -crf 34 -preset veryfast -an -movflags +faststart "$o"
     n=$((n+1))
   done
 done
-echo "压了 $n 段，总计 $(du -ch out/s3_*/videos/*_web.mp4 2>/dev/null | tail -1 | cut -f1)"
+echo "压了 $n 段 -> out/s3_web/（$(du -sh out/s3_web | cut -f1)）"
