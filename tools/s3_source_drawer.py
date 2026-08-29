@@ -883,7 +883,9 @@ def main() -> int:
 
     records: list[tuple[str, EpisodeRecord]] = []
     for b in range(_a.batches):
-        fam_of_env = [families[(b * _a.envs + i) % len(families)] for i in range(_a.envs)]
+        # 用 (b + i) 而不是 (b*envs + i)：录像只录 env 0，而 envs 是家族数的
+        # 倍数时 env 0 永远落在同一个家族上，多少个批次都只录得到一个家族。
+        fam_of_env = [families[(b + i) % len(families)] for i in range(_a.envs)]
         print(f"\n=== batch {b + 1}/{_a.batches} · {_a.envs} env ===", flush=True)
         buf, m, preview = run_batch(scene, sim, camera, fam_of_env, rng, device, b)
         if camera is not None:

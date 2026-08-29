@@ -753,7 +753,9 @@ def main() -> int:
 
     records: list[tuple[str, EpisodeRecord]] = []
     for b in range(_a.batches):
-        fam_of = [fams[(b * _a.envs + i) % len(fams)] for i in range(_a.envs)]
+        # 用 (b + i) 而不是 (b*envs + i)：录像只录 env 0，而 envs 是家族数的
+        # 倍数时 env 0 永远落在同一个家族上——45 个批次全都只录到 tool_center。
+        fam_of = [fams[(b + i) % len(fams)] for i in range(_a.envs)]
         print(f"\n=== wipe batch {b + 1}/{_a.batches} · {_a.envs} env ===", flush=True)
         buf, m, preview = run_batch(scene, sim, camera, fam_of, rng, device, b)
         if camera is not None:
