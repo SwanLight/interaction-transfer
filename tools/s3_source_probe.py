@@ -89,6 +89,7 @@ from it.contact_attrib import (  # noqa: E402
 )
 from it.contact_utils import (  # noqa: E402
     classify_contact_mode_padded,
+    contact_rel_vel,
     extract_contact_points_padded,
 )
 from it.float_ctrl import FloatingPD  # noqa: E402
@@ -549,6 +550,7 @@ class Buffers:
         self.pos_obj = z(2, n, MAX_CONTACTS, 3)
         self.nrm_obj = z(2, n, MAX_CONTACTS, 3)
         self.fri_obj = z(2, n, MAX_CONTACTS, 3)
+        self.rvel_obj = z(2, n, MAX_CONTACTS, 3)
         self.fn = z(2, n, MAX_CONTACTS)
         self.sep = z(2, n, MAX_CONTACTS)
         self.cvalid = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, dtype=torch.bool,
@@ -591,6 +593,12 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
         if art is not None:
             return art.data.body_pos_w[:, bid, :], art.data.body_quat_w[:, bid, :]
         return tgt_obj.data.root_pos_w, tgt_obj.data.root_quat_w
+
+    def obj_vel():
+        """被操作物体在其参考体上的线速度与角速度（世界系）。"""
+        if art is not None:
+            return (art.data.body_lin_vel_w[:, bid, :], art.data.body_ang_vel_w[:, bid, :])
+        return tgt_obj.data.root_lin_vel_w, tgt_obj.data.root_ang_vel_w
 
     def obj_state():
         if art is not None:
@@ -917,6 +925,12 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
                 buf.pos_obj[frame, k] = pl * cp["valid"].unsqueeze(-1)
                 buf.nrm_obj[frame, k] = rotate_inverse(o_quat, cp["normals"])
                 buf.fri_obj[frame, k] = rotate_inverse(o_quat, cp["friction_forces"])
+                # `plan/03` §5 的相对速度（解析式，见 `contact_utils.contact_rel_vel`）
+                o_lin, o_ang = obj_vel()
+                rv = contact_rel_vel(cp["positions"], plate.data.root_pos_w,
+                                     plate.data.root_lin_vel_w, plate.data.root_ang_vel_w,
+                                     o_pos, o_lin, o_ang)
+                buf.rvel_obj[frame, k] = rotate_inverse(o_quat, rv) * cp["valid"].unsqueeze(-1)
                 buf.fn[frame, k] = cp["normal_forces"]
                 buf.sep[frame, k] = cp["separations"]
                 buf.cvalid[frame, k] = cp["valid"]
@@ -1128,6 +1142,7 @@ def to_arrays(buf: Buffers, e: int) -> dict[str, np.ndarray]:
         out[f"{c}/pos_obj"] = cpu(buf.pos_obj[:, k, e]).astype(np.float32)
         out[f"{c}/normal_obj"] = cpu(buf.nrm_obj[:, k, e]).astype(np.float32)
         out[f"{c}/friction_obj"] = cpu(buf.fri_obj[:, k, e]).astype(np.float32)
+        out[f"{c}/rel_vel_obj"] = cpu(buf.rvel_obj[:, k, e]).astype(np.float32)
         out[f"{c}/normal_force"] = cpu(buf.fn[:, k, e]).astype(np.float32)
         out[f"{c}/separation"] = cpu(buf.sep[:, k, e]).astype(np.float32)
         out[f"{c}/valid"] = cpu(buf.cvalid[:, k, e])

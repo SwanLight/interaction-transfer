@@ -48,6 +48,8 @@ _ap.add_argument("--batches", type=int, default=24)
 _ap.add_argument("--out", default="/tmp/s3_wipe")
 _ap.add_argument("--seed", type=int, default=20260829)
 _ap.add_argument("--family", default="all")
+_ap.add_argument("--holdout-implementation", default="direct",
+                 help="留出哪一种实现（with_tool / direct / 空字符串表示不留）")
 _ap.add_argument("--holdout-family", default="tool_tilt",
                  help="划进 unseen_strategy_test 的家族（`plan/03` §7）")
 _ap.add_argument("--physics-variant-frac", type=float, default=0.15)
@@ -80,6 +82,7 @@ from it.contact_attrib import (  # noqa: E402
 )
 from it.contact_utils import (  # noqa: E402
     classify_contact_mode_padded,
+    contact_rel_vel,
     extract_contact_points_padded,
 )
 from it.float_ctrl import FloatingPD  # noqa: E402
@@ -297,6 +300,7 @@ class Buffers:
         self.pos_obj = z(3, n, MAX_CONTACTS, 3)
         self.nrm_obj = z(3, n, MAX_CONTACTS, 3)
         self.fri_obj = z(3, n, MAX_CONTACTS, 3)
+        self.rvel_obj = z(3, n, MAX_CONTACTS, 3)
         self.fn = z(3, n, MAX_CONTACTS)
         self.sep = z(3, n, MAX_CONTACTS)
         self.cvalid = torch.zeros(N_FRAMES, 3, n, MAX_CONTACTS, dtype=torch.bool,
@@ -349,6 +353,11 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     b_pos = board.data.root_pos_w
     b_quat = board.data.root_quat_w
     top = b_pos + torch.tensor([0.0, 0.0, BOARD[2] / 2], device=device)
+    # **几何变体**（`plan/03` §7 的"小幅几何变化"）：黑板擦长度按 env 轮转，
+    # 80 / 90 / 100 mm。夹持面在 ±Y、位置由 body[1] 决定且三档不变，
+    # 所以采集器不必按 env 取夹持几何，只需标签——变的是擦拭覆盖的足迹。
+    geom_tag = [A.geom_tag_of(i) for i in range(n)]
+
     x0, y0 = raster(torch.zeros(n, device=device), y_dir, n_pass)
 
     e_st = eraser.data.default_root_state.clone()
@@ -545,6 +554,11 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
                 buf.pos_obj[frame, bi] = pl_loc * cp["valid"].unsqueeze(-1)
                 buf.nrm_obj[frame, bi] = rotate_inverse(b_quat, cp["normals"])
                 buf.fri_obj[frame, bi] = rotate_inverse(b_quat, cp["friction_forces"])
+                # `plan/03` §5 的相对速度。这里的另一侧是**平面**——它是
+                # kinematic 刚体、全程不动，所以省略 B 即可（见 `contact_rel_vel`）。
+                rv = contact_rel_vel(cp["positions"], body.data.root_pos_w,
+                                     body.data.root_lin_vel_w, body.data.root_ang_vel_w)
+                buf.rvel_obj[frame, bi] = rotate_inverse(b_quat, rv) * cp["valid"].unsqueeze(-1)
                 buf.fn[frame, bi] = cp["normal_forces"]
                 buf.sep[frame, bi] = cp["separations"]
                 buf.cvalid[frame, bi] = cp["valid"]
@@ -610,7 +624,8 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     if n_cut > 0.01 * max(n_keep, 1.0):
         raise RuntimeError(f"{n_cut:.0f} 个接触点被静默截掉（P-03），调大 MAX_CONTACTS")
     return buf, dict(is_tool=is_tool, press=press, n_pass=n_pass, tilt=tilt,
-                     grip_off=grip_off, is_var=is_var, y_dir=y_dir), preview
+                     grip_off=grip_off, is_var=is_var, y_dir=y_dir,
+                     geom_tag=geom_tag), preview
 
 
 # ---------------------------------------------------------------- 判定与落盘
@@ -703,6 +718,7 @@ def to_arrays(buf: Buffers, e: int) -> dict[str, np.ndarray]:
         out[f"{c}/pos_obj"] = cpu(buf.pos_obj[:, bi, e]).astype(np.float32)
         out[f"{c}/normal_obj"] = cpu(buf.nrm_obj[:, bi, e]).astype(np.float32)
         out[f"{c}/friction_obj"] = cpu(buf.fri_obj[:, bi, e]).astype(np.float32)
+        out[f"{c}/rel_vel_obj"] = cpu(buf.rvel_obj[:, bi, e]).astype(np.float32)
         out[f"{c}/normal_force"] = cpu(buf.fn[:, bi, e]).astype(np.float32)
         out[f"{c}/separation"] = cpu(buf.sep[:, bi, e]).astype(np.float32)
         out[f"{c}/valid"] = cpu(buf.cvalid[:, bi, e])
@@ -787,7 +803,12 @@ def main() -> int:
         physx=sim_utils.PhysxCfg(gpu_max_rigid_contact_count=2 ** 22,
                                  gpu_max_rigid_patch_count=2 ** 20)))
     scene = InteractiveScene(SceneCfg(num_envs=_a.envs, env_spacing=1.6,
-                                      replicate_physics=True))
+                                      # **必须 False**：`replicate_physics=True` 时
+                                      # Isaac Lab 把 env_0 的物理整体复制给所有 env，
+                                      # `MultiUsdFileCfg` 的多资产会被抹平——实测 24 个
+                                      # env 全部拿到名义几何，而代码以为其中 4 个是变体。
+                                      # 几何变体（`plan/03` §7）靠它才成立。
+                                      replicate_physics=False))
     sim.reset()
     camera: Camera | None = scene["cam"] if _a.video else None
     device, rng, sha = sim.device, np.random.default_rng(_a.seed), _git_sha()
@@ -812,6 +833,11 @@ def main() -> int:
                 "implementation": "tool" if d["tool_used"] else "direct",
                 "strategy_family": fam, "strategy_variant": f"b{b:02d}e{e:03d}",
                 "physics_variant": "heldout_press" if bool(m["is_var"][e]) else "nominal",
+                "geometry_variant": m["geom_tag"][e],
+                # `plan/01` §5.1 的两种**实现**。`plan/03` §7 要求至少留出一种
+                # 实现的全部 episode 作跨实现测试（对应 `02` §7 第 8 条：
+                # envelope 与是否使用工具无关）。
+                "implementation": "with_tool" if bool(m["is_tool"][e]) else "direct",
                 "success": good, "failure_reasons": fails,
                 "seed": int(_a.seed + b * _a.envs + e),
                 "control_hz": 1.0 / CONTROL_DT, "physics_hz": 1.0 / DT,
@@ -833,8 +859,11 @@ def main() -> int:
         del buf
 
     entries = [r.to_manifest_entry("x") for _, r in records]
+    # `plan/03` §7 末尾：两种实现中至少留出**一种实现的全部 episode**
+    # 作跨实现测试（对应 `02` §7 第 8 条：envelope 与是否使用工具无关）。
     splits = split_episode_entries(entries, seed=_a.seed,
-                                   holdout_strategy_family=_a.holdout_family)
+                                   holdout_strategy_family=_a.holdout_family,
+                                   holdout_implementation=_a.holdout_implementation)
     write_manifest(records, out_dir / "manifest.json", dataset_name="s3_wipe_source",
                    generator_git_sha=sha, splits=splits,
                    extra={"task": "wipe", "families": list(fams),

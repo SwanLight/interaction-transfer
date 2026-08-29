@@ -59,10 +59,27 @@ def _rigid_props(max_lin_vel: float = 20.0, max_depenetration_velocity: float = 
 
 # ---------------------------------------------------------------- 任务物体
 
+#: 几何变体的混采比例：12 个槽位里 10 个名义 + 各 1 个变体 -> 约 17%。
+#: `MultiUsdFileCfg(random_choice=False)` 按 **env 下标 % 槽位数** 轮转，
+#: 是确定的，采集器据此给每条 episode 标 ``geometry_variant``（`plan/03` §7）。
+GEOM_SLOTS = 12
+
+
+def geom_usd_list(name: str) -> list[str]:
+    """12 个槽位的 USD 路径：10 个名义 + g1 + g2。"""
+    return [_usd(name)] * 10 + [_usd(f"{name}_g1"), _usd(f"{name}_g2")]
+
+
+def geom_tag_of(env_idx):
+    """env 下标 -> 几何变体标签，与 `geom_usd_list` 的排布一一对应。"""
+    slot = env_idx % GEOM_SLOTS
+    return "nominal" if slot < 10 else ("g1" if slot == 10 else "g2")
+
+
 KNOB_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Knob",
-    spawn=sim_utils.UsdFileCfg(
-        usd_path=_usd("knob"),
+    spawn=sim_utils.MultiUsdFileCfg(
+        usd_path=geom_usd_list("knob"), random_choice=False,
         activate_contact_sensors=True,
         rigid_props=_rigid_props(),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
@@ -84,8 +101,8 @@ KNOB_CFG = ArticulationCfg(
 
 CABINET_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Cabinet",
-    spawn=sim_utils.UsdFileCfg(
-        usd_path=_usd("cabinet"),
+    spawn=sim_utils.MultiUsdFileCfg(
+        usd_path=geom_usd_list("cabinet"), random_choice=False,
         activate_contact_sensors=True,
         rigid_props=_rigid_props(),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
@@ -108,8 +125,9 @@ CABINET_CFG = ArticulationCfg(
 
 ERASER_CFG = RigidObjectCfg(
     prim_path="{ENV_REGEX_NS}/Eraser",
-    spawn=sim_utils.UsdFileCfg(
-        usd_path=_usd("eraser"), activate_contact_sensors=True, rigid_props=_rigid_props()
+    spawn=sim_utils.MultiUsdFileCfg(
+        usd_path=geom_usd_list("eraser"), random_choice=False,
+        activate_contact_sensors=True, rigid_props=_rigid_props()
     ),
     init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.05)),
 )

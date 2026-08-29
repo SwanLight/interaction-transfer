@@ -116,7 +116,7 @@ DRAWER_PARTS = (
 def classify_drawer_local(
     pts_local: torch.Tensor,
     *,
-    bar_x: float,
+    bar_x: float | torch.Tensor,
     bar_z: float,
     bar_radius: float,
     bar_half_len: float,
@@ -137,6 +137,10 @@ def classify_drawer_local(
             所以判"在杆上"要放宽到半径 ± tol。
     """
     x, y, z = pts_local[..., 0], pts_local[..., 1], pts_local[..., 2]
+    # bar_x 可以是标量，也可以是**逐 env** 的 (N,) 张量——几何变体
+    # （`plan/03` §7）让把手净空按 env 变，横杆的 X 位置随之不同。
+    if torch.is_tensor(bar_x) and bar_x.dim() == 1:
+        bar_x = bar_x.view(-1, *([1] * (x.dim() - 1)))
     dx, dz = x - bar_x, z - bar_z
     r = torch.sqrt(dx * dx + dz * dz)
 

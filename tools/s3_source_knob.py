@@ -76,6 +76,7 @@ from it.contact_attrib import (  # noqa: E402
 )
 from it.contact_utils import (  # noqa: E402
     classify_contact_mode_padded,
+    contact_rel_vel,
     extract_contact_points_padded,
 )
 from it.float_ctrl import FloatingPD  # noqa: E402
@@ -232,6 +233,7 @@ class Buffers:
         self.pos_obj = z(2, n, MAX_CONTACTS, 3)
         self.nrm_obj = z(2, n, MAX_CONTACTS, 3)
         self.fri_obj = z(2, n, MAX_CONTACTS, 3)
+        self.rvel_obj = z(2, n, MAX_CONTACTS, 3)
         self.fn = z(2, n, MAX_CONTACTS)
         self.sep = z(2, n, MAX_CONTACTS)
         self.cvalid = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, dtype=torch.bool,
@@ -277,9 +279,14 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     # 转角均值却几乎一模一样（0.780 vs 0.782、0.814 vs 0.813），
     # 正是因为这一半 episode 与控制无关地钉死在限位上。见 P-43。
     turn_dir = torch.ones(n, device=device)
+    # **几何变体**（`plan/03` §7 的"小幅几何变化"）：销钉偏心距按 env 轮转，
+    # 46 / 52 / 58 mm。`MultiUsdFileCfg(random_choice=False)` 的分配是
+    # env 下标 % 槽位数，所以这里能确定地知道每个 env 拿到的是哪一个。
+    geom_tag = [A.geom_tag_of(i) for i in range(n)]
+    pin_off = torch.tensor(
+        [float(B.variant_cfg("knob", t).pin_offset) for t in geom_tag], device=device)
     # 接触半径：销钉家族接销钉侧面，轮缘家族接圆盘外缘
-    radius = torch.where(on_pin > 0,
-                         torch.full((n,), _K.pin_offset, device=device),
+    radius = torch.where(on_pin > 0, pin_off,
                          torch.full((n,), _K.disc_radius, device=device))
     # 接触高度：销钉在盘面之上，轮缘在盘厚中段
     height = torch.where(on_pin > 0,
@@ -430,7 +437,7 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     # 板的半径与高度因此被稳稳按住。
     #
     #   需要的力矩 τ = 阻尼 × ω，力臂是接触半径 -> F = 阻尼·ω / r（×1.15 余量）
-    r_eff = torch.where(on_pin > 0, torch.full((n,), _K.pin_offset, device=device),
+    r_eff = torch.where(on_pin > 0, pin_off,
                         torch.full((n,), _K.disc_radius, device=device))
     n_push_plates = (role > 0).float().sum(dim=1).clamp_min(1.0)
     f_total = ((damp * omega / r_eff) * 1.35).clamp(max=MAX_PUSH_FORCE)
@@ -588,6 +595,14 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                 fri_l = rotate_inverse(o_quat, cp["friction_forces"])
                 buf.nrm_obj[frame, k] = nrm_l
                 buf.fri_obj[frame, k] = fri_l
+                # `plan/03` §5 要求逐帧记录接触点的**相对速度**。PhysX 的接触
+                # 缓冲不给，但两个接触体都是刚体，接触点处的速度是解析的。
+                rv = contact_rel_vel(
+                    cp["positions"], pl.data.root_pos_w,
+                    pl.data.root_lin_vel_w, pl.data.root_ang_vel_w,
+                    o_pos, knob.data.body_lin_vel_w[:, bid, :],
+                    knob.data.body_ang_vel_w[:, bid, :])
+                buf.rvel_obj[frame, k] = rotate_inverse(o_quat, rv) * cp["valid"].unsqueeze(-1)
                 buf.fn[frame, k] = cp["normal_forces"]
                 buf.sep[frame, k] = cp["separations"]
                 buf.cvalid[frame, k] = cp["valid"]
@@ -599,7 +614,8 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
                 # 接触在销钉上还是轮缘上（物体系半径判定）
                 r_c = pl_loc[..., :2].norm(dim=-1)
                 buf.on_pin_c[frame, k] = cp["valid"] & (
-                    (pl_loc[..., :2] - torch.tensor([_K.pin_offset, 0.0], device=device)
+                    (pl_loc[..., :2] - torch.stack(
+                        [pin_off, torch.zeros_like(pin_off)], dim=-1).unsqueeze(1)
                      ).norm(dim=-1) < _K.pin_radius + 0.005)
                 # 绕轴力矩：接触力对圆盘轴的 Z 分量（作用在圆盘上 = 取负）
                 f_w = -(cp["normal_forces"].unsqueeze(-1) * cp["normals"]
@@ -660,7 +676,8 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
     if n_cut > 0.01 * max(n_keep, 1.0):
         raise RuntimeError(f"{n_cut:.0f} 个接触点被静默截掉（P-03），调大 MAX_CONTACTS")
     return buf, dict(goal=goal, omega=omega, turn_dir=turn_dir, damp=damp,
-                     is_var=is_var, on_pin=on_pin, th0=th0), preview
+                     is_var=is_var, on_pin=on_pin, th0=th0,
+                     geom_tag=geom_tag, pin_off=pin_off), preview
 
 
 def diagnostics(buf: Buffers, m: dict, e: int) -> dict[str, Any]:
@@ -750,6 +767,7 @@ def to_arrays(buf: Buffers, e: int) -> dict[str, np.ndarray]:
         out[f"{c}/pos_obj"] = cpu(buf.pos_obj[:, k, e]).astype(np.float32)
         out[f"{c}/normal_obj"] = cpu(buf.nrm_obj[:, k, e]).astype(np.float32)
         out[f"{c}/friction_obj"] = cpu(buf.fri_obj[:, k, e]).astype(np.float32)
+        out[f"{c}/rel_vel_obj"] = cpu(buf.rvel_obj[:, k, e]).astype(np.float32)
         out[f"{c}/normal_force"] = cpu(buf.fn[:, k, e]).astype(np.float32)
         out[f"{c}/separation"] = cpu(buf.sep[:, k, e]).astype(np.float32)
         out[f"{c}/valid"] = cpu(buf.cvalid[:, k, e])
@@ -839,7 +857,12 @@ def main() -> int:
         physx=sim_utils.PhysxCfg(gpu_max_rigid_contact_count=2 ** 22,
                                  gpu_max_rigid_patch_count=2 ** 20)))
     scene = InteractiveScene(SceneCfg(num_envs=_a.envs, env_spacing=1.4,
-                                      replicate_physics=True))
+                                      # **必须 False**：`replicate_physics=True` 时
+                                      # Isaac Lab 把 env_0 的物理整体复制给所有 env，
+                                      # `MultiUsdFileCfg` 的多资产会被抹平——实测 24 个
+                                      # env 全部拿到名义几何，而代码以为其中 4 个是变体。
+                                      # 几何变体（`plan/03` §7）靠它才成立。
+                                      replicate_physics=False))
     sim.reset()
     camera: Camera | None = scene["cam"] if _a.video else None
     device, rng, sha = sim.device, np.random.default_rng(_a.seed), _git_sha()
@@ -863,6 +886,8 @@ def main() -> int:
                 "source_embodiment": "two_dynamic_plates",
                 "strategy_family": fam, "strategy_variant": f"b{b:02d}e{e:03d}",
                 "physics_variant": "heldout_damping" if bool(m["is_var"][e]) else "nominal",
+                "geometry_variant": m["geom_tag"][e],
+                "implementation": "two_plate_pin",
                 "success": good, "failure_reasons": fails,
                 "expected_to_fail": fam == "rim_only",
                 "seed": int(_a.seed + b * _a.envs + e),
@@ -870,6 +895,7 @@ def main() -> int:
                 "phase_names": list(PHASE_NAMES), "phase_steps": list(PHASE_STEPS),
                 "generator_git_sha": sha,
                 "goal_rad": float(m["goal"][e].item()),
+                "geometry": {"pin_offset_mm": float(m["pin_off"][e].item() * 1000)},
                 "physics": {"joint_damping": float(m["damp"][e].item()),
                             "rim_friction": _K.rim_friction,
                             "pin_friction": _K.pin_friction,

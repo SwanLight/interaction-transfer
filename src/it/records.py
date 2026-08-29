@@ -125,6 +125,10 @@ class EpisodeRecord:
             "strategy_family": self.meta["strategy_family"],
             "strategy_variant": self.meta.get("strategy_variant", "default"),
             "physics_variant": self.meta.get("physics_variant", "nominal"),
+            # `plan/03` §7 的另外两条划分依据。它们必须**提到条目层**，
+            # 因为 `split_episode_entries` 只看条目、不下钻 meta。
+            "geometry_variant": self.meta.get("geometry_variant", "nominal"),
+            "implementation": self.meta.get("implementation", "default"),
             "success": bool(self.meta.get("success", False)),
             "split": self.meta.get("split", "unassigned"),
             "meta": self.meta,
@@ -259,19 +263,27 @@ def split_episode_entries(
     *,
     seed: int = 0,
     holdout_strategy_family: str | None = None,
+    holdout_implementation: str | None = None,
 ) -> dict[str, list[str]]:
     """确定性地按 **episode** 分配划分（P-10：绝不按帧）。
 
-    `plan/03` §7 要一个校准集 + 四个冻结测试集，另加一个 ``failed`` 桶。
-    三条不靠随机抽、由元数据决定的规则，**按以下顺序**生效：
+    `plan/03` §7 要一个校准集 + **五个**冻结测试集，另加一个 ``failed`` 桶。
+    五条不靠随机抽、由元数据决定的规则，**按以下顺序**生效：
 
     1. ``failed``：``success == False`` 的全部。
        `plan/03` §6 要求"失败、近成功和物理不可行样本单独保存，
        **不与成功 shared-structure 标签混合**"。它们仍然留在数据集里可供检查，
        但不进训练集、不进任何测试集——**一条失败的示教不是示教**，
        把它放进 `unseen_strategy_test` 会让那个集合的泛化数字失去意义。
-    2. ``unseen_strategy_test``：``strategy_family == holdout_strategy_family`` 的成功样本。
-    3. ``unseen_physics_test``：``physics_variant != "nominal"`` 的其余成功样本。
+    2. ``unseen_implementation_test``：``implementation == holdout_implementation``
+       的成功样本。`plan/03` §7 末尾要求擦拭"两种实现中至少留出一种实现的
+       **全部** episode 作跨实现测试"，对应 `02` §7 第 8 条那条泄漏检查
+       （envelope 与是否使用工具无关）。它排在策略留出**之前**——
+       "实现"是比"策略家族"更粗的一层，一种实现里可能有多个家族。
+    3. ``unseen_strategy_test``：``strategy_family == holdout_strategy_family`` 的成功样本。
+    4. ``unseen_geometry_test``：``geometry_variant != "nominal"`` 的其余成功样本
+       （`plan/03` §7 表第 6 行"小幅几何变化"：销钉偏心距 / 把手高度 / 黑板擦尺寸）。
+    5. ``unseen_physics_test``：``physics_variant != "nominal"`` 的其余成功样本。
 
     ⚠️ 第 3 条是 2026-08-28 修的一个真 bug：原实现用随机 shuffle 填它，
     于是这个名字叫「没有见过的物理」的集合里装的其实是同分布 episode，
@@ -288,12 +300,23 @@ def split_episode_entries(
     failed = [i for i in ids if not by_id[i].get("success", False)]
     taken = set(failed)
 
+    holdout_impl = [
+        i for i in ids
+        if i not in taken and holdout_implementation is not None
+        and by_id[i].get("implementation") == holdout_implementation
+    ]
+    taken |= set(holdout_impl)
     holdout_strategy = [
         i for i in ids
         if i not in taken and holdout_strategy_family is not None
         and by_id[i].get("strategy_family") == holdout_strategy_family
     ]
     taken |= set(holdout_strategy)
+    holdout_geom = [
+        i for i in ids
+        if i not in taken and by_id[i].get("geometry_variant", "nominal") != "nominal"
+    ]
+    taken |= set(holdout_geom)
     holdout_physics = [
         i for i in ids
         if i not in taken and by_id[i].get("physics_variant", "nominal") != "nominal"
@@ -319,7 +342,9 @@ def split_episode_entries(
         "calibration": remaining[n_train: n_train + n_cal],
         "in_distribution_test": remaining[n_train + n_cal: n_train + n_cal + n_test],
         "unseen_physics_test": holdout_physics,
+        "unseen_geometry_test": holdout_geom,
         "unseen_strategy_test": holdout_strategy,
+        "unseen_implementation_test": holdout_impl,
         "failed": failed,
     }
     assigned = [item for values in result.values() for item in values]

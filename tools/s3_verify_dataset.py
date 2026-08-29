@@ -94,6 +94,47 @@ def main() -> int:
               f"却有 {len(hold_fam)} 条")
         print("[INFO] 本数据集未声明留出策略家族")
 
+    # ---- 几何留出（`plan/03` §7 表第 6 行）----
+    has_geom = [i for i in ids_all
+                if by_id[i].get("geometry_variant", "nominal") != "nominal"]
+    hold_geom = splits.get("unseen_geometry_test", [])
+    if has_geom:
+        tags = {by_id[i].get("geometry_variant") for i in hold_geom}
+        check("nominal" not in tags and tags,
+              "unseen_geometry_test 只含非名义几何", f"{sorted(tags)}")
+        # 与物理留出同理：划分有优先级，前面的桶要扣掉。
+        expect = (set(has_geom) - set(splits.get("failed", []))
+                  - set(splits.get("unseen_strategy_test", []))
+                  - set(splits.get("unseen_implementation_test", [])))
+        check(set(hold_geom) == expect,
+              "所有成功、且不属于前序留出的几何变体都进了 unseen_geometry_test",
+              f"变体 {len(has_geom)} 条，应留出 {len(expect)} 条，实际 {len(hold_geom)} 条")
+        check(all(by_id[i].get("geometry_variant", "nominal") == "nominal"
+                  for i in splits.get("train", [])),
+              "训练集只含名义几何")
+    else:
+        check(not hold_geom, "没有几何变体样本，unseen_geometry_test 应为空",
+              f"却有 {len(hold_geom)} 条")
+
+    # ---- 跨实现留出（`plan/03` §7 末尾，对应 `02` §7 第 8 条）----
+    impls = {by_id[i].get("implementation", "default") for i in ids_all}
+    hold_impl = splits.get("unseen_implementation_test", [])
+    if len(impls) > 1:
+        check(bool(hold_impl), "多实现数据集必须留出一种实现作跨实现测试",
+              f"实现有 {sorted(impls)}，留出 {len(hold_impl)} 条")
+        held = {by_id[i].get("implementation") for i in hold_impl}
+        check(len(held) == 1, "unseen_implementation_test 只含**一种**实现",
+              f"{sorted(held)}")
+        check(all(by_id[i].get("implementation") not in held
+                  for i in splits.get("train", [])),
+              "训练集不含被留出的那种实现")
+        n_success_held = len([i for i in ids_all
+                              if by_id[i].get("implementation") in held
+                              and by_id[i]["success"]])
+        check(len(hold_impl) == n_success_held,
+              "被留出实现的**全部**成功 episode 都在该桶里",
+              f"该实现成功 {n_success_held} 条，桶里 {len(hold_impl)} 条")
+
     has_var = [i for i in ids_all
                if by_id[i]["meta"].get("physics_variant", "nominal") != "nominal"]
     hold_phys = splits.get("unseen_physics_test", [])
@@ -101,11 +142,14 @@ def main() -> int:
         phys_hold = {by_id[i]["meta"].get("physics_variant") for i in hold_phys}
         check("nominal" not in phys_hold and phys_hold,
               "unseen_physics_test 只含非名义物理参数", f"{sorted(phys_hold)}")
-        # 划分是有优先级的（失败 -> 策略留出 -> 物理留出），所以一条既属于
-        # 留出家族、又带物理变体的成功 episode 会进 unseen_strategy_test。
-        # 判据必须把这两块都扣掉，否则会得到一个假的 FAIL。
+        # 划分是有优先级的（失败 -> 跨实现 -> 策略 -> 几何 -> 物理），
+        # 一条既带物理变体、又落在前面任何一个桶里的 episode 会被前面拿走。
+        # 判据必须把**前面所有桶**都扣掉，否则会得到一个假的 FAIL——
+        # 加几何桶那次就当场撞上了（5 条变体里 2 条被几何桶先拿走）。
         expect = (set(has_var) - set(splits.get("failed", []))
-                  - set(splits.get("unseen_strategy_test", [])))
+                  - set(splits.get("unseen_implementation_test", []))
+                  - set(splits.get("unseen_strategy_test", []))
+                  - set(splits.get("unseen_geometry_test", [])))
         check(set(hold_phys) == expect,
               "所有成功、且不属于留出家族的物理变体都进了 unseen_physics_test",
               f"变体 {len(has_var)} 条，应留出 {len(expect)} 条，实际 {len(hold_phys)} 条")

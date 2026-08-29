@@ -84,6 +84,7 @@ from isaaclab.utils.math import quat_from_angle_axis, quat_mul  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from it import assets as A  # noqa: E402
+from it import build_assets as B  # noqa: E402
 from it.build_assets import CabinetCfg, PlateCfg  # noqa: E402
 from it.contact_attrib import (  # noqa: E402
     DRAWER_PARTS,
@@ -96,6 +97,7 @@ from it.contact_attrib import (  # noqa: E402
 )
 from it.contact_utils import (  # noqa: E402
     classify_contact_mode_padded,
+    contact_rel_vel,
     extract_contact_points_padded,
 )
 from it.float_ctrl import FloatingPD  # noqa: E402
@@ -364,6 +366,7 @@ class Buffers:
         self.pos_obj = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, 3, device=device)
         self.nrm_obj = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, 3, device=device)
         self.fri_obj = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, 3, device=device)
+        self.rvel_obj = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, 3, device=device)
         self.fn = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, device=device)
         self.sep = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, device=device)
         self.cvalid = torch.zeros(N_FRAMES, 2, n, MAX_CONTACTS, dtype=torch.bool, device=device)
@@ -431,8 +434,16 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
     cabinet.set_joint_effort_target(zero1, joint_ids=[jid])
     scene.update(DT)
 
-    handle = cabinet.data.body_pos_w[:, drawer_body, :] + torch.tensor(
-        [BAR_X, 0.0, BAR_Z], device=device)
+    # **几何变体**（`plan/03` §7 的"小幅几何变化"）：把手离面板的净空按 env
+    # 轮转，38 / 45 / 52 mm，横杆的 X 位置随之变。`MultiUsdFileCfg` 的分配是
+    # env 下标 % 槽位数，所以这里能确定地知道每个 env 拿到的是哪一个。
+    geom_tag = [A.geom_tag_of(i) for i in range(n)]
+    bar_x = torch.tensor(
+        [float(B.variant_cfg("cabinet", t).handle_clearance) + C.panel_t + C.handle_radius
+         for t in geom_tag], device=device)
+    bar_off = torch.stack(
+        [bar_x, torch.zeros_like(bar_x), torch.full_like(bar_x, BAR_Z)], dim=-1)
+    handle = cabinet.data.body_pos_w[:, drawer_body, :] + bar_off
     quats = [plate_quat(side[:, p]) for p in range(2)]
     # **两块板都从前方（+X）下方飞进来**：手指那块要伸进净空，只能从杆子
     # 底下穿过去再升上来；从 -X 侧进入意味着穿过柜体，物理上根本没有那条路。
@@ -482,8 +493,7 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
     frame = 0
     for phase_id, phase_len in enumerate(PHASE_STEPS):
         for k in range(phase_len):
-            handle = cabinet.data.body_pos_w[:, drawer_body, :] + torch.tensor(
-                [BAR_X, 0.0, BAR_Z], device=device)
+            handle = cabinet.data.body_pos_w[:, drawer_body, :] + bar_off
             opening = cabinet.data.joint_pos[:, jid]
             drawer_v = cabinet.data.joint_vel[:, jid]
             active = opening < (goal - GOAL_TOL)
@@ -621,6 +631,14 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
                 # 法向和摩擦力是**矢量**，只旋转不平移
                 buf.nrm_obj[frame, p] = rotate_inverse(obj_quat, cp["normals"])
                 buf.fri_obj[frame, p] = rotate_inverse(obj_quat, cp["friction_forces"])
+                # `plan/03` §5 要求逐帧记录接触点的**相对速度**（解析式，见
+                # `contact_utils.contact_rel_vel`）。
+                rv = contact_rel_vel(
+                    cp["positions"], plate.data.root_pos_w,
+                    plate.data.root_lin_vel_w, plate.data.root_ang_vel_w,
+                    obj_pos, cabinet.data.body_lin_vel_w[:, drawer_body, :],
+                    cabinet.data.body_ang_vel_w[:, drawer_body, :])
+                buf.rvel_obj[frame, p] = rotate_inverse(obj_quat, rv) * cp["valid"].unsqueeze(-1)
                 buf.fn[frame, p] = cp["normal_forces"]
                 buf.sep[frame, p] = cp["separations"]
                 buf.cvalid[frame, p] = cp["valid"]
@@ -631,7 +649,7 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
                 buf.part[frame, p] = torch.where(
                     cp["valid"],
                     classify_drawer_local(
-                        pos_l, bar_x=BAR_X, bar_z=BAR_Z, bar_radius=C.handle_radius,
+                        pos_l, bar_x=bar_x, bar_z=BAR_Z, bar_radius=C.handle_radius,
                         bar_half_len=C.handle_bar_len / 2,
                         post_half_spacing=C.post_spacing / 2, post_radius=C.post_radius,
                         panel_t=C.panel_t),
@@ -695,7 +713,8 @@ def run_batch(scene, sim, camera, family_of_env, rng, device, batch_idx):
             f"{n_cut:.0f} 个接触点因超过 MAX_CONTACTS={MAX_CONTACTS} 被截掉"
             f"（保留 {n_kept:.0f}）。截断是静默的（P-03），调大上限再跑。")
     meta = dict(goal=goal, damping=damping, is_variant=is_variant,
-                side=side, y_off=y_off, z_off=z_off, force=force_mag, use=use)
+                side=side, y_off=y_off, z_off=z_off, force=force_mag, use=use,
+                geom_tag=geom_tag, bar_x=bar_x)
     return buf, meta, preview
 
 
@@ -810,6 +829,7 @@ def to_arrays(buf: Buffers, e: int) -> dict[str, np.ndarray]:
         out[f"{k}/pos_obj"] = cpu(buf.pos_obj[:, p, e]).astype(np.float32)
         out[f"{k}/normal_obj"] = cpu(buf.nrm_obj[:, p, e]).astype(np.float32)
         out[f"{k}/friction_obj"] = cpu(buf.fri_obj[:, p, e]).astype(np.float32)
+        out[f"{k}/rel_vel_obj"] = cpu(buf.rvel_obj[:, p, e]).astype(np.float32)
         out[f"{k}/normal_force"] = cpu(buf.fn[:, p, e]).astype(np.float32)
         out[f"{k}/separation"] = cpu(buf.sep[:, p, e]).astype(np.float32)
         out[f"{k}/valid"] = cpu(buf.cvalid[:, p, e])
@@ -874,7 +894,12 @@ def main() -> int:
         physx=sim_utils.PhysxCfg(gpu_max_rigid_contact_count=2 ** 22,
                                  gpu_max_rigid_patch_count=2 ** 20)))
     scene = InteractiveScene(SceneCfg(num_envs=_a.envs, env_spacing=2.2,
-                                      replicate_physics=True))
+                                      # **必须 False**：`replicate_physics=True` 时
+                                      # Isaac Lab 把 env_0 的物理整体复制给所有 env，
+                                      # `MultiUsdFileCfg` 的多资产会被抹平——实测 24 个
+                                      # env 全部拿到名义几何，而代码以为其中 4 个是变体。
+                                      # 几何变体（`plan/03` §7）靠它才成立。
+                                      replicate_physics=False))
     sim.reset()
     camera: Camera | None = scene["cam"] if _a.video else None
     device = sim.device
@@ -904,6 +929,8 @@ def main() -> int:
                 "strategy_family": fam,
                 "strategy_variant": f"b{b:02d}e{e:03d}",
                 "physics_variant": "heldout_damping" if variant else "nominal",
+                "geometry_variant": m["geom_tag"][e],
+                "implementation": "two_plate_handle",
                 "success": ok,
                 "failure_reasons": fails,
                 "seed": int(_a.seed + b * _a.envs + e),

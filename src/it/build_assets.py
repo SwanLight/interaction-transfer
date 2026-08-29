@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace, field
 
 try:
     from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
@@ -1005,6 +1005,36 @@ BUILDERS = {
 DEFAULT_OUT = "/workspace/interaction_transfer/assets_gen"
 
 
+#: **小幅几何变化**（`plan/03` §7 表第 6 行）。每个任务物体额外生成两个变体，
+#: 采集时按 env 轮转混进去，它们的 episode 单独进 ``unseen_geometry_test``。
+#:
+#: 变化量刻意取小（±12% 以内）：judge 与 envelope 都不该因为它失效，
+#: 这一格要测的是"同一份交互规格在略微不同的几何上还成不成立"，
+#: 不是"换了个物体"。改的都是**采集器必须知道的那一个尺寸**——
+#: 销钉偏心距、把手离面板的距离、黑板擦长度——所以采集器也要按 env 取值。
+GEOM_VARIANTS: dict[str, list[tuple[str, dict]]] = {
+    "knob": [("nominal", {}),
+             ("g1", {"pin_offset": 46 * MM}),
+             ("g2", {"pin_offset": 58 * MM})],
+    "cabinet": [("nominal", {}),
+                ("g1", {"handle_clearance": 38 * MM}),
+                ("g2", {"handle_clearance": 52 * MM})],
+    "eraser": [("nominal", {}),
+               ("g1", {"body": (80 * MM, 45 * MM, 25 * MM),
+                       "pad": (70 * MM, 35 * MM, 5 * MM)}),
+               ("g2", {"body": (100 * MM, 45 * MM, 25 * MM),
+                       "pad": (90 * MM, 35 * MM, 5 * MM)})],
+}
+
+
+def variant_cfg(name: str, tag: str, cfg: BuildCfg | None = None):
+    """取某个物体某个几何变体的配置对象（``tag`` = nominal / g1 / g2）。"""
+    cfg = cfg or BuildCfg()
+    base = getattr(cfg, BUILDERS[name][1])
+    over = dict(next(o for t, o in GEOM_VARIANTS[name] if t == tag))
+    return replace(base, **over) if over else base
+
+
 def build_all(out_dir: str = DEFAULT_OUT, cfg: BuildCfg | None = None) -> dict[str, str]:
     cfg = cfg or BuildCfg()
     os.makedirs(out_dir, exist_ok=True)
@@ -1013,6 +1043,10 @@ def build_all(out_dir: str = DEFAULT_OUT, cfg: BuildCfg | None = None) -> dict[s
         p = os.path.join(out_dir, f"{name}.usd")
         fn(p, getattr(cfg, attr))
         made[name] = p
+        for tag, _ in GEOM_VARIANTS.get(name, [])[1:]:
+            pv = os.path.join(out_dir, f"{name}_{tag}.usd")
+            fn(pv, variant_cfg(name, tag, cfg))
+            made[f"{name}_{tag}"] = pv
     return made
 
 

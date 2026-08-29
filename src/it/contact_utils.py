@@ -462,6 +462,43 @@ def _friction_into(out, f_forces, f_points, body_pos_w, own_radius: float) -> No
                               * share.unsqueeze(-1))
 
 
+def contact_rel_vel(
+    points: torch.Tensor,
+    a_pos: torch.Tensor, a_lin: torch.Tensor, a_ang: torch.Tensor,
+    b_pos: torch.Tensor | None = None,
+    b_lin: torch.Tensor | None = None,
+    b_ang: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """逐接触点的**相对速度**（世界系），shape 与 ``points`` 相同 (N, K, 3)。
+
+    `plan/03` §5 要求每帧记录"原始接触点、法向、法向力、摩擦力、**相对速度**"。
+    前四项 PhysX 的接触缓冲直接给，相对速度不给——但两个接触体都是刚体，
+    它们在接触点处的速度是解析的，不需要额外查询：
+
+        v(p) = v_质心 + ω × (p − 质心)
+        v_rel = v_A(p) − v_B(p)
+
+    B 省略时视为静止（固定的平面、底座之类），此时返回的就是 A 在接触点处的
+    绝对速度。
+
+    ⚠️ 这个量与 `classify_contact_mode_padded` 判 stick/slide 用的判据**不是**
+    同一条路：那里用"摩擦力是否饱和"（力判据），这里是运动学量。两者在
+    "力已饱和但实际没动"的边界上会不一致，正是 S4 需要区分时要用的信息
+    （见 `classify_contact_mode_padded` 的说明）。所以两个都存，不互相替代。
+
+    Args:
+        points: (N, K, 3) 世界系接触点。
+        a_pos / a_lin / a_ang: (N, 3) 物体 A 的质心位置、线速度、角速度。
+        b_pos / b_lin / b_ang: (N, 3) 物体 B 的同上；省略即静止。
+    """
+    v = a_lin.unsqueeze(1) + torch.cross(
+        a_ang.unsqueeze(1).expand_as(points), points - a_pos.unsqueeze(1), dim=-1)
+    if b_pos is not None:
+        v = v - (b_lin.unsqueeze(1) + torch.cross(
+            b_ang.unsqueeze(1).expand_as(points), points - b_pos.unsqueeze(1), dim=-1))
+    return v
+
+
 def classify_contact_mode_padded(
     normal_forces: torch.Tensor,
     friction_forces: torch.Tensor,
