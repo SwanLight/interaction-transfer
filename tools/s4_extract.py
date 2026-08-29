@@ -199,8 +199,11 @@ def _report(name: str, rows: list[dict], surfaces: dict, elapsed: float) -> str:
     src = {}
     for r in rows:
         src[r["mode_source"]] = src.get(r["mode_source"], 0) + 1
-    lines.append(f"滑移判据来源：{src}（patch_drift = 瞬时相对速度与几何不相容，"
-                 "按 P-52 不采信）")
+    lines.append(f"滑移判据来源：{src}")
+    lines.append("  pose_diff  = 两刚体位姿差分（主判据，D-49）；也是真实装置能测的量")
+    lines.append("  patch_drift= 位姿缺失时的退路：接触斑块在物体表面上的位移")
+    lines.append("  ⚠️ PhysX 报的瞬时相对速度只作诊断（`mode/inst_slip`），"
+                 "它被采集板的姿态极限环污染，见 P-52")
     lines.append("")
 
     lines.append("接触力按物体部件（与 S3 的接触部位统计对拍）")
