@@ -130,6 +130,8 @@ SLIDE_V_MIN = 0.008                            # m/s
 #: 一度以为滑脱是夹持不够，加到 4.5 mm 反而更糟（下压力被顶到 8 N）——
 #: 真正的原因是 release 阶段的目标阶跃，见下面 u_ph 的注释。
 GRIP_INTERF = 3.0 * MM
+#: 下落时夹持轴上额外张开的量。**必须先张开再夹拢**，理由见 `grip_targets`。
+GRIP_OPEN = 6.0 * MM
 #: 下压干涉与力的换算：单块板的位置刚度 kp_pos × m = 1500 N/m。
 #:
 #: **持工具与直擦的换算不同**：持工具时两块板共同把**一个**黑板擦压向平面，
@@ -200,13 +202,13 @@ def sample_family(fam: str, rng, n: int, device) -> dict:
 
     Returns:
         ``tool``：1 = 持工具擦，0 = 直擦；
-        ``grip_y`` 抓持点沿黑板擦 Y 的偏移（偏心抓）；
+        ``grip_off`` 抓持点沿黑板擦**长轴 X** 的偏移（偏心抓）；
         ``tilt`` 绕扫掠轴的侧倾角；
         ``press`` 下压力（N）；``n_pass`` 蛇形趟数（趟数越多扫得越快）；
         ``y_dir`` 起始扫掠方向（±1）。
     """
     z = lambda: torch.zeros(n)  # noqa: E731
-    tool, grip_y, tilt = torch.ones(n), z(), z()
+    tool, grip_off, tilt = torch.ones(n), z(), z()
     press = _u(rng, 4.0, 5.5, n)
     n_pass = torch.full((n,), 3.0)
     y_dir = torch.from_numpy(rng.choice(np.array([-1.0, 1.0], dtype=np.float32), size=n))
@@ -214,13 +216,18 @@ def sample_family(fam: str, rng, n: int, device) -> dict:
     if fam == "tool_center":
         pass
     elif fam == "tool_offset":
-        # 偏心抓：板贴在黑板擦两个 ±X 面上，但沿 Y 偏离中心
-        grip_y = torch.from_numpy(
+        # 偏心抓：板贴在黑板擦两个 ±Y **长侧面**上，但沿长轴 X 偏离中心。
+        # 长侧面 90 mm、板长边 35 mm，两边各有 27.5 mm 余量，
+        # ±6~10 mm 的偏心完全落在面内。（贴短端面时余量只有 5 mm，
+        # 同样的偏心会让板有一小半悬空。）
+        grip_off = torch.from_numpy(
             rng.choice(np.array([-1.0, 1.0], dtype=np.float32), size=n)) \
             * _u(rng, 0.006, 0.010, n)
     elif fam == "tool_tilt":
-        # 轻微倾斜抓持：绕**扫掠轴**侧倾，底垫单边受力更重。
-        # 不绕竖直轴偏摆——那样夹持面就不再是黑板擦的 ±X 面了。
+        # 轻微倾斜抓持：绕**扫掠轴 Y** 侧倾，底垫单边受力更重。
+        # 绕 Y 转**不改变 ±Y 面的法向**，所以抓持面始终与板平贴；
+        # 板也跟着一起倾（见 `q_grip`），就是人捏着长边把工具侧一侧。
+        # 不绕竖直轴偏摆——那样夹持面就不再是黑板擦的 ±Y 面了。
         tilt = torch.from_numpy(
             rng.choice(np.array([-1.0, 1.0], dtype=np.float32), size=n)) \
             * _u(rng, math.radians(3), math.radians(7), n)
@@ -238,7 +245,7 @@ def sample_family(fam: str, rng, n: int, device) -> dict:
     else:
         raise ValueError(f"未知策略家族：{fam}")
     return {k: v.to(device) for k, v in
-            dict(tool=tool, grip_y=grip_y, tilt=tilt, press=press,
+            dict(tool=tool, grip_off=grip_off, tilt=tilt, press=press,
                  n_pass=n_pass, y_dir=y_dir).items()}
 
 
@@ -319,14 +326,14 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     bodies = [eraser] + plates
 
     par = {k: torch.zeros(n, device=device)
-           for k in ("tool", "grip_y", "tilt", "press", "n_pass", "y_dir")}
+           for k in ("tool", "grip_off", "tilt", "press", "n_pass", "y_dir")}
     for fam in sorted(set(fam_of_env)):
         idx = [i for i, f in enumerate(fam_of_env) if f == fam]
         sub = sample_family(fam, rng, len(idx), device)
         sel = torch.tensor(idx, device=device, dtype=torch.long)
         for k in par:
             par[k][sel] = sub[k]
-    tool, grip_y = par["tool"], par["grip_y"]
+    tool, grip_off = par["tool"], par["grip_off"]
     tilt, press, n_pass, y_dir = (
         par["tilt"], par["press"], par["n_pass"], par["y_dir"])
     is_tool = tool > 0.5
@@ -349,7 +356,7 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     e_st[:, 1] = top[:, 1] + y0
     e_st[:, 2] = top[:, 2] + 0.0005
     ax_y = torch.tensor([0.0, 1.0, 0.0], device=device).expand(n, 3)
-    from isaaclab.utils.math import quat_from_angle_axis
+    from isaaclab.utils.math import quat_from_angle_axis, quat_mul
     e_st[:, 3:7] = quat_from_angle_axis(tilt, ax_y)
     e_st[:, 7:] = 0.0
     # 直擦的那一档把黑板擦挪到一边，别让它挡路
@@ -361,9 +368,14 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     # 两块板从两侧夹黑板擦，工作面法向相反。**深色鳍（局部 +Y）必须都朝上**，
     # 否则录像里一块朝上一块朝下、看着像翻了 180°（实测正好 -1.00）。
     _up = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
-    q_grip = [quat_face_and_up(
-        torch.tensor([[-1.0, 0.0, 0.0]], device=device).expand(n, 3) * (1 if k == 0 else -1),
-        _up) for k in range(2)]
+    # **夹的是两个 90×25 的长侧面（±Y），不是 45×25 的短端面。**
+    # 生活中捏黑板擦就是捏长边；而且扫掠恰好沿 Y，捏长侧面时推力由**法向**
+    # 直接传，捏短端面时只能靠摩擦传。
+    q_grip = [quat_mul(
+        quat_from_angle_axis(tilt, ax_y),
+        quat_face_and_up(
+            torch.tensor([[0.0, -1.0, 0.0]], device=device).expand(n, 3)
+            * (1 if k == 0 else -1), _up)) for k in range(2)]
     # 直擦时板的**长边沿 X**（换道方向），两块板合起来 95 mm 宽，
     # 与黑板擦垫子的 80 mm 同量级；长边沿 Y 只有 69 mm，覆盖不住。
     # 直擦时板是水平的、法向朝下，"鳍朝上"退化（up 与法向共线）；
@@ -377,18 +389,33 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     pds = [FloatingPD(pl, kp_pos=3000.0, kd_pos=110.0, kp_rot=6.0, kd_rot=0.025,
                       max_force=120.0, max_torque=4.0, kd_force=15.0) for pl in plates]
 
-    def grip_targets(cx, cy, press_on: bool):
-        """给定接触体中心的平面局部 (x, y)，返回两块板的世界目标位置。"""
+    def grip_targets(cx, cy, press_frac: float, open_extra: float = 0.0):
+        """给定接触体中心的平面局部 (x, y)，返回两块板的世界目标位置。
+
+        ``press_frac`` 是下压量的比例（0~1）。**必须等夹拢之后才加压。**
+        张开着落下去时板不受阻，会一路落到"已经下压"的那个高度；等夹拢时
+        竖直方向的位置误差已经归零，压力也就归零了——实测板的 z 误差从
+        +1.5 mm 掉到 +0.15 mm，平面上的法向力从 4.8 N 掉到 0.45 N，
+        清除率 0%。顺序必须是：张开落下 -> 夹拢 -> 再下压。
+
+        ``open_extra`` 是夹持轴上额外张开的量（m）。**下落时必须先张开。**
+        夹持位比黑板擦本体窄 2×GRIP_INTERF，直上直下落下去等于拿两块板的
+        下边缘楔在工具顶面上：捏短端面时工具要沿长轴挪 45 mm 才能脱出，
+        勉强夹得住；捏长侧面时只要挪 22 mm，实测工具被顶高 23 mm、
+        随即甩出 200 mm，六个持工具家族全线失败（力 1.0 N、清除率 29%）。
+        先张开 6 mm 落到位、再夹拢，就是人拿黑板擦的顺序。
+        """
         out = []
         for k in range(2):
             sgn = 1.0 - 2.0 * k                     # +1 / -1
             p = torch.zeros(n, 3, device=device)
             if True:
-                # 持工具：贴在黑板擦 ±X 面上，压进 GRIP_INTERF
-                gx = _E.body[0] / 2 + _P.size[2] / 2 - GRIP_INTERF
-                tx = top[:, 0] + cx + sgn * gx
-                ty = top[:, 1] + cy + grip_y
-                on_ = 1.0 if press_on else 0.0
+                # 持工具：贴在黑板擦 ±Y **长侧面**上，压进 GRIP_INTERF；
+                # 偏心抓沿黑板擦长轴 X 偏移。
+                gy = _E.body[1] / 2 + _P.size[2] / 2 - GRIP_INTERF + open_extra
+                tx = top[:, 0] + cx + grip_off
+                ty = top[:, 1] + cy + sgn * gy
+                on_ = press_frac
                 dz_tool = press / (2.0 * PLATE_STIFF) * on_
                 dz_direct = press / PLATE_STIFF * on_
                 tz = top[:, 2] + _E.pad[2] + _E.body[2] / 2 - dz_tool
@@ -407,7 +434,7 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     targets = []
     for k, pl in enumerate(plates):
         st = pl.data.default_root_state.clone()
-        g = grip_targets(x0, y0, False)[k]
+        g = grip_targets(x0, y0, 0.0, GRIP_OPEN)[k]
         st[:, :3] = g + torch.tensor([0.0, 0.0, STANDOFF], device=device)
         st[:, 3:7] = quats[k]
         st[:, 7:] = 0.0
@@ -442,14 +469,26 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
             u_ph = {0: 0.0, 1: 0.0, 2: (kk + 1) / plen, 3: 1.0}[phase_id]
             u = torch.full((n,), u_ph, device=device)
             cx, cy = raster(u, y_dir, n_pass)
-            g = grip_targets(cx, cy, phase_id in (1, 2))
+            # establish 相位分三段，与人拿黑板擦的顺序一致：
+            #   u < 0.40   张开着落到位
+            #   0.40~0.70  夹拢（张开量线性归零）
+            #   0.70~1.00  加压（下压量线性升到 1）
+            if phase_id == 0:
+                open_extra, press_frac = GRIP_OPEN, 0.0
+            elif phase_id == 1:
+                u = (kk + 1) / max(plen, 1)
+                open_extra = GRIP_OPEN * min(max((0.70 - u) / 0.30, 0.0), 1.0)
+                press_frac = min(max((u - 0.70) / 0.30, 0.0), 1.0)
+            else:
+                open_extra, press_frac = 0.0, 1.0
+            g = grip_targets(cx, cy, press_frac, open_extra)
             for k in range(2):
                 tgt = targets[k]
-                if phase_id == 0:                        # approach：降到接触上方
+                if phase_id == 0:                        # approach：张开着降到接触上方
                     a = min((kk + 1) / max(plen - 6, 1), 1.0)
                     tgt[:] = g[k] + torch.tensor([0.0, 0.0, STANDOFF], device=device) \
                         * (1.0 - a) + torch.tensor([0.0, 0.0, 0.012], device=device) * a
-                elif phase_id == 1:                      # establish：贴合并建立压力
+                elif phase_id == 1:                      # establish：落到位、夹拢、加压
                     tgt[:] = g[k] + torch.tensor([0.0, 0.0, 0.012], device=device) \
                         * max(1.0 - (kk + 1) / max(plen - 10, 1), 0.0)
                 elif phase_id == 2:                      # manipulate：栅格擦拭
@@ -460,9 +499,11 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
                     sgn = 1.0 - 2.0 * k
                     a = min((kk + 1) / 12.0, 1.0)
                     b = min(max((kk + 1 - 12) / max(plen - 12, 1), 0.0), 1.0)
-                    open_x = torch.zeros(n, 3, device=device)
-                    open_x[:, 0] = sgn * 0.010 * a
-                    tgt[:] = g[k] + open_x \
+                    # 沿**夹持轴 Y** 张开（夹的是长侧面）。原来写成沿 X 张开，
+                    # 那是贴短端面时的夹持轴，改了抓持面就不再对应。
+                    open_g = torch.zeros(n, 3, device=device)
+                    open_g[:, 1] = sgn * 0.010 * a
+                    tgt[:] = g[k] + open_g \
                         + torch.tensor([0.0, 0.0, STANDOFF], device=device) * b
                 buf.src_cmd[frame, k, :, :3] = tgt - prev_tgt[k]
                 prev_tgt[k] = tgt.clone()
@@ -569,7 +610,7 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     if n_cut > 0.01 * max(n_keep, 1.0):
         raise RuntimeError(f"{n_cut:.0f} 个接触点被静默截掉（P-03），调大 MAX_CONTACTS")
     return buf, dict(is_tool=is_tool, press=press, n_pass=n_pass, tilt=tilt,
-                     grip_y=grip_y, is_var=is_var, y_dir=y_dir), preview
+                     grip_off=grip_off, is_var=is_var, y_dir=y_dir), preview
 
 
 # ---------------------------------------------------------------- 判定与落盘
@@ -782,7 +823,7 @@ def main() -> int:
                             "eraser_pad_friction": _E.pad_friction,
                             "plate_friction": _P.friction},
                 "source_params": {"tilt_deg": math.degrees(float(m["tilt"][e].item())),
-                                  "grip_offset_mm": float(m["grip_y"][e].item() * 1000),
+                                  "grip_offset_mm": float(m["grip_off"][e].item() * 1000),
                                   "n_pass": float(m["n_pass"][e].item()),
                                   "sweep_dir": float(m["y_dir"][e].item())},
                 "diagnostics": d,
