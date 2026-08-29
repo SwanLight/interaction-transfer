@@ -25,18 +25,25 @@
 [PASS] 旋钮         D-14 成立（region 不可从 effect 推出）      实测 τ_rim 0.2501 < τ_need 0.420 < τ_pin 0.6430 N·m
 [PASS] 双板         自由落体后稳态接触力 ≈ mg（P-09）              |F| = 4.9030 N, mg = 4.9050 N, 比值 = 0.9996
 [PASS] 双板         板是动力学体而非 kinematic                 kinematic_enabled = False（kinematic 体可施加无限力）
-[PASS] 预训练集       滑块关节数                              num_joints = 1
-[PASS] 预训练集       滑块行程 80-300 mm                     limits = [0.0, 0.15] m
-[PASS] 预训练集       滑块可被推动                             施加 15 N 后位移 150.0 mm
-[PASS] 预训练集       滑块可被拉回（凸缘提供可勾结构）                   反向 15 N 后从 150.0 回到 0.0 mm
-[PASS] 预训练集       转盘关节数                              num_joints = 1
-[PASS] 预训练集       转盘可被转动                             施加 0.6 N·m 后转过 7.500 rad
-[PASS] 预训练集       wipeboard 固定不动（kinematic，filter 通道才有效） 线速度 0.000000 m/s
-[PASS] 预训练集       ridge 固定不动（kinematic，filter 通道才有效） 线速度 0.000000 m/s
-[PASS] 预训练集       block 静置稳定（无穿模/无飞出）                静置后 z = 20.0 mm
-[PASS] 预训练集       block 静置后速度趋零                      |v| = 0.0001 m/s
-[PASS] 预训练集       column 静置稳定（无穿模/无飞出）               静置后 z = 60.0 mm
-[PASS] 预训练集       column 静置后速度趋零                     |v| = 0.0002 m/s
+[PASS] 探针集        滑块关节数                              num_joints = 1
+[PASS] 探针集        滑块行程 80-300 mm                     limits = [0.0, 0.15] m
+[PASS] 探针集        滑块可被推动                             施加 15 N 后位移 150.0 mm
+[PASS] 探针集        滑块可被拉回（凸缘提供可勾结构）                   反向 15 N 后从 150.0 回到 0.0 mm
+[PASS] 探针集        转盘关节数                              num_joints = 1
+[PASS] 探针集        转盘可被转动                             施加 0.6 N·m 后转过 7.500 rad
+[PASS] 探针集        slab 固定不动（kinematic，filter 通道才有效）  线速度 0.000000 m/s
+[PASS] 探针集        ridge 固定不动（kinematic，filter 通道才有效） 线速度 0.000000 m/s
+[PASS] 探针集        翻板可被推开（第二个受约束转动物体）                 施加 1.2 N·m 后转过 -0.785 rad
+[PASS] 探针集        柱塞可被压入（第二个受约束平移物体）                 施加 25 N 后位移 -55.0 mm
+[PASS] 探针集        柱塞可被拉出（端帽台肩提供可勾结构）                 反向 25 N 后从 -55.0 回到 55.0 mm
+[PASS] 探针集        block 静置稳定（无穿模/无飞出）                静置后 z = 20.0 mm
+[PASS] 探针集        block 静置后速度趋零                      |v| = 0.0001 m/s
+[PASS] 探针集        column 静置稳定（无穿模/无飞出）               静置后 z = 40.0 mm
+[PASS] 探针集        column 静置后速度趋零                     |v| = 0.0000 m/s
+[PASS] 探针集        roller 静置稳定（无穿模/无飞出）               静置后 z = 30.0 mm
+[PASS] 探针集        roller 静置后速度趋零                     |v| = 0.0013 m/s
+[PASS] 探针集        ball 静置稳定（无穿模/无飞出）                 静置后 z = 35.0 mm
+[PASS] 探针集        ball 静置后速度趋零                       |v| = 0.0000 m/s
 [PASS] 擦拭         filter 通道有效（P-17）                  接触对 counts=[4, 4]（0 表示 filter 目标不是刚体）
 [PASS] 擦拭         法向力落在 3-8 N 工作区间                   |Fn| = 5.077 N（目标 (3.0, 8.0)）
 [PASS] 擦拭         contact_pos_w 有效（非全 NaN）           NaN 比例 = 0.000

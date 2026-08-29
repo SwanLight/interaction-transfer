@@ -720,7 +720,7 @@ def check_allegro():
 
 
 def check_pretrain_objs():
-    """`plan/03` §2.4 探针物体集：八个物体都能载入、且各自承载的原语可行。
+    """`plan/03` §2.4 探针物体集：九个物体都能载入、且各自承载的原语可行。
 
     这一组不是任务，但它决定 Gate E 能不能成立（D-39）：如果某个执行器
     的留出任务所需的交互原语在这一组里根本不存在，Gate E 不通过就无法归因于
@@ -753,6 +753,10 @@ def check_pretrain_objs():
             init_state=type(A.FLAP_CFG.init_state)(
                 pos=(0.9, -0.9, 0.041), joint_pos={"PanelJoint": 0.0},
                 joint_vel={"PanelJoint": 0.0}))
+        roller = A.ROLLER_CFG.replace(
+            init_state=type(A.ROLLER_CFG.init_state)(pos=(-0.9, 0.7, 0.031)))
+        ball = A.BALL_CFG.replace(
+            init_state=type(A.BALL_CFG.init_state)(pos=(-0.9, 1.2, 0.036)))
         plunger = A.PLUNGER_CFG.replace(
             init_state=type(A.PLUNGER_CFG.init_state)(
                 pos=(-0.9, 0.0, 0.041), joint_pos={"RodJoint": 0.0},
@@ -831,7 +835,8 @@ def check_pretrain_objs():
 
     # --- 自由体：静置后应当落在地面上而不是穿下去或乱飞 ---
     _steps(sim, scene, 400, dt)
-    for name, z_lo, z_hi in (("block", 0.015, 0.06), ("column", 0.05, 0.12)):
+    for name, z_lo, z_hi in (("block", 0.015, 0.06), ("column", 0.03, 0.08),
+                             ("roller", 0.02, 0.05), ("ball", 0.02, 0.06)):
         obj = scene[name]
         z = obj.data.root_pos_w[0, 2].item()
         record("探针集", f"{name} 静置稳定（无穿模/无飞出）", z_lo < z < z_hi,
