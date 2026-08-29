@@ -167,13 +167,28 @@ def main() -> int:
                 np.asarray(base.arrays[key], dtype=np.float64)
                 - np.asarray(turned.arrays[key], dtype=np.float64)).max()))
 
-    check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5
-          and worst["slip"] < 1e-4,
-          "1. 场景刚体旋转：不变量逐元素一致",
-          f"{len(pick)} 条 × 随机旋转；region 索引差 {worst['idx']} 个、"
-          f"滑移速度最大差 {worst['slip']:.2e} m/s、"
-          f"离阈值 5% 以外的 mode 差 {worst['mode']} 个、"
-          f"effect 最大差 {worst['effect']:.2e}")
+    measured = bool(load_episode(root / ok_entries[0]["path"])
+                    .meta["extraction"].get("object_pose_measured", True))
+    if not measured:
+        # 这份数据没记被操作物体的位姿（擦拭平面是 kinematic 的），场景一转
+        # 平面也该跟着转，而记录里没有那个自由度。**不许在假定之上报通过。**
+        defer("1. 场景刚体旋转",
+              "该数据集没有记录被操作物体的位姿（擦拭平面是 kinematic），"
+              "无法如实施加场景旋转。下一轮采集把平面的 root pose 记上（一列常量）"
+              "即可补测；region / effect / 力与力矩三项在下面单独报")
+        check(worst["idx"] == 0 and worst["effect"] < 1e-5,
+              "1a. 场景旋转下 region 与 effect 仍逐元素一致",
+              f"region 索引差 {worst['idx']} 个、effect 最大差 {worst['effect']:.2e}"
+              "（mode 那一路因上述原因不参与）")
+    else:
+        check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5
+              and worst["slip"] < 1e-4,
+              "1. 场景刚体旋转：不变量逐元素一致",
+              f"{len(pick)} 条 × 随机旋转；region 索引差 {worst['idx']} 个、"
+              f"滑移速度最大差 {worst['slip']:.2e} m/s、"
+              f"离阈值 5% 以外的 mode 差 {worst['mode']} 个、"
+              f"effect 最大差 {worst['effect']:.2e}")
+
     check(worst["wrench"] < 1e-3, "1b. 物体系的力、力矩与广义力逐元素不变",
           f"最大残差 {worst['wrench']:.2e} N / N·m")
     info("1c. 这条测试的限制",

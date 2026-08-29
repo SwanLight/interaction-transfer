@@ -513,6 +513,9 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
             "force_on_object_sign": on_object,
             "normal_sign_agreement": normal_conf,
             "has_rel_vel": bool(has_relvel),
+            # 被操作物体的位姿是量出来的，还是按"它不动"假定的。擦拭平面没记位姿，
+            # 于是那份数据上的场景旋转检查无法如实进行（见 `_object_pose`）。
+            "object_pose_measured": bool(_pose_measured(record.arrays, meta)),
             # 逐接触体：瞬时相对速度与斑块位移的路程相容吗（P-52）。
             # 全为 False 时 mode 完全由斑块位移给出。
             # mode 用哪一路滑移速度。主判据是位姿差分（见上）。
@@ -540,6 +543,12 @@ def _body_pose_key(arrays: dict, body: str) -> str | None:
     return None
 
 
+def _pose_measured(arrays: dict, meta: dict) -> bool:
+    """被操作物体的位姿是量出来的（True）还是按"它不动"假定的（False）。"""
+    op = _object_pose(arrays, meta)
+    return bool(op[2]) if op is not None else False
+
+
 def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
                normal_out: np.ndarray, meta: dict, dt: float) -> np.ndarray | None:
     """由**位姿差分**算接触点处的相对切向速度。(T, A) 或 None（缺位姿时）。
@@ -565,7 +574,7 @@ def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
     op = _object_pose(arrays, meta)
     if op is None:
         return None
-    obj_pos, obj_rot = op
+    obj_pos, obj_rot, _measured = op
     n_frames, n_slots = pos.shape[0], pos.shape[1]
     per = n_slots // max(len(bodies), 1)
     out = np.zeros((n_frames, n_slots))
@@ -599,23 +608,34 @@ def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
     return out
 
 
-def _object_pose(arrays: dict, meta: dict) -> tuple[np.ndarray, np.ndarray] | None:
-    """被操作物体的世界位姿。擦拭平面是 kinematic 的，不记位姿——它不动，用恒等。"""
+def _object_pose(arrays: dict, meta: dict):
+    """被操作物体的世界位姿，返回 ``(位置, 旋转, 是不是量出来的)``。
+
+    ⚠️ **擦拭平面的位姿在 S3 数据里根本没记**（它是 kinematic、全程不动），
+    这里只能假定"在原点、姿态恒等"。对真实数据无害——静止物体的常量偏移在
+    位姿差分里会抵消——但它是一条**写死的假定**，必须让下游知道：
+    `plan/02` §7 第 1 条的场景旋转检查在这份数据上**没法如实进行**
+    （场景一转，平面也该跟着转，而记录里没有那个自由度）。
+    第三个返回值就是给那条检查看的，不许它在假定之上报"通过"。
+
+    下一轮采集擦拭时应当把平面的 root pose 也记下来（一列常量，几乎零成本），
+    那条检查才能在主任务上真正跑起来。
+    """
     # 自由体的位姿本来就在 `object/state` 里（位置 + 四元数），优先用它——
     # 那是模型可见字段，用不着走 source 追查字段。
     st = arrays.get("object/state")
     if st is not None and np.asarray(st).shape[-1] == 7:
         st = np.asarray(st, dtype=np.float64)
-        return st[:, :3], _quat_to_rot(st[:, 3:7])
+        return st[:, :3], _quat_to_rot(st[:, 3:7]), True
     for pk, qk in (("source/drawer_pos_w", "source/drawer_quat_w"),
                    ("source/disc_pos_w", "source/disc_quat_w"),
                    ("source/object_pos_w", "source/object_quat_w")):
         if pk in arrays and qk in arrays:
             return (np.asarray(arrays[pk], dtype=np.float64),
-                    _quat_to_rot(np.asarray(arrays[qk], dtype=np.float64)))
+                    _quat_to_rot(np.asarray(arrays[qk], dtype=np.float64)), True)
     if str(meta.get("task")) == "wipe":
         n = len(arrays["phase"])
-        return (np.zeros((n, 3)), np.tile(np.eye(3), (n, 1, 1)))
+        return (np.zeros((n, 3)), np.tile(np.eye(3), (n, 1, 1)), False)
     return None
 
 

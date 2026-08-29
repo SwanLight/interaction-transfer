@@ -127,7 +127,7 @@ class Device:
         op = _object_pose(src_arrays, meta)
         if op is None:
             raise ValueError("拿不到被操作物体的位姿")
-        self.obj_pos, self.obj_rot = op
+        self.obj_pos, self.obj_rot = op[0], op[1]
         n = len(self.obj_pos)
 
         # 面相对物体的位姿 = 真值 ∘ 噪声。噪声加在**相对位姿**上（`plan/07` §3）
