@@ -108,7 +108,13 @@ def make_episode(*, bodies=("plate0", "plate1"), reported_normal_sign=+1.0,
             arrays[f"{c}/separation"][:, 0] = 1e-4
             arrays[f"{c}/valid"][:, 0] = True
             arrays[f"{c}/mode"][:, 0] = raw_mode
-        arrays[f"source/{body}/root_pose"] = np.zeros((T, 7), dtype=np.float32)
+        # 板的位姿要与场景自洽：mode 的主判据是**位姿差分**（见 `_pose_slip`），
+        # 写一堆零等于告诉提取器"板一动没动"，滑移就无从谈起。
+        # 物体沿 +Y 走 1 mm/帧；滑移时板再多走 SLIP，不滑时与物体同速。
+        plate_y = np.arange(T) * (1e-3 + (SLIP / 50.0 if slide else 0.0))
+        plate_p = np.stack([np.full(T, CONTACT_X + 0.02), plate_y, np.zeros(T)], axis=1)
+        arrays[f"source/{body}/root_pose"] = np.concatenate(
+            [plate_p @ rot.T, _quat_mul_left(rot, quat)], axis=1).astype(np.float32)
 
     meta = {
         "schema_version": SCHEMA_VERSION,
@@ -181,23 +187,28 @@ class TestExtract(unittest.TestCase):
         out = extract(make_episode(raw_mode=3, slide=True))
         self.assertEqual(int(np.asarray(out.arrays["mode/raw"])[0, 0]), 3)
         self.assertEqual(int(np.asarray(out.arrays["mode/label"])[0, 0]), 2)
-        self.assertEqual(out.meta["extraction"]["mode_source"], "rel_vel")
+        self.assertEqual(out.meta["extraction"]["mode_source"], "pose_diff")
 
-    def test_untrustworthy_rel_vel_falls_back_to_patch(self):
-        """接触点钉死不动却报着 10 mm/s 的相对速度 -> 速度信号不采信（P-52）。
+    def test_pose_diff_beats_corrupted_instant_velocity(self):
+        """板与物体同速（没在滑）却报着 10 mm/s 的瞬时相对速度 —— 判 sticking。
 
-        这正是抽屉/旋钮数据里的情形：把瞬时速度积出来是几十毫米的滑移，
-        而接触点在物体系里一动没动。那种情况下 mode 必须由斑块位移给出。
+        这正是抽屉/旋钮数据里的情形（P-52）：PhysX 报的瞬时速度被采集板的姿态
+        极限环污染，积出来是几十毫米的滑移，而位姿差分说两者根本没有相对运动。
+        mode 必须听位姿差分的，另外两路只作诊断留在记录里。
         """
         out = extract(make_episode(slide=False))
-        self.assertEqual(out.meta["extraction"]["mode_source"], "patch_drift")
-        # 第 0 个接触体是唯一有接触的那个，它必须被判成不可信；
-        # 闲置的那块板没有数据，不参与这个判定（否则 mode_source 会变成 mixed）
+        self.assertEqual(out.meta["extraction"]["mode_source"], "pose_diff")
         self.assertFalse(out.meta["extraction"]["rel_vel_trusted"][0])
         self.assertEqual(int(np.asarray(out.arrays["mode/label"])[10, 0]), 1)
-        # 两个证据都留在记录里，谁也不掩盖谁
+        # 三路证据都留在记录里，谁也不掩盖谁
         self.assertGreater(float(np.asarray(out.arrays["mode/inst_slip"])[10, 0]), 5e-3)
-        self.assertLess(float(np.asarray(out.arrays["mode/patch_slip"])[10, 0]), 1e-3)
+        self.assertLess(float(np.asarray(out.arrays["mode/pose_slip"])[10, 0]), 1e-3)
+
+    def test_pose_diff_detects_real_sliding(self):
+        """板真的相对物体滑 10 mm/s 时，位姿差分要判成 sliding。"""
+        out = extract(make_episode(slide=True))
+        self.assertGreater(float(np.asarray(out.arrays["mode/pose_slip"])[10, 0]), 5e-3)
+        self.assertEqual(int(np.asarray(out.arrays["mode/label"])[10, 0]), 2)
 
     def test_separating_only_without_force(self):
         """力没了、几何上正在分开，才是 separating。"""

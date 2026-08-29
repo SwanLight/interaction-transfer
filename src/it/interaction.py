@@ -19,11 +19,16 @@ S7（留出任务零样本）共同的输入，**这一层错了下游全错，�
    （P-49：离散选择必须在回路外面算一次），再统一成"作用在物体上的力"。
 
 3. **contact mode 重判，且与原始值并排存**（D-49）。S3 的 mode 只看摩擦锥比值，
-   且 ``separation > 0`` 会覆盖一切——于是抽屉 29.3%、擦拭个别 episode 49%
-   的接触被标成 separating，而几何上接触是连续的（板与杆的间隙全程 −0.5 mm），
-   那是 PhysX 逐子步报告的采样伪影（P-31）。这里用**法向力**判接触有没有、
-   用**切向相对速度**判 stick/slide，摩擦锥比值降为并存的诊断量。
-   ``mode/raw`` 原样保留，两套数在报告里并列，不用新判据去掩盖旧判据。
+   且 ``separation > 0`` 会覆盖一切——于是抽屉 29.3% 的接触被标成 separating，
+   而几何上接触是连续的（板与杆的间隙全程 −0.5 mm），那是 PhysX 逐子步报告的
+   采样伪影（P-31）。这里用**法向力**判接触有没有、用**接触点处的相对切向
+   速度**判 stick/slide。
+
+   那个相对速度**由两个刚体的位姿差分算**，不用 PhysX 报的瞬时速度——后者
+   被采集板的姿态极限环污染（P-52，角速度顶在 100 rad/s 上限）。位姿是位置量，
+   在 50 Hz 上差分等于对 6 个物理子步取平均，抖动自然抵消。
+   **这同时是真实装置能测到的量**：`plan/07` §3 的传感方案给的就是"面相对
+   物体的位姿"，差分即得相对速度——oracle 与硬件在这一项上算的是同一个东西。
 
 **这一层永不读 `source/*`。** 输入取 `EpisodeRecord.model_arrays()`，
 那个函数对未归类的前缀是 fail-closed 的。
@@ -57,11 +62,9 @@ CONTACT_FORCE_MIN = 0.05
 #: 便利品；`s4_extract` 的报告里附 {1,3,5,10} mm/s 的敏感度表（工作方式第 4 条）。
 SLIP_SPEED_MIN = 5.0e-3
 
-#: 判"瞬时相对速度可不可信"：把它沿时间积出来的路程，与接触斑块在物体表面上
-#: 实际走过的路程比。前者远大于后者 = 速度信号与几何不相容。
-#: 实测采集板的角速度在抽屉 96.9%、旋钮 100% 的操作帧上顶在 PhysX 的
-#: 100 rad/s 上限（P-52），ω×r 使瞬时相对速度虚高 5~10 倍，积分出 59 mm 的
-#: 滑移而接触点在物体系里**一动没动**（0.1 mm 以内）。
+#: 判"PhysX 报的瞬时相对速度可不可信"：把它沿时间积出来的路程，与接触斑块在
+#: 物体表面上实际走过的路程比。前者远大于后者 = 速度信号与几何不相容（P-52）。
+#: 这个量现在只用于**诊断报告**，不再决定 mode——mode 由位姿差分给出。
 RELVEL_PATH_RATIO = 3.0
 RELVEL_PATH_MARGIN = 5.0e-3
 
@@ -378,11 +381,14 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
     lever = pos
 
     # --- 5. contact mode 重判（D-49） ---
-    # 证据一（几何）：接触斑块在**物体表面上**移动得多快。逐接触体算力加权质心，
-    #   中心差分。这一条不受采集体自身抖动影响——斑块位置是位置量，不是速度量。
-    # 证据二（力）：摩擦锥比值 |f_t| / (μ|f_n|)，饱和即在滑。
-    # 证据三（速度）：PhysX 报的接触点相对速度。**它在两个数据集上不可信**，
-    #   由与证据一的路程相容性逐 episode 判定（P-52），不可信时只作诊断保留。
+    # 三条证据，主判据是第一条：
+    #   一（位姿差分）：把接触点分别钉在两个刚体上，按它们的**位姿**各自搬到
+    #     下一帧，位置之差 / dt 就是接触点处的相对速度。位姿是位置量，
+    #     差分等于对物理子步取平均，不受采集体的姿态极限环影响（P-52）。
+    #   二（几何）：接触斑块在物体表面上的移动速度。⚠️ 它把"平板贴圆柱时接触线
+    #     随姿态微动而迁移"也算成滑移（实测抽屉上因此把 93% 的 sticking 判成
+    #     一半在滑），所以只作诊断，不当主判据。
+    #   三（力）：摩擦锥比值，饱和即在滑；逐点摩擦是斑块级摊派来的，噪声大。
     v_n = np.einsum("tak,tak->ta", rel_vel, normal_out)
     v_t = rel_vel - v_n[..., None] * normal_out
     inst_slip = np.linalg.norm(v_t, axis=-1)
@@ -390,7 +396,9 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
     patch_slip, trusted_body, trusted_slot, body_has_data = _patch_slip(
         pos, fn, active, len(bodies), inst_slip, dt)
     live_trust = trusted_body[body_has_data]
-    slip = np.where(trusted_slot[None, :], inst_slip, patch_slip)
+    pose_slip = _pose_slip(record.arrays, bodies, pos, normal_out, meta, dt)
+    slip = pose_slip if pose_slip is not None else patch_slip
+    slip_source = "pose_diff" if pose_slip is not None else "patch_drift"
     mu = np.full(n_slots, _default_friction(spec.obj))
     part_mu = _part_friction(spec.obj)
     mu_point = np.full((n_frames, n_slots), float(mu[0]))
@@ -450,6 +458,9 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
         "mode/cone_ratio": sort_by_force(np.where(active, cone, 0.0)).astype(np.float32),
         "mode/inst_slip": sort_by_force(inst_slip * active).astype(np.float32),
         "mode/patch_slip": sort_by_force(patch_slip * active).astype(np.float32),
+        "mode/pose_slip": sort_by_force(
+            (pose_slip if pose_slip is not None else np.zeros_like(fn)) * active
+        ).astype(np.float32),
         "mech/force_obj": sort_by_force(force).astype(np.float32),
         "mech/wrench_obj": wrench.astype(np.float32),
         "mech/generalized": np.asarray(generalized, dtype=np.float32),
@@ -504,10 +515,11 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
             "has_rel_vel": bool(has_relvel),
             # 逐接触体：瞬时相对速度与斑块位移的路程相容吗（P-52）。
             # 全为 False 时 mode 完全由斑块位移给出。
+            # mode 用哪一路滑移速度。主判据是位姿差分（见上）。
+            "mode_source": slip_source,
+            # 诊断：PhysX 报的瞬时速度与几何是否相容（P-52）。全 False 说明
+            # 那一路被采集体的姿态极限环污染了，只能当诊断看。
             "rel_vel_trusted": [bool(v) for v in trusted_body],
-            "mode_source": ("rel_vel" if bool(np.all(live_trust)) and live_trust.size
-                            else "patch_drift" if not bool(np.any(live_trust))
-                            else "mixed"),
             "slip_threshold_mps": SLIP_SPEED_MIN,
         },
         "source_episode": {
@@ -517,6 +529,94 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
         },
     }
     return EpisodeRecord(meta=new_meta, arrays=out_arrays)
+
+
+#: 接触体在记录里的位姿字段名。采集器给板写的是 ``source/plateK/root_pose``，
+#: 给黑板擦写的是 ``source/tool_pose``——名字不统一是历史原因，这里兜住。
+def _body_pose_key(arrays: dict, body: str) -> str | None:
+    for key in (f"source/{body}/root_pose", f"source/{body}_pose"):
+        if key in arrays:
+            return key
+    return None
+
+
+def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
+               normal_out: np.ndarray, meta: dict, dt: float) -> np.ndarray | None:
+    """由**位姿差分**算接触点处的相对切向速度。(T, A) 或 None（缺位姿时）。
+
+    做法：把同一个接触点分别钉在接触体和被操作物体上，按各自的位姿搬到前后帧，
+    位移之差除以 2dt 就是相对速度。**位姿是位置量**，在 50 Hz 上差分等于对 6 个
+    物理子步取平均——PhysX 报的瞬时速度会被采集板的姿态极限环污染到虚高
+    5~10 倍（P-52），这条不会。
+
+    **这一步读了 `source/*`，是有意的**：`plan/02` §1 禁的是把 source 字段
+    **写进表示**，不是禁 oracle 用特权数据去算物体中心的物理量。算出来的
+    "接触点处的相对速度"是交互本身的性质（Huang 的接触模式分类就按它定义），
+    不是板的位姿。而且 `plan/07` §3 的传感方案给的正是"面相对物体的位姿"，
+    真实装置差分一下得到的就是同一个量——oracle 与硬件在这一项上没有落差。
+
+    实测（擦拭数据集，板不抖，可作标尺）：与 PhysX 瞬时速度逐帧相关 0.95、
+    各阈值下 sticking 占比差 0.5 个百分点以内；而在抽屉/旋钮上它给出
+    93~95% sticking，瞬时速度给 3~6%——后者是被抖动污染的那一路。
+    """
+    keys = [_body_pose_key(arrays, b) for b in bodies]
+    if any(k is None for k in keys):
+        return None
+    op = _object_pose(arrays, meta)
+    if op is None:
+        return None
+    obj_pos, obj_rot = op
+    n_frames, n_slots = pos.shape[0], pos.shape[1]
+    per = n_slots // max(len(bodies), 1)
+    out = np.zeros((n_frames, n_slots))
+    # 接触点的世界坐标（物体系 -> 世界）
+    world = obj_pos[:, None, :] + np.einsum("tij,tkj->tki", obj_rot, pos)
+
+    def carried(rot: np.ndarray, org: np.ndarray) -> np.ndarray:
+        """把接触点钉在这个刚体上，返回它在前一帧/后一帧的世界位置之差。"""
+        loc = np.einsum("tij,tkj->tki", rot.transpose(0, 2, 1), world - org[:, None, :])
+        nxt = org[2:, None, :] + np.einsum("tij,tkj->tki", rot[2:], loc[1:-1])
+        prv = org[:-2, None, :] + np.einsum("tij,tkj->tki", rot[:-2], loc[1:-1])
+        return nxt - prv
+
+    d_obj = carried(obj_rot, obj_pos)
+    for b, key in enumerate(keys):
+        pose = np.asarray(arrays[key], dtype=np.float64)
+        rot = _quat_to_rot(pose[:, 3:7])
+        rel = (carried(rot, pose[:, :3]) - d_obj) / (2.0 * dt)
+        # ⚠️ `rel` 算在**世界系**，而法向是**物体系**的——不转回来就等于拿两个
+        # 不同坐标系的矢量做投影，切向分量整个是错的。这个 bug 是被
+        # `plan/02` §7 第 1 条的场景旋转检查逮到的（转过的场景里滑移速度差到
+        # 0.17 m/s），逐帧数值上完全看不出来。
+        rel = np.einsum("tij,tkj->tki", obj_rot[1:-1].transpose(0, 2, 1), rel)
+        sl = slice(b * per, (b + 1) * per)
+        nrm = normal_out[1:-1, sl]
+        v = rel[:, sl]
+        tang = v - np.einsum("tak,tak->ta", v, nrm)[..., None] * nrm
+        out[1:-1, sl] = np.linalg.norm(tang, axis=-1)
+    # 首末帧没有中心差分，用邻帧顶上（比留 0 诚实：留 0 会被判成 sticking）
+    out[0], out[-1] = out[1], out[-2]
+    return out
+
+
+def _object_pose(arrays: dict, meta: dict) -> tuple[np.ndarray, np.ndarray] | None:
+    """被操作物体的世界位姿。擦拭平面是 kinematic 的，不记位姿——它不动，用恒等。"""
+    # 自由体的位姿本来就在 `object/state` 里（位置 + 四元数），优先用它——
+    # 那是模型可见字段，用不着走 source 追查字段。
+    st = arrays.get("object/state")
+    if st is not None and np.asarray(st).shape[-1] == 7:
+        st = np.asarray(st, dtype=np.float64)
+        return st[:, :3], _quat_to_rot(st[:, 3:7])
+    for pk, qk in (("source/drawer_pos_w", "source/drawer_quat_w"),
+                   ("source/disc_pos_w", "source/disc_quat_w"),
+                   ("source/object_pos_w", "source/object_quat_w")):
+        if pk in arrays and qk in arrays:
+            return (np.asarray(arrays[pk], dtype=np.float64),
+                    _quat_to_rot(np.asarray(arrays[qk], dtype=np.float64)))
+    if str(meta.get("task")) == "wipe":
+        n = len(arrays["phase"])
+        return (np.zeros((n, 3)), np.tile(np.eye(3), (n, 1, 1)))
+    return None
 
 
 def _patch_slip(pos: np.ndarray, fn: np.ndarray, active: np.ndarray,

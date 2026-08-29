@@ -19,9 +19,9 @@
 硬编码的世界轴，**不检验仿真器的坐标处理**；后者由 S3 已有的接触部位统计
 间接支撑（抽屉 90.2% 落在把手背面这类数字，坐标错了不可能对）。
 
-``mech/generalized`` 不参加这个测试：它按物体的**标准轴**定义（抽屉沿 +X、
-旋钮绕 +Z、平面压 −Z）。真实的场景旋转会把标准轴一起转走，所以它按构造不变；
-而代数测试是"换一个物体系定义"，那个轴不跟着转，比较没有意义。
+``mech/generalized`` 也参加这个测试。它按物体的**标准轴**定义（抽屉沿 +X、
+旋钮绕 +Z、平面压 −Z），而那些轴长在物体自己身上——场景一转它们跟着转，
+所以广义力在场景旋转下就该**逐元素不变**，不是等变。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from it.interaction import extract, spec_for  # noqa: E402
+from it.interaction import SLIP_SPEED_MIN, extract, spec_for  # noqa: E402
 from it.records import EpisodeRecord, load_episode, read_manifest  # noqa: E402
 from it.surfaces import surface_for  # noqa: E402
 
@@ -79,19 +79,38 @@ def _quat_left(rot: np.ndarray, quat: np.ndarray) -> np.ndarray:
                      (m[:, 1, 0] - m[:, 0, 1]) / (4 * w)], axis=1)
 
 
-def rotate_episode(rec: EpisodeRecord, rot: np.ndarray) -> EpisodeRecord:
-    """把一条 S3 episode 的**物体系**量整体转过去。标量（关节量、力大小）不动。"""
+def rotate_scene(rec: EpisodeRecord, rot: np.ndarray) -> EpisodeRecord:
+    """把**整个场景**绕世界原点转过去：所有世界系字段转，物体系字段一个不动。
+
+    这才是 `plan/02` §7 第 1 条的原话——"整个场景刚体旋转后，物体系表示
+    **逐元素一致**"。场景一转，物体的世界位姿、接触体的世界位姿全都跟着转，
+    而"接触点在物体系里的坐标"按定义不变。于是提取器的输出必须**逐位相同**；
+    一旦某处硬编码了世界轴（"+X 是拉出方向"、"up = +Z"），这个测试立刻炸。
+
+    ⚠️ 第一版写错过：那一版把物体系的 `contact/*` 也转了，同时又把物体的世界
+    姿态往同方向转——等于把同一个旋转记了两次，于是滑移速度差到 0.52 m/s。
+    错的是测试，不是提取器。擦拭那份恰好没暴露（它的物体是静止且姿态恒等的）。
+    """
     arrays = {}
     for k, v in rec.arrays.items():
         a = np.asarray(v)
-        if k.startswith("contact/") and a.ndim == 3 and a.shape[-1] == 3:
-            arrays[k] = np.einsum("ij,taj->tai", rot, a.astype(np.float64)).astype(a.dtype)
-        elif k == "object/state" and a.shape[-1] == 7:
+        world_pose = a.ndim == 2 and a.shape[-1] == 7 and (
+            k.endswith("root_pose") or k.endswith("_pose") or k == "object/state")
+        world_pos = a.ndim == 2 and a.shape[-1] == 3 and k.endswith("_pos_w")
+        world_quat = a.ndim == 2 and a.shape[-1] == 4 and k.endswith("_quat_w")
+        world_pts = a.ndim == 3 and a.shape[-1] == 3 and k.endswith("contact_pos_w")
+        if world_pose:
             p = np.einsum("ij,tj->ti", rot, a[:, :3].astype(np.float64))
             q = _quat_left(rot, a[:, 3:7].astype(np.float64))
             arrays[k] = np.concatenate([p, q], axis=1).astype(a.dtype)
+        elif world_pos:
+            arrays[k] = np.einsum("ij,tj->ti", rot, a.astype(np.float64)).astype(a.dtype)
+        elif world_quat:
+            arrays[k] = _quat_left(rot, a.astype(np.float64)).astype(a.dtype)
+        elif world_pts:
+            arrays[k] = np.einsum("ij,tkj->tki", rot, a.astype(np.float64)).astype(a.dtype)
         else:
-            arrays[k] = a
+            arrays[k] = a          # contact/* 是物体系的，按定义不动
     return EpisodeRecord(meta=dict(rec.meta), arrays=arrays)
 
 
@@ -113,7 +132,7 @@ def main() -> int:
 
     # ---------------- 1. 场景刚体旋转后物体系表示逐元素一致 ----------------
     pick = rng.choice(len(ok_entries), size=min(a.sample, len(ok_entries)), replace=False)
-    worst = {"idx": 0, "mode": 0, "effect": 0.0, "wrench": 0.0}
+    worst = {"idx": 0, "mode": 0, "effect": 0.0, "wrench": 0.0, "slip": 0.0}
     for i in pick:
         e = ok_entries[int(i)]
         src = load_episode(src_root / src_by_id[e["episode_id"]]["path"])
@@ -122,28 +141,40 @@ def main() -> int:
         surf = surface_for(spec.obj, tag)
         base = extract(src, surf)
         rot = _rand_rot(rng)
-        turned = extract(rotate_episode(src, rot), surf.rotated(rot))
+        # 表面采样不跟着转：场景转了，但物体在**自己**的坐标系里没变
+        turned = extract(rotate_scene(src, rot), surf)
 
         worst["idx"] = max(worst["idx"], int(
             (np.asarray(base.arrays["region/point_idx"])
              != np.asarray(turned.arrays["region/point_idx"])).sum()))
+        # mode 比**连续量**，不比标签：标签是按 5 mm/s 切出来的，卡在阈值上的点
+        # 会因为旋转多绕几步浮点运算而翻面。那是数值噪声，不是坐标依赖。
+        # 判据因此是：滑移速度的差要小，且**离阈值不近**的点标签必须一致。
+        s0 = np.asarray(base.arrays["mode/slip_speed"], dtype=np.float64)
+        s1 = np.asarray(turned.arrays["mode/slip_speed"], dtype=np.float64)
+        worst["slip"] = max(worst["slip"], float(np.abs(s0 - s1).max()))
+        far = np.abs(s0 - SLIP_SPEED_MIN) > 0.05 * SLIP_SPEED_MIN
         worst["mode"] = max(worst["mode"], int(
-            (np.asarray(base.arrays["mode/label"])
-             != np.asarray(turned.arrays["mode/label"])).sum()))
+            ((np.asarray(base.arrays["mode/label"])
+              != np.asarray(turned.arrays["mode/label"])) & far).sum()))
         worst["effect"] = max(worst["effect"], float(np.abs(
             np.asarray(base.arrays["effect/future"], dtype=np.float64)
             - np.asarray(turned.arrays["effect/future"], dtype=np.float64)).max()))
-        w0 = np.asarray(base.arrays["mech/wrench_obj"], dtype=np.float64)
-        w1 = np.asarray(turned.arrays["mech/wrench_obj"], dtype=np.float64)
-        worst["wrench"] = max(worst["wrench"], float(np.abs(
-            np.concatenate([w0[:, :3] @ rot.T - w1[:, :3],
-                            w0[:, 3:] @ rot.T - w1[:, 3:]], axis=1)).max()))
+        # 物体系的力与力矩在场景旋转下**不变**（不是等变）——它们本来就表达在
+        # 物体自己的坐标系里，场景怎么摆与它无关。
+        for key in ("mech/wrench_obj", "mech/generalized"):
+            worst["wrench"] = max(worst["wrench"], float(np.abs(
+                np.asarray(base.arrays[key], dtype=np.float64)
+                - np.asarray(turned.arrays[key], dtype=np.float64)).max()))
 
-    check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5,
+    check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5
+          and worst["slip"] < 1e-4,
           "1. 场景刚体旋转：不变量逐元素一致",
           f"{len(pick)} 条 × 随机旋转；region 索引差 {worst['idx']} 个、"
-          f"mode 差 {worst['mode']} 个、effect 最大差 {worst['effect']:.2e}")
-    check(worst["wrench"] < 1e-3, "1b. 力与力矩按 R 等变",
+          f"滑移速度最大差 {worst['slip']:.2e} m/s、"
+          f"离阈值 5% 以外的 mode 差 {worst['mode']} 个、"
+          f"effect 最大差 {worst['effect']:.2e}")
+    check(worst["wrench"] < 1e-3, "1b. 物体系的力、力矩与广义力逐元素不变",
           f"最大残差 {worst['wrench']:.2e} N / N·m")
     info("1c. 这条测试的限制",
          "只检验提取器有没有混进硬编码世界轴；不检验仿真器的坐标处理")
@@ -154,8 +185,11 @@ def main() -> int:
     check(not [k for k in keys if k.startswith("source/")],
           "2. 记录里没有 source/* 字段", f"{len(keys)} 个数组")
 
-    # 更强的一条：把输入里的 source/* 全删掉，输出必须逐位相同 ——
-    # 证明提取器**根本没读**它们，而不是读了以后没写出来
+    # 更强的一条：把输入里的 source/* 全删掉，看输出有哪些字段会变。
+    # **允许变的只有滑移速度那两路**——mode 的主判据是接触体与物体的位姿差分
+    # （见 `interaction._pose_slip`），那是 oracle 用特权数据算出来的**物理量**，
+    # 不是把 source 字段写进表示。`plan/02` §1 禁的是后者。
+    # 其余任何字段一旦随 source 变化，就说明采集侧的东西漏进表示了。
     src0 = load_episode(src_root / src_by_id[ok_entries[0]["episode_id"]]["path"])
     spec0 = spec_for(src0.meta)
     surf0 = surface_for(spec0.obj, str(src0.meta.get("geometry_variant", "nominal")))
@@ -163,9 +197,14 @@ def main() -> int:
                              arrays={k: v for k, v in src0.arrays.items()
                                      if not k.startswith("source/")})
     a0, a1 = extract(src0, surf0).arrays, extract(stripped, surf0).arrays
-    same = all(np.array_equal(np.asarray(a0[k]), np.asarray(a1[k])) for k in a0)
-    check(same and set(a0) == set(a1), "2b. 删掉输入的 source/* 后输出逐位相同",
-          "提取器确实没读采集侧数据")
+    differ = sorted(k for k in a0
+                    if not np.array_equal(np.asarray(a0[k]), np.asarray(a1[k])))
+    # 允许变的就是滑移那一路：`mode/slip_speed` 是主判据的值本身，
+    # `mode/pose_slip` 是它的诊断副本，`mode/label` 是按它切出来的标签。
+    allowed = {"mode/pose_slip", "mode/slip_speed", "mode/label"}
+    check(set(a0) == set(a1) and set(differ) <= allowed,
+          "2b. 去掉 source/* 后，只有滑移速度那一路会变",
+          f"实际变化的字段：{differ or '无'}（允许：{sorted(allowed)}）")
 
     model_keys = sorted(sample.model_arrays())
     banned = [k for k in model_keys
