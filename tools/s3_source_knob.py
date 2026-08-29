@@ -70,7 +70,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from it import assets as A  # noqa: E402
 from it import build_assets as B  # noqa: E402
 from it.contact_attrib import (  # noqa: E402
-    quat_from_frame,
+    quat_face_and_up,
     rotate_inverse,
     to_local,
 )
@@ -363,7 +363,7 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
         rim_pos = center + rad * (_P.size[2] / 2 + gap).unsqueeze(-1)
         pos = torch.where(on_pin.unsqueeze(-1) > 0, pin_pos, rim_pos)
         # 从板指向接触体的方向：销钉家族是切向，轮缘家族是径向朝内。
-        # 它同时是板的局部 +Z（工作面法向，见 `contact_attrib.quat_from_frame`）
+        # 它同时是板的局部 +Z（工作面法向，见 `contact_attrib.quat_face_and_up`）
         # 和力控方向。
         n_push = torch.where(on_pin.unsqueeze(-1) > 0,
                              -tan * s_k.unsqueeze(-1), -rad)
@@ -381,9 +381,15 @@ def run_batch(scene, sim, camera, fam_of, rng, device, batch):
         _up = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
         # 轮缘家族同样横放：竖放时 35 mm 的板跨在只有 15 mm 厚的盘缘上，
         # 实测操作阶段全程脱手；横放实测稳定压住、法向力 19.5 N。
+        #
+        # 深色鳍（局部 +Y）的朝向必须**两块板一致**，否则录像里看着像其中一块
+        # 翻了 180°（实测两块板的鳍夹角余弦 -0.99）。见 `quat_face_and_up`：
+        #   竖放家族 —— 长边被约束成竖直，鳍只能水平，统一取"径向朝外"；
+        #   横放家族 —— 长边不受约束，鳍朝上。
         vert = ((on_pin > 0) & ~both_push).unsqueeze(-1)
-        x_hint = torch.where(vert, _up, torch.cross(_up, n_push, dim=-1))
-        return pos, quat_from_frame(n_push, x_hint), n_push
+        q_vert = quat_face_and_up(n_push, rad, long_axis=_up)
+        q_flat = quat_face_and_up(n_push, _up)
+        return pos, torch.where(vert, q_vert, q_flat), n_push
 
     pds = [FloatingPD(pl, kp_pos=3000.0, kd_pos=110.0, kp_rot=6.0, kd_rot=0.025,
                       max_force=45.0, max_torque=4.0, kd_force=40.0) for pl in plates]

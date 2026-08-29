@@ -82,7 +82,7 @@ from it import build_assets as B  # noqa: E402
 from it.contact_attrib import (  # noqa: E402
     PLATE_PARTS,
     classify_plate_face,
-    quat_from_frame,
+    quat_face_and_up,
     rotate_inverse,
     to_local,
 )
@@ -609,6 +609,13 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
         n_site[i] = len(used)
         for k, sname in enumerate(used):
             site_idx[i, k] = site_names.index(sname)
+        if len(used) == 1:
+            # **单位点原语里不参与的那块板要跟着第一块**，否则它默认指到
+            # `site_names[0]`（字母序第一个位点，通常不是正在用的那个），
+            # 于是它朝着另一个方向悬停——录像里两块板的朝向标记互相矛盾
+            # （实测 press / shear 两块板的鳍夹角余弦 0.00）。
+            # 它由 `n_site` 门控、全程不接触，改的只是它待命时的位姿。
+            site_idx[i, 1] = site_idx[i, 0]
         f_norm[i, :] = float(rng.uniform(*pr.f_normal))
         tan_amp[i] = float(rng.uniform(*pr.tan_amp)) if pr.tan_mode != "none" else 0.0
     site_idx = site_idx.to(device)
@@ -683,9 +690,16 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
     pds = [FloatingPD(pl, kp_pos=3000.0, kd_pos=110.0, kp_rot=6.0, kd_rot=0.025,
                       max_force=120.0, max_torque=4.0, kd_force=15.0) for pl in plates]
 
+    #: 深色鳍（局部 +Y）的共同参考方向。两块板的标记必须一致，否则录像里
+    #: 看着像其中一块翻了 180°——实测所有对捏原语的两块板夹角余弦都是 -1.00。
+    _up_w = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
+
     quats = []
     for k in range(2):
-        quats.append(quat_from_frame(-dir_world(s_nrm)[:, k], dir_world(s_lng)[:, k]))
+        # 位点的 `long` 定的是长边的**轴**（圆柱面上必须沿柱轴才是线接触），
+        # 符号由"两块板的鳍朝同一边"来定，见 `quat_face_and_up`。
+        quats.append(quat_face_and_up(-dir_world(s_nrm)[:, k], _up_w,
+                                      long_axis=dir_world(s_lng)[:, k]))
 
     targets = []
     for k, plate in enumerate(plates):
@@ -728,7 +742,8 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
             p_site = world_of(s_pos)
             d_nrm, d_app, d_swp = dir_world(s_nrm), dir_world(s_app), dir_world(s_swp)
             for k in range(2):
-                quats[k] = quat_from_frame(-d_nrm[:, k], dir_world(s_lng)[:, k])
+                quats[k] = quat_face_and_up(-d_nrm[:, k], _up_w,
+                                            long_axis=dir_world(s_lng)[:, k])
             p_eng = p_site + d_nrm * (PLATE_T / 2 + PRE_GAP)
             p_safe = p_eng + d_app * SAFE_GAP
             p_home = p_site + d_app * (STANDOFF + torch.tensor(

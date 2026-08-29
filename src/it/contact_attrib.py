@@ -177,6 +177,41 @@ def bar_span_fraction(pts_local: torch.Tensor, post_half_spacing: float,
     return pts_local[..., 1].abs() < (post_half_spacing - post_radius)
 
 
+def quat_face_and_up(z_axis: torch.Tensor, up_hint: torch.Tensor,
+                     long_axis: torch.Tensor | None = None) -> torch.Tensor:
+    """把板"正对某个表面"，并且**把朝向标记摆到一个确定的方向上**。
+
+    `quat_from_frame` 只钉住工作面法向（局部 +Z）和局部 +X，**局部 +Y 是自己
+    落下来的**——而深色鳍就长在 +Y 那条边上（`build_assets.PlateCfg`）。
+    两块板一旦面对面（对捏、双面夹持），两个 +Z 相反，+Y 也就跟着相反：
+    实测擦拭持工具时一块板的鳍朝下（-1.00）、另一块朝上（+1.00），
+    探针上所有对捏原语的两块板夹角余弦都是 -1.00。
+
+    **物理上这是恒等**——板是 35×25×3 的长方体，绕自身任一主轴转 180° 与自身
+    重合，标记又只有视觉没有碰撞。但朝向标记的**唯一用途**就是让人在录像里
+    读出板的姿态（`plan/06` §7 的人工检查），两块板的标记互相矛盾时它就废了。
+
+    Args:
+        z_axis: (N, 3) 工作面法向的世界方向（从板指向被接触的表面）。
+        up_hint: (N, 3) 希望 **局部 +Y（鳍所在边）** 对齐的世界方向。
+            通常是世界 +Z；与 ``z_axis`` 共线时退化，此时保持 `quat_from_frame`
+            的行为并由调用方保证两块板取同一个退化参考。
+        long_axis: (N, 3)，可选。**长边（局部 +X，35 mm）被物理约束**时给它——
+            例如推销钉时长边必须与销钉轴平行，横过来板会从柱面滑脱（P-46）。
+            给了它就只在 ±long_axis 两个等价解里挑一个，挑的依据是让 +Y
+            与 ``up_hint`` 同向；长边的**轴**不动，只定符号。
+    """
+    z = z_axis / z_axis.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+    if long_axis is not None:
+        x = long_axis - (long_axis * z).sum(dim=-1, keepdim=True) * z
+        y = torch.cross(z, x, dim=-1)
+        # +Y 与 up_hint 反向时，把长边取反（绕 Z 转 180°，几何上自映射）
+        flip = ((y * up_hint).sum(dim=-1, keepdim=True) < 0.0)
+        return quat_from_frame(z, torch.where(flip, -x, x))
+    # 想要 Y ≈ up_hint，而 quat_from_frame 里 Y = Z × X，故取 X = up_hint × Z
+    return quat_from_frame(z, torch.cross(up_hint, z, dim=-1))
+
+
 def quat_from_frame(z_axis: torch.Tensor, x_hint: torch.Tensor) -> torch.Tensor:
     """由"局部 +Z 指向哪、局部 +X 大致指向哪"构造姿态四元数 (N, 4)。
 

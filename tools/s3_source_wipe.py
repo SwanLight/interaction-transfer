@@ -74,7 +74,7 @@ from it import assets as A  # noqa: E402
 from it import build_assets as B  # noqa: E402
 from it.contact_attrib import (  # noqa: E402
     PLATE_PARTS,
-    quat_from_frame,
+    quat_face_and_up,
     rotate_inverse,
     to_local,
 )
@@ -358,14 +358,20 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     eraser.write_root_state_to_sim(e_st)
 
     # 板的姿态：工作面法向指向黑板擦（持工具）或指向平面（直擦）
-    q_grip = [quat_from_frame(
+    # 两块板从两侧夹黑板擦，工作面法向相反。**深色鳍（局部 +Y）必须都朝上**，
+    # 否则录像里一块朝上一块朝下、看着像翻了 180°（实测正好 -1.00）。
+    _up = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
+    q_grip = [quat_face_and_up(
         torch.tensor([[-1.0, 0.0, 0.0]], device=device).expand(n, 3) * (1 if k == 0 else -1),
-        torch.tensor([[0.0, 1.0, 0.0]], device=device).expand(n, 3)) for k in range(2)]
+        _up) for k in range(2)]
     # 直擦时板的**长边沿 X**（换道方向），两块板合起来 95 mm 宽，
     # 与黑板擦垫子的 80 mm 同量级；长边沿 Y 只有 69 mm，覆盖不住。
-    q_flat = quat_from_frame(
+    # 直擦时板是水平的、法向朝下，"鳍朝上"退化（up 与法向共线）；
+    # 两块板取同一个水平参考即可，保证互相一致。
+    q_flat = quat_face_and_up(
         torch.tensor([[0.0, 0.0, -1.0]], device=device).expand(n, 3),
-        torch.tensor([[1.0, 0.0, 0.0]], device=device).expand(n, 3))
+        torch.tensor([[0.0, -1.0, 0.0]], device=device).expand(n, 3),
+        long_axis=torch.tensor([[1.0, 0.0, 0.0]], device=device).expand(n, 3))
     quats = [torch.where(is_tool.unsqueeze(-1), q_grip[k], q_flat) for k in range(2)]
 
     pds = [FloatingPD(pl, kp_pos=3000.0, kd_pos=110.0, kp_rot=6.0, kd_rot=0.025,
