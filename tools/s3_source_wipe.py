@@ -321,6 +321,52 @@ class Buffers:
         self.rot_err = z(2, n)
 
 
+
+class DirtVis:
+    """把 dirt 网格画成平面上一片片**纯视觉、无碰撞**的小方片（只在录像时开）。
+
+    为什么要有它：擦拭的 effect **只有** dirt 状态变化（`plan/02` §3.1 经
+    D-42 修订），而 dirt 一直是个内部张量、没有任何可视几何——录像里看得到
+    板和黑板擦怎么动，**看不到污渍**。"动作看着对、区域没擦干净"这两件事
+    在画面上分不出来，所以一直只能另出一张 `dirt_tc.png` 覆盖图。
+    现在录像里也能直接看到污渍一格格消失，覆盖图仍然保留（它给的是全体
+    episode 的统计，录像只有一条）。
+
+    只给 **env 0** 建（相机只拍它），只在 ``--video`` 时建，格子不带碰撞、
+    不带物理 API，**对物理和数据没有任何影响**。擦除是单调的，所以每次渲染
+    只需要把"这一帧新变干净的"藏掉，累计不超过 630 次写。
+    """
+
+    def __init__(self, stage, origin, top_z):
+        from pxr import Gf, UsdGeom
+        self._UsdGeom = UsdGeom
+        self.prims = {}
+        root = UsdGeom.Xform.Define(stage, "/World/DirtVis")
+        UsdGeom.Xformable(root).AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
+        for i in range(GRID[0]):
+            for j in range(GRID[1]):
+                x = float(origin[0]) + (i + 0.5) * CELL - REGION[0] / 2
+                y = float(origin[1]) + (j + 0.5) * CELL - REGION[1] / 2
+                c = UsdGeom.Cube.Define(stage, f"/World/DirtVis/c_{i}_{j}")
+                c.CreateSizeAttr(1.0)
+                xf = UsdGeom.Xformable(c)
+                xf.AddTranslateOp().Set(Gf.Vec3d(x, y, float(top_z) + 0.0006))
+                # 铺满单元格（0.96 而不是 0.42）：占比小的时候看着像一片散点，
+                # 铺满之后脏区连成一片，"哪一块被擦干净了"一眼就能看出来。
+                xf.AddScaleOp().Set(Gf.Vec3f(CELL * 0.96, CELL * 0.96, 0.0004))
+                c.CreateDisplayColorAttr([Gf.Vec3f(0.16, 0.12, 0.09)])
+                self.prims[(i, j)] = c.GetPrim()
+        self.shown = {k: True for k in self.prims}
+
+    def update(self, dirt_env0):
+        """``dirt_env0``：(GRID) 的 bool，True = 还脏。把新变干净的藏掉。"""
+        clean = (~dirt_env0).nonzero(as_tuple=False).tolist()
+        for i, j in clean:
+            if self.shown.get((i, j)):
+                self._UsdGeom.Imageable(self.prims[(i, j)]).MakeInvisible()
+                self.shown[(i, j)] = False
+
+
 def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
     n = scene.cfg.num_envs
     board: RigidObject = scene["board"]
@@ -459,6 +505,13 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
 
     buf = Buffers(n, device)
     dirt = torch.ones(n, *GRID, dtype=torch.bool, device=device)
+    dirt_vis = None
+    if camera is not None:
+        import omni.usd
+        stg = omni.usd.get_context().get_stage()
+        if stg.GetPrimAtPath("/World/DirtVis"):
+            stg.RemovePrim("/World/DirtVis")
+        dirt_vis = DirtVis(stg, top[0].tolist(), float(top[0, 2]))
     # 网格中心（平面局部系）
     gx = (torch.arange(GRID[0], device=device) + 0.5) * CELL - REGION[0] / 2
     gy = (torch.arange(GRID[1], device=device) + 0.5) * CELL - REGION[1] / 2
@@ -612,6 +665,8 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
             buf.valid[frame] = ok & (buf.fn[frame].abs().sum(dim=(0, 2)) <= MAX_VALID_FORCE)
 
             if camera is not None and frame % every == 0:
+                if dirt_vis is not None:
+                    dirt_vis.update(dirt[0])       # 先更新污渍，再渲染
                 sim.render()
                 camera.update(CONTROL_DT)
                 preview.append(camera.data.output["rgb"][0, ..., :3]
