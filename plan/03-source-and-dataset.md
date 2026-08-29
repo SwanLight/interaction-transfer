@@ -27,7 +27,7 @@
 
 ⚠️ **第 5 条在 D-14 之后不是一个"正常策略"，而是一个预期失败的对照。**
 初版把它列为普通家族，那是加低摩擦轮缘之前写的。实测在**压足 19.5 N**
-（安全上限 25 N 之内）的条件下只转到 **0.057 rad**，而销钉家族转到
+（安全上限 25 N 之内）的条件下只转到 **0.019 rad**，而销钉家族转到
 2.31~2.81 rad：
 
     τ_rim = μ·F·R = 0.10 × 19.5 × 0.070 = 0.137 N·m
@@ -164,16 +164,16 @@ E-I 需要覆盖**交互指令空间**，而三个任务的 envelope 只是这�
 
 粗体是 2026-08-29 补上的承载物体，理由见下。
 
-冗余核对（**实测**，10740 条 episode / 9046 成功，`out/s3_probe/coverage.txt`）：
+冗余核对（**实测**，10740 条 episode / 9250 成功，`out/s3_probe/coverage.txt`）：
 
 ```
 OK press        1432 成功 / 7 物体     OK slide_along  420 / 2
 OK push          232 / 2               OK hook_pull    407 / 2
-OK slide_push    249 / 2               OK twist        271 / 2
+OK slide_push    251 / 2               OK twist        263 / 2
 OK rub           420 / 2               OK pinch_hold   414 / 2
 OK shear         624 / 3               OK pinch_move   414 / 2
 OK poke         2676 / 10              OK pinch_turn   400 / 2
-OK pivot         278 / 2               OK roll         399 / 2
+OK pivot         278 / 2               OK roll         588 / 2
 OK crank         410 / 2
                                        两条判据都满足：15 / 15
 ```

@@ -83,6 +83,7 @@ from it.contact_attrib import (  # noqa: E402
     PLATE_PARTS,
     classify_plate_face,
     quat_face_and_up,
+    roll_sign,
     rotate_inverse,
     to_local,
 )
@@ -609,13 +610,11 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
         n_site[i] = len(used)
         for k, sname in enumerate(used):
             site_idx[i, k] = site_names.index(sname)
-        if len(used) == 1:
-            # **单位点原语里不参与的那块板要跟着第一块**，否则它默认指到
-            # `site_names[0]`（字母序第一个位点，通常不是正在用的那个），
-            # 于是它朝着另一个方向悬停——录像里两块板的朝向标记互相矛盾
-            # （实测 press / shear 两块板的鳍夹角余弦 0.00）。
-            # 它由 `n_site` 门控、全程不接触，改的只是它待命时的位姿。
-            site_idx[i, 1] = site_idx[i, 0]
+        # ⚠️ 单位点原语里不参与的那块板**位置不能跟着第一块**。试过让
+        # `site_idx[i, 1] = site_idx[i, 0]`，结果 `press` 的待命板正好悬在
+        # 工作板的正上方，把它压成边角接触：侧边接触从 9.8% 涨到 62.5%、
+        # 成功率 46/51 -> 8/51。它待命的位置保持原样（字母序第一个位点上方），
+        # 只有**朝向**跟随第一块板，见下面 `quats` 的构造。
         f_norm[i, :] = float(rng.uniform(*pr.f_normal))
         tan_amp[i] = float(rng.uniform(*pr.tan_amp)) if pr.tan_mode != "none" else 0.0
     site_idx = site_idx.to(device)
@@ -694,12 +693,29 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
     #: 看着像其中一块翻了 180°——实测所有对捏原语的两块板夹角余弦都是 -1.00。
     _up_w = torch.tensor([[0.0, 0.0, 1.0]], device=device).expand(n, 3)
 
-    quats = []
-    for k in range(2):
-        # 位点的 `long` 定的是长边的**轴**（圆柱面上必须沿柱轴才是线接触），
-        # 符号由"两块板的鳍朝同一边"来定，见 `quat_face_and_up`。
-        quats.append(quat_face_and_up(-dir_world(s_nrm)[:, k], _up_w,
-                                      long_axis=dir_world(s_lng)[:, k]))
+    #: 参考方向按优先级：先"朝上"，退化时退到世界 +X、再退到 +Y。
+    #: 圆柱侧面位点上鳍恰好水平，`y·up` 正好是 0，只用一个参考会被浮点噪声
+    #: 决定符号 —— 而姿态每步重算，目标就会在两个等价解之间来回跳（P-49）。
+    _refs = [_up_w,
+             torch.tensor([[1.0, 0.0, 0.0]], device=device).expand(n, 3),
+             torch.tensor([[0.0, 1.0, 0.0]], device=device).expand(n, 3)]
+    #: **符号只在这里算一次**，整条 episode 不再变。
+    roll_s = [roll_sign(-dir_world(s_nrm)[:, k], dir_world(s_lng)[:, k], _refs)
+              for k in range(2)]
+    #: 单位点原语里不参与的那块板：**位置**留在原地（跟过去会压到工作板身上，
+    #: 见上面的说明），但**朝向**整个跟随第一块板——否则它按自己那个位点的法向
+    #: 摆，录像里两块板的标记又对不上（实测 column press 余弦 -1.00）。
+    #: 它全程不接触、停在远处，改朝向没有物理后果。
+    idle = (n_site < 2).view(n, 1)
+
+    def _quats(nrm_w):
+        qs = [quat_face_and_up(-nrm_w[:, k], _up_w,
+                               long_axis=dir_world(s_lng)[:, k], sign=roll_s[k])
+              for k in range(2)]
+        qs[1] = torch.where(idle, qs[0], qs[1])
+        return qs
+
+    quats = _quats(dir_world(s_nrm))
 
     targets = []
     for k, plate in enumerate(plates):
@@ -742,8 +758,7 @@ def run_batch(scene, sim, camera, prim_of_env, rng, device, batch):
             p_site = world_of(s_pos)
             d_nrm, d_app, d_swp = dir_world(s_nrm), dir_world(s_app), dir_world(s_swp)
             for k in range(2):
-                quats[k] = quat_face_and_up(-d_nrm[:, k], _up_w,
-                                            long_axis=dir_world(s_lng)[:, k])
+                quats[k] = _quats(d_nrm)[k]
             p_eng = p_site + d_nrm * (PLATE_T / 2 + PRE_GAP)
             p_safe = p_eng + d_app * SAFE_GAP
             p_home = p_site + d_app * (STANDOFF + torch.tensor(

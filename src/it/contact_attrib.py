@@ -177,8 +177,35 @@ def bar_span_fraction(pts_local: torch.Tensor, post_half_spacing: float,
     return pts_local[..., 1].abs() < (post_half_spacing - post_radius)
 
 
+def roll_sign(z_axis: torch.Tensor, long_axis: torch.Tensor,
+              refs: list[torch.Tensor]) -> torch.Tensor:
+    """在 ±long_axis 两个**等价**解里挑一个，返回 (N, 1) 的 +1 / -1。
+
+    ⚠️ **判据必须在退化时也是确定的，而且整条 episode 只能算一次。**
+
+    第一版写成 `flip = (y·up < 0)`，而在圆柱侧面这类位点上 y 恰好水平，
+    `y·up` 数学上正好是 0、实际是 ±1e-9 的浮点噪声。姿态每个控制步重算一次，
+    于是目标四元数在相邻步之间**随机翻 180°**，转动 PD 每步都想把板拧半圈：
+    实测立柱对捏的夹持力从 14.1 N 掉到 8.7 N、物体被甩出 1046 mm、
+    成功率 51/52 -> 16/52。见 P-49。
+
+    Args:
+        refs: 参考方向按优先级排列。前一个与 y 近乎正交（|点积| < 1e-3）时
+            退到下一个，因此结果与"哪个参考恰好退化"无关。
+    """
+    z = z_axis / z_axis.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+    x = long_axis - (long_axis * z).sum(dim=-1, keepdim=True) * z
+    y = torch.cross(z, x, dim=-1)
+    score = torch.zeros(y.shape[0], 1, device=y.device, dtype=y.dtype)
+    for r in refs:
+        d = (y * r).sum(dim=-1, keepdim=True)
+        score = torch.where(score.abs() < 1e-3, d, score)
+    return torch.where(score < 0.0, -torch.ones_like(score), torch.ones_like(score))
+
+
 def quat_face_and_up(z_axis: torch.Tensor, up_hint: torch.Tensor,
-                     long_axis: torch.Tensor | None = None) -> torch.Tensor:
+                     long_axis: torch.Tensor | None = None,
+                     sign: torch.Tensor | None = None) -> torch.Tensor:
     """把板"正对某个表面"，并且**把朝向标记摆到一个确定的方向上**。
 
     `quat_from_frame` 只钉住工作面法向（局部 +Z）和局部 +X，**局部 +Y 是自己
@@ -194,20 +221,22 @@ def quat_face_and_up(z_axis: torch.Tensor, up_hint: torch.Tensor,
     Args:
         z_axis: (N, 3) 工作面法向的世界方向（从板指向被接触的表面）。
         up_hint: (N, 3) 希望 **局部 +Y（鳍所在边）** 对齐的世界方向。
-            通常是世界 +Z；与 ``z_axis`` 共线时退化，此时保持 `quat_from_frame`
-            的行为并由调用方保证两块板取同一个退化参考。
         long_axis: (N, 3)，可选。**长边（局部 +X，35 mm）被物理约束**时给它——
             例如推销钉时长边必须与销钉轴平行，横过来板会从柱面滑脱（P-46）。
-            给了它就只在 ±long_axis 两个等价解里挑一个，挑的依据是让 +Y
-            与 ``up_hint`` 同向；长边的**轴**不动，只定符号。
+            给了它就只在 ±long_axis 两个等价解里挑符号，长边的**轴**不动。
+        sign: (N, 1)，可选。由 `roll_sign` **在 episode 开始时算一次**再传进来。
+            姿态在控制回路里每步重算，符号却必须全程不变，否则目标会在两个
+            等价解之间跳（P-49）。不给时就地按 up_hint 判，只适用于
+            ``y·up_hint`` 明显不为零的场合。
     """
     z = z_axis / z_axis.norm(dim=-1, keepdim=True).clamp_min(1e-9)
     if long_axis is not None:
         x = long_axis - (long_axis * z).sum(dim=-1, keepdim=True) * z
-        y = torch.cross(z, x, dim=-1)
-        # +Y 与 up_hint 反向时，把长边取反（绕 Z 转 180°，几何上自映射）
-        flip = ((y * up_hint).sum(dim=-1, keepdim=True) < 0.0)
-        return quat_from_frame(z, torch.where(flip, -x, x))
+        if sign is None:
+            y = torch.cross(z, x, dim=-1)
+            sign = torch.where((y * up_hint).sum(dim=-1, keepdim=True) < 0.0,
+                               -torch.ones_like(x[:, :1]), torch.ones_like(x[:, :1]))
+        return quat_from_frame(z, x * sign)
     # 想要 Y ≈ up_hint，而 quat_from_frame 里 Y = Z × X，故取 X = up_hint × Z
     return quat_from_frame(z, torch.cross(up_hint, z, dim=-1))
 
