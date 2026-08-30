@@ -1,0 +1,27 @@
+mechanics 允许集合的形状比较（同一 coverage 目标下比体积）
+========================================================================================
+标定：冻结校准集上 split conformal 定 k，使 ≥90% 的 episode 有 ≥95% 的
+      力加权接触点落进集合。之后在冻结测试集上报 coverage，并比体积。
+体积用**立方根**（N/m²）报，因为它是三维集合的线性尺度，可直接与 traction 幅值比。
+
+--- drawer  train 300 / calib 43  尺度地板 136.2 N/m²
+form                k     尺度(N/m²)   in_distribution    unseen_physics   unseen_strategy
+box_obj          2.82       7361.2             0.891             0.833             0.831
+box_surface      3.69       9554.0             0.922             0.848             0.860
+ellipsoid        4.17       8745.0             0.922             0.848             0.882
+cone             4.37      17764.2             0.906             0.924             0.897
+
+--- wipe  train 300 / calib 127  尺度地板 32.2 N/m²
+form                k     尺度(N/m²)   in_distribution    unseen_physics   unseen_strategy
+box_obj         15.33       1274.2             0.921             0.913             1.000
+box_surface     15.33       1274.2             0.921             0.913             1.000
+ellipsoid       15.59       1065.1             0.916             0.904             1.000
+cone           956.48      71567.4             0.926             0.922             1.000
+
+--- knob  train 300 / calib 87  尺度地板 2470.1 N/m²
+form                k     尺度(N/m²)   in_distribution    unseen_physics   unseen_strategy
+box_obj          3.37      46582.3             0.862             0.780             0.013
+box_surface      3.61      38835.4             0.892             0.780             0.010
+ellipsoid        3.80      31932.9             0.908             0.734             0.007
+cone             4.63      45951.9             0.923             0.555             0.000
+

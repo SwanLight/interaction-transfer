@@ -308,21 +308,25 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
              "total_area_m2": total_area}))
 
     band = _mechanics_band_report(transfer, summaries)
+    calibrated = baked.get("calibrated")
     checks.append(Check(
-        "1b mechanics band（只报数，不设门槛）", "DEFER",
-        "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；"
+        "1b mechanics 集合带内率", "PASS" if calibrated else "DEFER",
+        ("artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；"
+         if calibrated else
+         "artifact 未标定：lo/hi 只是 10/90 分位数，没有覆盖保证（D-67/D-71）；")
         + "；".join(f"{k} 逐点带内 全部 {v['all']:.3f} / 支持≥5 {v['support>=5']:.3f}"
                     f" / 支持≥10 {v['support>=10']:.3f}、episode 全中 {v['simultaneous']:.3f}"
                     for k, v in sorted(band["per_split"].items()) if k != "train")
         + f"；cell 支持分布 {band['cell_support_histogram']}"
-        + "。⚠️ 逐点数要求三分量**同时**命中，独立时就该是单轴的三次方（P-65）；"
-          "有覆盖保证的是 episode 级那一列",
+        + "。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；"
+          "'episode 全中'那一列因此天然更低，不是失败",
         band))
     checks.append(Check(
         "2b mechanics width", "PASS",
-        f"traction 带相对宽度中位数 全部 {band['relative_width_median']:.3f} / "
-        f"支持≥5 {band['relative_width_median_support5']:.3f}（与 1b 并读："
-        "带很宽而带内率仍低，说明问题不是带窄了）",
+        f"traction 集合相对宽度中位数 全部 {band['relative_width_median']:.3f} / "
+        f"支持≥5 {band['relative_width_median_support5']:.3f}"
+        + ("（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——"
+           "宽度是为了买到那个带内率）" if calibrated else "（未标定）"),
         {"relative_width_median": band["relative_width_median"],
          "relative_width_median_support5": band["relative_width_median_support5"]}))
     return checks, tau_star

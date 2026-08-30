@@ -1,7 +1,21 @@
 [
   {
     "artifact": "drawer-drawer-nominal-train.npz",
-    "artifact_sha256": "53c8f111e032b052ae4196eef404d878ea3dadf67a9e15c0930c2a641957e61d",
+    "artifact_sha256": "c6235f607dc78bb307e6f2e69828b9ee80ff689e59175a8b7c0244c3d42a047c",
+    "calibration": {
+      "calibrated": true,
+      "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+      "mech_floor_relative": 0.05,
+      "mech_moment_k": 4.199150610673497,
+      "mech_traction_k": 2.820459713247705,
+      "num_episodes": 43,
+      "point_mass_target": 0.95,
+      "region_tau": 0.99,
+      "set_form": "object_frame_axis_aligned_box",
+      "target_coverage": 0.9
+    },
+    "calibration_episodes": 43,
+    "calibration_split": "calibration",
     "manifest": "/tmp/s4_drawer/manifest.json",
     "manifest_dataset": "s4_s3_drawer_source",
     "meta": {
@@ -23,6 +37,18 @@
           0.1,
           0.9
         ]
+      },
+      "calibration": {
+        "calibrated": true,
+        "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+        "mech_floor_relative": 0.05,
+        "mech_moment_k": 4.199150610673497,
+        "mech_traction_k": 2.820459713247705,
+        "num_episodes": 43,
+        "point_mass_target": 0.95,
+        "region_tau": 0.99,
+        "set_form": "object_frame_axis_aligned_box",
+        "target_coverage": 0.9
       },
       "diagnostics": {
         "cell_support_median": 108.5,
@@ -688,7 +714,7 @@
       },
       "num_episodes": 323,
       "object": "drawer",
-      "schema_version": "interaction-transfer-v2",
+      "schema_version": "interaction-transfer-v3",
       "strategy_family_counts": {
         "hook_both": 92,
         "pinch_center": 69,
@@ -716,6 +742,7 @@
     "source_split": "train",
     "source_surface_sha256": "f7774e4f2ec4260447a2796ae7d33367598799f79b33caa3bac3804990dbb026",
     "support": {
+      "allowed_cells_mean": 4.40625,
       "cell_support_median": 108.5,
       "cell_support_under_half_fraction": 0.7738095238095238,
       "empty_bins": 0,

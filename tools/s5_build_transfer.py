@@ -25,6 +25,12 @@ from it.surfaces import load_surface  # noqa: E402
 from it.transfer import build_transfer, save_transfer  # noqa: E402
 
 
+def _allowed_cells_mean(transfer) -> float:
+    active = transfer.arrays["region/mass/mean"].sum(axis=1) > 0
+    allowed = transfer.arrays["region/allowed"]
+    return float(allowed[active].sum(axis=1).mean()) if active.any() else 0.0
+
+
 def _slug(value: object) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(value)).strip("-") or "unknown"
 
@@ -142,7 +148,9 @@ def main() -> None:
                 "cell_support_median": transfer.meta["diagnostics"]["cell_support_median"],
                 "cell_support_under_half_fraction":
                     transfer.meta["diagnostics"]["cell_support_under_half_fraction"],
-                "allowed_cells_mean": float(transfer.arrays["region/allowed"].sum(axis=1).mean()),
+                # 只在**有接触质量**的命令格上平均，与 s5_eval_envelope.py 的 2a 项
+                # 同一个分母；否则接近段那些空格会把这个数稀释掉。
+                "allowed_cells_mean": _allowed_cells_mean(transfer),
             },
             "calibration": transfer.meta["calibration"],
         }

@@ -1,7 +1,21 @@
 [
   {
     "artifact": "wipe-board-nominal-train.npz",
-    "artifact_sha256": "f1e6243edfa9f6f3f829866231d4363e617bdb3f5f78238ccc3014467ce408b8",
+    "artifact_sha256": "154267e7c1d77dcfed01b2b1dab79124ee70f00f79951be0462eab52f08e1253",
+    "calibration": {
+      "calibrated": true,
+      "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+      "mech_floor_relative": 0.05,
+      "mech_moment_k": 1.9745642423554748,
+      "mech_traction_k": 1.9920409694672478,
+      "num_episodes": 127,
+      "point_mass_target": 0.95,
+      "region_tau": 0.94,
+      "set_form": "object_frame_axis_aligned_box",
+      "target_coverage": 0.9
+    },
+    "calibration_episodes": 127,
+    "calibration_split": "calibration",
     "manifest": "/tmp/s4_wipe/manifest.json",
     "manifest_dataset": "s4_s3_wipe_source",
     "meta": {
@@ -23,6 +37,18 @@
           0.1,
           0.9
         ]
+      },
+      "calibration": {
+        "calibrated": true,
+        "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+        "mech_floor_relative": 0.05,
+        "mech_moment_k": 1.9745642423554748,
+        "mech_traction_k": 1.9920409694672478,
+        "num_episodes": 127,
+        "point_mass_target": 0.95,
+        "region_tau": 0.94,
+        "set_form": "object_frame_axis_aligned_box",
+        "target_coverage": 0.9
       },
       "diagnostics": {
         "cell_support_median": 366.0,
@@ -1942,7 +1968,7 @@
       },
       "num_episodes": 950,
       "object": "board",
-      "schema_version": "interaction-transfer-v2",
+      "schema_version": "interaction-transfer-v3",
       "strategy_family_counts": {
         "tool_center": 241,
         "tool_heavy_slow": 246,
@@ -1966,6 +1992,7 @@
     "source_split": "train",
     "source_surface_sha256": "abe5a6edbe41a92ec25af3455d590710eb8f756889b2c58960b576a5fefcce2b",
     "support": {
+      "allowed_cells_mean": 9.625,
       "cell_support_median": 366.0,
       "cell_support_under_half_fraction": 0.7639902676399026,
       "empty_bins": 0,

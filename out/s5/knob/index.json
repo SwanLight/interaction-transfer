@@ -1,7 +1,21 @@
 [
   {
     "artifact": "knob-knob-nominal-train.npz",
-    "artifact_sha256": "fd8dd405b0077dea82073b4290366937b3eabf9a1a72028839da70eea4eba335",
+    "artifact_sha256": "7720a92a9c670ad11502055a00bea336b14c66f07e87c576f484482abc4b780e",
+    "calibration": {
+      "calibrated": true,
+      "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+      "mech_floor_relative": 0.05,
+      "mech_moment_k": 2.6500160339392846,
+      "mech_traction_k": 2.81784310436022,
+      "num_episodes": 87,
+      "point_mass_target": 0.95,
+      "region_tau": 0.9299999999999999,
+      "set_form": "object_frame_axis_aligned_box",
+      "target_coverage": 0.9
+    },
+    "calibration_episodes": 87,
+    "calibration_split": "calibration",
     "manifest": "/tmp/s4_knob/manifest.json",
     "manifest_dataset": "s4_s3_knob_source",
     "meta": {
@@ -23,6 +37,18 @@
           0.1,
           0.9
         ]
+      },
+      "calibration": {
+        "calibrated": true,
+        "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
+        "mech_floor_relative": 0.05,
+        "mech_moment_k": 2.6500160339392846,
+        "mech_traction_k": 2.81784310436022,
+        "num_episodes": 87,
+        "point_mass_target": 0.95,
+        "region_tau": 0.9299999999999999,
+        "set_form": "object_frame_axis_aligned_box",
+        "target_coverage": 0.9
       },
       "diagnostics": {
         "cell_support_median": 136.0,
@@ -1346,7 +1372,7 @@
       },
       "num_episodes": 652,
       "object": "knob",
-      "schema_version": "interaction-transfer-v2",
+      "schema_version": "interaction-transfer-v3",
       "strategy_family_counts": {
         "pin_pinch": 252,
         "pin_push_dual": 150,
@@ -1371,6 +1397,7 @@
     "source_split": "train",
     "source_surface_sha256": "99eb4d0410b125a93233a1abdd87fe73b0b632d9b2547b805d3b0ad0a6509b3c",
     "support": {
+      "allowed_cells_mean": 4.4375,
       "cell_support_median": 136.0,
       "cell_support_under_half_fraction": 0.728744939271255,
       "empty_bins": 0,

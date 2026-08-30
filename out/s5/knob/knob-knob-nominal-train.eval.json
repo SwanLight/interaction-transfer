@@ -24,7 +24,7 @@
         },
         "tau_star": 0.9299999999999999
       },
-      "detail": "校准集 n=87 定出 τ*=0.930；留出 in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；门槛 0.9",
+      "detail": "artifact 自带标定；τ*=0.930（校准 n=87）；留出 in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；门槛 0.9",
       "name": "1a' region coverage（conformal）",
       "status": "FAIL"
     },
@@ -48,54 +48,54 @@
         },
         "per_split": {
           "calibration": {
-            "all": 0.5880120280228278,
+            "all": 0.977650170931016,
             "episodes": 87,
-            "simultaneous": 0.0,
-            "support>=10": 0.5870583476754032,
-            "support>=5": 0.5883534499662951
+            "simultaneous": 0.5172413793103449,
+            "support>=10": 0.9768588674168783,
+            "support>=5": 0.977979327170649
           },
           "in_distribution_test": {
-            "all": 0.5946750805489137,
+            "all": 0.9734407774848977,
             "episodes": 130,
-            "simultaneous": 0.0,
-            "support>=10": 0.5917592506998368,
-            "support>=5": 0.5950367455400797
+            "simultaneous": 0.6,
+            "support>=10": 0.9726951648899129,
+            "support>=5": 0.9735871433264804
           },
           "train": {
-            "all": 0.5913995781630023,
+            "all": 0.9826449866902187,
             "episodes": 652,
-            "simultaneous": 0.0,
-            "support>=10": 0.5909693378337526,
-            "support>=5": 0.59166799514066
+            "simultaneous": 0.598159509202454,
+            "support>=10": 0.9822682550311925,
+            "support>=5": 0.9825252838999909
           },
           "unseen_physics_test": {
-            "all": 0.3138745397297908,
+            "all": 0.9161490572876749,
             "episodes": 173,
-            "simultaneous": 0.0,
-            "support>=10": 0.3136902568127312,
-            "support>=5": 0.31395500780143454
+            "simultaneous": 0.08670520231213873,
+            "support>=10": 0.9174586030222892,
+            "support>=5": 0.9171513815402424
           },
           "unseen_strategy_test": {
-            "all": 0.504215754845403,
+            "all": 0.9007136269833506,
             "episodes": 375,
             "simultaneous": 0.0,
-            "support>=10": 0.5046891375600674,
-            "support>=5": 0.5044791260374187
+            "support>=10": 0.9008114805198186,
+            "support>=5": 0.9007723801614147
           }
         },
-        "relative_width_median": 1.1441074794670925,
-        "relative_width_median_support5": 1.19144334929308
+        "relative_width_median": 3.3000154333223928,
+        "relative_width_median_support5": 3.384730481310725
       },
-      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；calibration 逐点带内 全部 0.588 / 支持≥5 0.588 / 支持≥10 0.587、episode 全中 0.000；in_distribution_test 逐点带内 全部 0.595 / 支持≥5 0.595 / 支持≥10 0.592、episode 全中 0.000；unseen_physics_test 逐点带内 全部 0.314 / 支持≥5 0.314 / 支持≥10 0.314、episode 全中 0.000；unseen_strategy_test 逐点带内 全部 0.504 / 支持≥5 0.504 / 支持≥10 0.505、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教",
+      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；calibration 逐点带内 全部 0.978 / 支持≥5 0.978 / 支持≥10 0.977、episode 全中 0.517；in_distribution_test 逐点带内 全部 0.973 / 支持≥5 0.974 / 支持≥10 0.973、episode 全中 0.600；unseen_physics_test 逐点带内 全部 0.916 / 支持≥5 0.917 / 支持≥10 0.917、episode 全中 0.087；unseen_strategy_test 逐点带内 全部 0.901 / 支持≥5 0.901 / 支持≥10 0.901、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。⚠️ 逐点数要求三分量**同时**命中，独立时就该是单轴的三次方（P-65）；有覆盖保证的是 episode 级那一列",
       "name": "1b mechanics band（只报数，不设门槛）",
       "status": "DEFER"
     },
     {
       "data": {
-        "relative_width_median": 1.1441074794670925,
-        "relative_width_median_support5": 1.19144334929308
+        "relative_width_median": 3.3000154333223928,
+        "relative_width_median_support5": 3.384730481310725
       },
-      "detail": "traction 带相对宽度中位数 全部 1.144 / 支持≥5 1.191（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）",
+      "detail": "traction 带相对宽度中位数 全部 3.300 / 支持≥5 3.385（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）",
       "name": "2b mechanics width",
       "status": "PASS"
     },
@@ -166,7 +166,7 @@
       "data": {
         "episodes": 800
       },
-      "detail": "800 条对半分，30 个数组维度全部一致",
+      "detail": "800 条对半分，31 个数组维度全部一致",
       "name": "7a 结构不变量",
       "status": "PASS"
     },

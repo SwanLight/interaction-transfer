@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 S0–S4 的自包含 HTML 报告（`plan/06` §1 要求）。
+"""生成 S0–S5 的自包含 HTML 报告（`plan/06` §1 要求）。
 
 视频以 base64 data URI 内嵌，**整个报告是单个文件**——直接双击、在 IDE 预览、
 发给别人都能播。早期版本用相对路径引用 mp4，在 VSCode 预览的沙箱里只显示
@@ -193,6 +193,7 @@ td code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--mu
      font-family:ui-monospace,monospace;font-weight:600}
 .tag.p{background:var(--okbg);color:var(--ok)}
 .tag.i{background:var(--code);color:var(--mut)}
+.tag.f{background:var(--warnbg);color:var(--warn)}
 .sw{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--c);
     margin-right:3px;vertical-align:baseline}
 .env{font-size:13px;color:var(--mut)}
@@ -511,12 +512,94 @@ def s4_section(s4_dir):
     return "\n".join(P)
 
 
+def s5_section(s5_dir):
+    """S5 段。数字**全部从 artifact 读**，不写死——写死的数字会在重跑后悄悄过期（P-56）。"""
+    import glob
+    names = {"drawer": "抽屉", "wipe": "擦拭", "knob": "旋钮"}
+    rows, checks_by_task = [], {}
+    for key, label in names.items():
+        report = sorted(glob.glob(os.path.join(s5_dir, key, "*.report.json")))
+        evaluation = sorted(glob.glob(os.path.join(s5_dir, key, "*.eval.json")))
+        if not report:
+            continue
+        meta = json.load(open(report[0]))
+        cal = meta["meta"]["calibration"]
+        sup = meta["support"]
+        diag = meta["meta"]["diagnostics"]
+        rows.append(
+            f"<tr><td><b>{label}</b></td><td>{meta['meta']['num_episodes']}</td>"
+            f"<td>{cal.get('num_episodes','—')}</td>"
+            f"<td>{cal.get('region_tau', float('nan')):.3f}</td>"
+            f"<td>{cal.get('mech_traction_k', float('nan')):.2f}</td>"
+            f"<td>{sup['allowed_cells_mean']:.1f} / 256</td>"
+            f"<td>{diag['dropped_force_mass_fraction_max']*100:.2f}%</td></tr>")
+        if evaluation:
+            checks_by_task[label] = json.load(open(evaluation[0]))["checks"]
+
+    P = ["<h2>S5 · 把很多条示教合成一份可传递的交互说明书</h2>",
+         "<p class=lead>S4 把<b>每一条</b>示教换成了物体中心的记录。S5 回答下一个问题："
+         "<b>很多人用不同方法做同一件事，能不能合成同一份说明书</b>——"
+         "「物体该怎么动、该碰哪儿、碰的时候是黏是滑、力该在什么范围」——"
+         "而且这份说明书要紧到有用、松到能容纳没见过的做法。</p>",
+
+         "<div class=note><b>为什么这一步的产物不是「平均值」。</b>"
+         "把多条示教逐点求平均，得到的是一条谁都没走过的中间路线。S5 输出的是"
+         "<b>集合</b>：每个命令步给出一片<b>允许接触的表面区域</b>和一个"
+         "<b>允许的受力范围</b>。集合的大小不是拍的——用一批"
+         "<b>从不参与构造</b>的校准示教标定，使 90% 的新示教落在里面"
+         "（split conformal，D-67 / D-71）。之后要报的数是<b>宽度</b>，"
+         "因为覆盖率已经被约束住了。</div>",
+
+         "<h3>三份说明书</h3>",
+         "<table><tr><th>任务</th><th>训练示教</th><th>校准示教</th><th>τ*</th>"
+         "<th>力集合标量 k</th><th>允许区域</th><th>表面投影丢掉的力</th></tr>"
+         + "".join(rows) + "</table>",
+         "<p class=lead>允许区域<b>只占 256 个表面格里的 4~10 个</b>，而 95% 以上的"
+         "留出示教落在里面——说明归纳出来的约束是<b>紧</b>的，不是把整个物体都圈进去。"
+         "「表面投影丢掉的力」是能失败的自检：抽屉上有 <b>2.11%</b> 的接触力没落在"
+         "冻结表面上，小样本上它是 0.00%，全量才暴露。</p>"]
+
+    if checks_by_task:
+        P.append("<h3>闸门结果</h3>")
+        P.append("<p class=lead>判据是<b>退出码</b>不是文件开头（P-55）。"
+                 "DEFER 表示<b>这一步做不完</b>，不得引用成通过。</p>")
+        for label, checks in checks_by_task.items():
+            items = []
+            for c in checks:
+                lv = {"PASS": "p", "FAIL": "f", "DEFER": "i"}[c["status"]]
+                items.append(f"<tr><td><span class='tag {lv}'>{c['status']}</span></td>"
+                             f"<td>{html.escape(c['name'])}</td>"
+                             f"<td><code>{html.escape(c['detail'][:300])}</code></td></tr>")
+            P.append(f"<h4>{label}</h4><table><tr><th></th><th>检查</th><th>实测</th></tr>"
+                     + "".join(items) + "</table>")
+
+    P.append("<div class=note><b>这一步纠正的四件事，都不报错、只让说明书失效。</b>"
+             "<b>①</b> 时间轴原按「任务完成了百分之多少」切，而接近段恒为 0、"
+             "拉到位后恒为 1——实测 <b>84%</b> 的画面挤进 32 格里的 2 格，"
+             "中间 30 格每格只有 1~2 帧（P-58）。"
+             "<b>②</b> 同一个位置一边写「这里要接触」一边写「这里的力必须为零」，"
+             "抽屉 58%、擦拭 81%、旋钮 49% 的位置都这样，根因是"
+             "「没碰过这里的人」在算方向时被排除、在算力时被当成 0（P-59）。"
+             "<b>③</b> 20 mm 厚的板配 50 mm 的格子，正反面被并成同一格，"
+             "黑板 <b>26%</b> 的面积串了面（P-63）。"
+             "<b>④</b> 一块<b>没在用</b>的黑板擦全程压在板角上，每一帧都被记成交互，"
+             "稳定占 10% 的力（P-64）——它差点让人得出「擦拭的两种做法不可互换」"
+             "这个错误结论。</div>")
+    P.append("<div class=note><b>还有一条是方法本身的错，记在这里免得重犯。</b>"
+             "报告曾写「力的带内率只有 0.24~0.68，低于名义 0.80，所以这种写法不行」。"
+             "那是<b>指标造出来的</b>：它要求三个分量<b>同时</b>命中，"
+             "而逐轴实测是 0.75~0.89，三轴独立时联合本就该是 0.8³≈0.51。"
+             "表示没问题，缺的是从来没有构造过一个<b>联合</b>集合（P-65）。"
+             "补上标定之后，同一个指标是 <b>0.97~0.99</b>。</div>")
+    return "\n".join(P)
+
+
 def main(vid_dir, s1_txt, out_path):
     P = [f"<!doctype html><html lang=zh><meta charset=utf-8>",
-         "<title>S0–S4 验证报告 · Functional Interaction Transfer</title>",
+         "<title>S0–S5 验证报告 · Functional Interaction Transfer</title>",
          "<meta name=viewport content='width=device-width,initial-scale=1'>",
          f"<style>{CSS}</style><div class=wrap>",
-         "<h1>S0 / S1 / S2 / S3 / S4 验证报告</h1>",
+         "<h1>S0 / S1 / S2 / S3 / S4 / S5 验证报告</h1>",
          "<p class=sub>Functional Interaction Transfer —— 资产可行性自检、可视化链路、"
          "第一个 Privileged Expert，与从示教里提取出的物体中心交互记录</p>",
          "<p class='sub env'>Isaac Sim <code>5.1.0-rc.19</code> + Isaac Lab <code>2.3.1</code>"
@@ -576,6 +659,9 @@ def main(vid_dir, s1_txt, out_path):
 
     P.append(s3_section(os.path.join(os.path.dirname(vid_dir), "s3_web")))
     P.append(s4_section(os.path.join(os.path.dirname(vid_dir), "s4_records")))
+    s5dir = os.path.join(os.path.dirname(vid_dir), "s5")
+    if os.path.isdir(s5dir):
+        P.append(s5_section(s5dir))
 
     P.append("<h2>S1 自检完整结果</h2>")
     P.append("<p class=lead>共 51 项，49 项 PASS、2 项 INFO（仅记录测量值，无判据）、0 项 FAIL。"
