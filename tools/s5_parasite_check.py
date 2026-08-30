@@ -113,6 +113,8 @@ def main() -> None:
         for entry in manifest["episodes"]:
             if args.existing_only and not (manifest_path.parent / entry["path"]).exists():
                 continue
+            if str(entry.get("split", "")).startswith("excluded_"):
+                continue
             if entry.get("success"):
                 meta = entry.get("meta", {})
                 groups[f"{meta.get('implementation', '?')}/{entry.get('strategy_family', '?')}"

@@ -57,6 +57,9 @@ def main() -> None:
             continue
         if not entry.get("success", False):
             continue
+        # 被移出范围的划分一律跳过，"all" 也不例外（见 tools/s5_exclude_episodes.py）。
+        if str(entry.get("split", "")).startswith("excluded_"):
+            continue
         if args.split != "all" and entry.get("split") != args.split:
             continue
         task = str(entry.get("task"))
