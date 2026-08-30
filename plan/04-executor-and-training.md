@@ -124,11 +124,40 @@ r = w_e · r_effect + w_r · r_region + w_m · r_mode + w_f · r_mech + r_safety
 
 | 项 | 定义 |
 |---|---|
-| `r_effect` | 被操作物体实际状态变化与**指令 effect** 的负误差 |
+| `r_effect` | 被操作物体实际状态变化与**指令 effect** 的负误差。**两路各自归一化后相加**，不对 6 维取 L2 |
 | `r_region` | 落在指令 region 内的接触法向力占比；region 外的接触受罚 |
-| `r_mode` | 各活跃表面点的实际 stick/slide 与指令 mode 的匹配率 |
-| `r_mech` | 实际 object-frame surface traction 对当前 command 统计带的法向、切向方向与幅值误差；并检查其积分 6D wrench 一致性。全程不做任务专用广义力投影 |
+| `r_mode` | 实际滑移速度对指令 `mode/slip_speed` 标定集合的负误差。**用连续量，不用阈值化的 `mode/prob`** |
+| `r_mech` | 实际 object-frame surface traction 对 `mech/traction_obj` 标定联合盒的负误差。全程不做任务专用广义力投影 |
 | `r_safety` | 法向力上限、关节限位、动作平滑、非目标碰撞 |
+
+三项的口径都被实测钉过，**不能按字面直觉实现**（`log/decisions.md` D-72/D-73/D-74，
+实测在 `out/s5/units_probe.txt`）：
+
+**`r_effect` 为什么不能取 6 维 L2。** `effect/rigid` 是 `(平移 3 m, 旋转 3 rad)`，而每个
+任务恰好只有一路非零：抽屉平移 p90 0.046 m / 旋转恒 0，旋钮反过来 0.940 rad，
+量级差 20.5 倍。直接取 L2 就是 §7.4 第 2 个洞（量纲失衡，最优解是"不动"）藏在
+"统一接口"里面。正确做法：
+
+```text
+r_effect = -( ‖Δξ‖_M / effect/rigid/scale_m
+            + ‖Δstate‖₁ / effect/surface_state/scale )
+其中 ‖Δξ‖_M = sqrt(Δξᵀ · effect/rigid/metric · Δξ)  ——「物体表面平均移动了多远」，单位米
+```
+
+`metric` 与两个 `scale` 都在 payload 里，任务无关（同一个公式）。换算后抽屉 0.0458 m、
+旋钮 0.0504 m，差 1.10×。擦拭的刚体一路恒为零、effect 全在 `surface_state`——这正是
+要两路各自刻度而不是一个范数的原因。
+
+**`r_mode` 为什么不能追 `mode/prob`。** 那四档是拿 `SLIP_SPEED_MIN = 5 mm/s` 切出来的，
+把阈值换成 1~10 mm/s，抽屉"黏住"占的力比例从 0.592 摆到 0.964（37 个百分点）。
+拿它当跟踪目标，等于把一个任意约定写进研究结论。用 `mode/slip_speed/{lo,hi}`
+（与 mechanics 同一套 split conformal 标定）。`mode/prob` 只用于画图和可解释性。
+
+**`r_mech` 里的 traction 是什么。** 是**在 4 mm 尺度上平滑后的表面力密度**，不是
+"力 ÷ 命令格面积"——后者随分辨率线性放大（换一档差 2.8~14.1×），S4.5 的分辨率扫描
+会因此扫到一个混杂量。带宽跟 `07` 的拟传感 taxel pitch 走，随 artifact 记录。
+`mech/moment_density_obj` 是 cell 内的**粗粒化残差**，力臂随格子边长走，
+**跨分辨率不可比**，不得与 traction 同判据。
 
 **明令禁止出现在 E-I reward 中的项**：
 

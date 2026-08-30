@@ -14,6 +14,7 @@
 #     bash tools/s5_all.sh --only parasite    # 只查寄生接触
 #     bash tools/s5_all.sh --only build       # 只重建 artifact
 #     bash tools/s5_all.sh --only eval        # 只重跑评估（artifact 不动）
+#     bash tools/s5_all.sh --only units       # 只跑单位/刻度体检
 set -uo pipefail
 
 OUT="${IT_S5_OUT:-/tmp/s5}"
@@ -23,7 +24,7 @@ POINTS="${IT_S5_POINTS:-256}"
 ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --only) ONLY="${2:?--only 后面要跟 freeze|parasite|build|eval}"; shift 2 ;;
+    --only) ONLY="${2:?--only 后面要跟 freeze|parasite|build|eval|units}"; shift 2 ;;
     *) echo "未知参数 $1" >&2; exit 2 ;;
   esac
 done
@@ -82,6 +83,21 @@ for t in $TASKS; do
         --manifest "$rec/manifest.json" --out "$OUT/$name/$base.eval.txt"
   done
 done
+
+# 单位与刻度体检放在最后：它要拿 artifact 查 payload 里有没有连续 mode 与 effect 刻度，
+# 所以必须在 build 之后跑（P-68 / P-69 / P-70，判据见 tools/s5_units_probe.py）。
+UNITS_ARGS=""
+for t in $TASKS; do
+  name="${t%%:*}"; rec="${t#*:}"
+  artifact="$(ls "$OUT/$name"/*.npz 2>/dev/null | head -1)"
+  if [ -n "$artifact" ]; then
+    UNITS_ARGS="$UNITS_ARGS --task $name=$rec=$artifact"
+  else
+    UNITS_ARGS="$UNITS_ARGS --task $name=$rec"
+  fi
+done
+run "units_log" "单位与刻度体检" "$PY" tools/s5_units_probe.py $UNITS_ARGS \
+    --out "$OUT/units_probe.txt"
 
 echo
 echo "================= S5 汇总 ================="

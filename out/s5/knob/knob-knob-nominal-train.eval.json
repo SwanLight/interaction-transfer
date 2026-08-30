@@ -48,54 +48,106 @@
         },
         "per_split": {
           "calibration": {
-            "all": 0.977650170931016,
+            "all": 0.9776757983770723,
             "episodes": 87,
-            "simultaneous": 0.5172413793103449,
-            "support>=10": 0.9768588674168783,
-            "support>=5": 0.977979327170649
+            "simultaneous": 0.4827586206896552,
+            "support>=10": 0.9770073488885578,
+            "support>=5": 0.9780180452753242
           },
           "in_distribution_test": {
-            "all": 0.9734407774848977,
+            "all": 0.9715672000750013,
             "episodes": 130,
-            "simultaneous": 0.6,
-            "support>=10": 0.9726951648899129,
-            "support>=5": 0.9735871433264804
+            "simultaneous": 0.5615384615384615,
+            "support>=10": 0.9709135214944637,
+            "support>=5": 0.9716981644107153
           },
           "train": {
-            "all": 0.9826449866902187,
+            "all": 0.9815370955061578,
             "episodes": 652,
-            "simultaneous": 0.598159509202454,
-            "support>=10": 0.9822682550311925,
-            "support>=5": 0.9825252838999909
+            "simultaneous": 0.5184049079754601,
+            "support>=10": 0.9812023594401152,
+            "support>=5": 0.9814287565646814
           },
           "unseen_physics_test": {
-            "all": 0.9161490572876749,
+            "all": 0.9111442732016,
             "episodes": 173,
             "simultaneous": 0.08670520231213873,
-            "support>=10": 0.9174586030222892,
-            "support>=5": 0.9171513815402424
+            "support>=10": 0.912442847169191,
+            "support>=5": 0.9121452891786124
           },
           "unseen_strategy_test": {
-            "all": 0.9007136269833506,
+            "all": 0.8983369170555905,
             "episodes": 375,
             "simultaneous": 0.0,
-            "support>=10": 0.9008114805198186,
-            "support>=5": 0.9007723801614147
+            "support>=10": 0.8984326846308347,
+            "support>=5": 0.8983946308009897
           }
         },
-        "relative_width_median": 3.3000154333223928,
-        "relative_width_median_support5": 3.384730481310725
+        "relative_width_median": 2.960749649371184,
+        "relative_width_median_support5": 3.1422994405516924
       },
-      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.978 / 支持≥5 0.978 / 支持≥10 0.977、episode 全中 0.517；in_distribution_test 逐点带内 全部 0.973 / 支持≥5 0.974 / 支持≥10 0.973、episode 全中 0.600；unseen_physics_test 逐点带内 全部 0.916 / 支持≥5 0.917 / 支持≥10 0.917、episode 全中 0.087；unseen_strategy_test 逐点带内 全部 0.901 / 支持≥5 0.901 / 支持≥10 0.901、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
+      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.978 / 支持≥5 0.978 / 支持≥10 0.977、episode 全中 0.483；in_distribution_test 逐点带内 全部 0.972 / 支持≥5 0.972 / 支持≥10 0.971、episode 全中 0.562；unseen_physics_test 逐点带内 全部 0.911 / 支持≥5 0.912 / 支持≥10 0.912、episode 全中 0.087；unseen_strategy_test 逐点带内 全部 0.898 / 支持≥5 0.898 / 支持≥10 0.898、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
       "name": "1b mechanics 集合带内率",
       "status": "PASS"
     },
     {
       "data": {
-        "relative_width_median": 3.3000154333223928,
-        "relative_width_median_support5": 3.384730481310725
+        "cell_support_histogram": {
+          "occupied": 247,
+          "support==1": 24,
+          "support>=10": 182,
+          "support>=5": 210
+        },
+        "per_split": {
+          "calibration": {
+            "all": 0.9769839657397913,
+            "episodes": 87,
+            "simultaneous": 0.3103448275862069,
+            "support>=10": 0.9772985404333421,
+            "support>=5": 0.9773926822923288
+          },
+          "in_distribution_test": {
+            "all": 0.9779534128586787,
+            "episodes": 130,
+            "simultaneous": 0.3384615384615385,
+            "support>=10": 0.9780480408795591,
+            "support>=5": 0.9782887261057523
+          },
+          "train": {
+            "all": 0.9801153446763642,
+            "episodes": 652,
+            "simultaneous": 0.4110429447852761,
+            "support>=10": 0.9799435760341013,
+            "support>=5": 0.9800471569813867
+          },
+          "unseen_physics_test": {
+            "all": 0.9685477387497842,
+            "episodes": 173,
+            "simultaneous": 0.27167630057803466,
+            "support>=10": 0.9691981835240946,
+            "support>=5": 0.9692994356601544
+          },
+          "unseen_strategy_test": {
+            "all": 0.7928660103055093,
+            "episodes": 375,
+            "simultaneous": 0.0,
+            "support>=10": 0.7930854347734684,
+            "support>=5": 0.7929056798359206
+          }
+        },
+        "relative_width_median": 4.811753207461833,
+        "relative_width_median_support5": 5.1189843002783935
       },
-      "detail": "traction 集合相对宽度中位数 全部 3.300 / 支持≥5 3.385（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
+      "detail": "`mode/prob` 的四档是拿 5 mm/s 这个阈值切出来的，实测把阈值换成 1~10 mm/s，抽屉「黏住」占的力比例从 0.554 摆到 0.989。所以跟踪目标用连续量，阈值只留在画图里（D-73）。calibration 逐点带内 全部 0.977 / 支持≥5 0.977；in_distribution_test 逐点带内 全部 0.978 / 支持≥5 0.978；unseen_physics_test 逐点带内 全部 0.969 / 支持≥5 0.969；unseen_strategy_test 逐点带内 全部 0.793 / 支持≥5 0.793",
+      "name": "1c 连续滑移速度集合带内率",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "relative_width_median": 2.960749649371184,
+        "relative_width_median_support5": 3.1422994405516924
+      },
+      "detail": "traction 集合相对宽度中位数 全部 2.961 / 支持≥5 3.142（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
       "name": "2b mechanics width",
       "status": "PASS"
     },
@@ -166,7 +218,7 @@
       "data": {
         "episodes": 800
       },
-      "detail": "800 条对半分，31 个数组维度全部一致",
+      "detail": "800 条对半分，37 个数组维度全部一致",
       "name": "7a 结构不变量",
       "status": "PASS"
     },
@@ -191,7 +243,7 @@
   "tally": {
     "DEFER": 6,
     "FAIL": 2,
-    "PASS": 4
+    "PASS": 5
   },
   "transfer_id": "knob-knob-nominal-train"
 }

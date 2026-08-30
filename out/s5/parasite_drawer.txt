@@ -1,0 +1,8 @@
+=== /tmp/s4_drawer  (s4_s3_drawer_source)
+  [PASS] two_plate_handle/asym_primary      n= 30  没有恒定静止接触
+  [PASS] two_plate_handle/hook_both         n= 30  没有恒定静止接触
+  [PASS] two_plate_handle/pinch_center      n= 30  没有恒定静止接触
+  [PASS] two_plate_handle/pinch_offset      n= 30  没有恒定静止接触
+  [PASS] two_plate_handle/single_finger     n= 30  没有恒定静止接触
+
+[PASS] 没有分组的寄生接触超过阈值

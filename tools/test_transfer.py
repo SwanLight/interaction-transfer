@@ -19,6 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from it.interaction import extract  # noqa: E402
 from it.transfer import (  # noqa: E402
     EXECUTOR_ARRAYS,
+    TRACTION_POOLINGS,
+    _episode_summary,
+    rigid_surface_displacement,
+    surface_metric,
     TRANSFER_SCHEMA_VERSION,
     TransferError,
     bin_index,
@@ -181,7 +185,7 @@ class TestInteractionTransfer(unittest.TestCase):
     def test_v1_artifacts_are_rejected(self):
         transfer = build_transfer(records(2), n_bins=8, n_surface=64)
         self.assertEqual(transfer.meta["schema_version"], TRANSFER_SCHEMA_VERSION)
-        transfer.meta["schema_version"] = "interaction-transfer-v2"
+        transfer.meta["schema_version"] = "interaction-transfer-v3"
         with self.assertRaises(TransferError):
             transfer.validate()
 
@@ -226,6 +230,121 @@ class TestInteractionTransfer(unittest.TestCase):
         self.assertEqual(loaded.meta, transfer.meta)
         for name in EXECUTOR_ARRAYS:
             np.testing.assert_array_equal(loaded.arrays[name], transfer.arrays[name])
+
+
+
+class TestUnitsAndScales(unittest.TestCase):
+    """P-68 / P-69 / P-70：三个自定义量各自的非物理依赖。
+
+    这三条都是**能失败**的对拍（P-60）：把实现换回出问题的那一版，它们立刻变红。
+    """
+
+    def test_traction_does_not_scale_with_surface_resolution(self):
+        """P-68：分辨率是我们选的，物体受到的压强不是。
+
+        v2 的 ``nearest_area`` 把接触力整个塞进最近的命令格再除格面积，于是
+        traction 随格数线性放大。这个测试把同一批示教在 64 / 256 两档上各算一遍，
+        要求中位数一致——**并同时断言旧实现通不过**，否则测试本身也可能是恒等式。
+        """
+        data = records(4)
+        surface = surface_for(data[0].meta["object"],
+                              data[0].meta.get("geometry_variant", "nominal"))
+        budget = phase_budget(data, surface, n_bins=8)
+
+        def median_traction(pooling: str, n_surface: int) -> float:
+            values = []
+            for record in data:
+                summary, _ = _episode_summary(record, surface, budget=budget, n_bins=8,
+                                              n_surface=n_surface, pooling=pooling)
+                traction = summary["traction"]
+                finite = np.isfinite(traction).all(axis=-1)
+                values.append(np.linalg.norm(traction[finite], axis=-1))
+            pooled = np.concatenate(values)
+            return float(np.median(pooled[pooled > 0])) if (pooled > 0).any() else 0.0
+
+        coarse = median_traction("kernel_forcew", 64)
+        fine = median_traction("kernel_forcew", 256)
+        self.assertGreater(coarse, 0.0)
+        self.assertLess(max(coarse, fine) / min(coarse, fine), 1.5,
+                        f"kernel_forcew 随分辨率漂移：64 档 {coarse:.1f}，256 档 {fine:.1f}")
+
+        legacy_coarse = median_traction("nearest_area", 64)
+        legacy_fine = median_traction("nearest_area", 256)
+        self.assertGreater(max(legacy_coarse, legacy_fine)
+                           / max(min(legacy_coarse, legacy_fine), 1e-9), 2.0,
+                           "旧实现居然没有随分辨率漂移——那这个测试没有区分能力，"
+                           "说明造的合成数据触不到 P-68，得换数据而不是放宽判据")
+
+    def test_payload_carries_continuous_slip_not_only_the_thresholded_label(self):
+        """P-69：阈值必须留在最下游，中间层不许把它固化掉。"""
+        payload = build_transfer(records(), n_bins=8, n_surface=64).executor_arrays()
+        for name in ("mode/slip_speed/median", "mode/slip_speed/lo", "mode/slip_speed/hi"):
+            self.assertIn(name, payload)
+            self.assertEqual(payload[name].shape, (8, 64, 1))
+        self.assertTrue((payload["mode/slip_speed/lo"] >= 0).all(),
+                        "滑移速率非负")
+        self.assertTrue((payload["mode/slip_speed/hi"]
+                         >= payload["mode/slip_speed/median"]).all())
+
+    def test_effect_metric_makes_metres_and_radians_commensurable(self):
+        """P-70：`effect/rigid` 的 6 维里混着米和弧度，下游取 L2 就是 D-31 第 2 个洞。"""
+        surface = surface_for("knob", "nominal")
+        metric = surface_metric(surface)
+        self.assertEqual(metric.shape, (6, 6))
+        np.testing.assert_allclose(metric, metric.T, atol=1e-9)
+        self.assertGreaterEqual(np.linalg.eigvalsh(metric).min(), -1e-12)
+
+        # 纯平移：表面平均位移就是位移本身，与几何无关。
+        for axis in range(3):
+            unit = np.zeros(6)
+            unit[axis] = 0.01
+            self.assertAlmostEqual(float(rigid_surface_displacement(unit, metric)),
+                                   0.01, places=9)
+        # 纯旋转：换算成米，量级由物体半径决定，不再是弧度。
+        spin = np.zeros(6)
+        spin[5] = 1.0
+        radius = float(rigid_surface_displacement(spin, metric))
+        self.assertGreater(radius, 1e-3)
+        self.assertLess(radius, 1.0)
+
+        # 度量是**旋转协变**的：把物体和增量一起转，表面平均位移不变。
+        angle = 0.7
+        rot = np.array([[np.cos(angle), -np.sin(angle), 0.0],
+                        [np.sin(angle), np.cos(angle), 0.0],
+                        [0.0, 0.0, 1.0]])
+        rotated = surface_metric(surface.rotated(rot))
+        twist = np.concatenate([rot @ np.array([0.01, -0.02, 0.03]),
+                                rot @ np.array([0.1, 0.2, -0.3])])
+        plain = np.concatenate([np.array([0.01, -0.02, 0.03]),
+                                np.array([0.1, 0.2, -0.3])])
+        self.assertAlmostEqual(float(rigid_surface_displacement(twist, rotated)),
+                               float(rigid_surface_displacement(plain, metric)), places=9)
+
+    def test_effect_channel_scales_are_positive_and_in_payload(self):
+        payload = build_transfer(records(), n_bins=8, n_surface=64).executor_arrays()
+        self.assertEqual(payload["effect/rigid/metric"].shape, (6, 6))
+        for name in ("effect/rigid/scale_m", "effect/surface_state/scale"):
+            self.assertEqual(payload[name].shape, ())
+            self.assertGreater(float(payload[name]), 0.0,
+                               "恒为零的那一路也必须给正刻度，否则 r_effect 变 NaN")
+
+    def test_rejects_a_metric_that_is_not_a_metric(self):
+        transfer = build_transfer(records(), n_bins=8, n_surface=64)
+        broken = copy.deepcopy(transfer)
+        broken.arrays["effect/rigid/metric"] = (
+            broken.arrays["effect/rigid/metric"] - 10.0).astype(np.float32)
+        with self.assertRaises(TransferError):
+            broken.validate()
+
+    def test_unknown_traction_pooling_fails_closed(self):
+        data = records(2)
+        surface = surface_for(data[0].meta["object"],
+                              data[0].meta.get("geometry_variant", "nominal"))
+        budget = phase_budget(data, surface, n_bins=8)
+        with self.assertRaises(TransferError):
+            _episode_summary(data[0], surface, budget=budget, n_bins=8, n_surface=64,
+                             pooling="whatever_looks_reasonable")
+        self.assertIn("kernel_forcew", TRACTION_POOLINGS)
 
 
 if __name__ == "__main__":

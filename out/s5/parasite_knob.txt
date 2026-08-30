@@ -1,0 +1,7 @@
+=== /tmp/s4_knob  (s4_s3_knob_source)
+  [PASS] two_plate_pin/pin_pinch            n= 30  没有恒定静止接触
+  [PASS] two_plate_pin/pin_push_dual        n= 30  没有恒定静止接触
+  [PASS] two_plate_pin/pin_push_single      n= 30  没有恒定静止接触
+  [PASS] two_plate_pin/pin_regrasp          n= 30  没有恒定静止接触
+
+[PASS] 没有分组的寄生接触超过阈值

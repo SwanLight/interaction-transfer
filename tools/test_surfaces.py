@@ -29,6 +29,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from it import geom_cfg as G  # noqa: E402
 from it.surfaces import (  # noqa: E402
     LEVELS,
+    SCATTER_K,
+    SCATTER_SIGMA,
     assign_to_surface,
     object_geometry,
     object_names,
@@ -129,6 +131,46 @@ class TestSurfaces(unittest.TestCase):
                 self.assertEqual(int(crossed.sum()), 0,
                                  f"{obj} 在 {level} 档上有 {int(crossed.sum())} 个点"
                                  f"（{crossed.mean():.1%}）被判给了另一个部件的代表点")
+
+    def test_scatter_kernel_conserves_force_within_the_same_part(self):
+        """力散射核的三条不变量。每一条都能失败——这不是恒等式对拍（P-60）。
+
+        1. **合力守恒**：每行权重和为 1，散射前后合力逐位相等；
+        2. **同部件**：跨部件摊力会把正面的接触摊到背面，薄物体上尤其致命
+           （与 `test_pooling_never_crosses_parts` 是同一条规矩，D-58 定的）；
+        3. **带宽是固定物理尺度**：核只由 sigma 决定，与 `LEVELS` 无关——
+           这正是 traction 能在 64/256/1024 三档上读出同一个数的原因（P-68）。
+        """
+        for obj in ("board", "drawer", "knob"):
+            surface = surface_for(obj)
+            index, weight = surface.scatter_kernel()
+            part = np.asarray(surface.part)
+            self.assertEqual(index.shape, (surface.n_points, min(SCATTER_K,
+                                                                 surface.n_points)))
+            np.testing.assert_allclose(weight.sum(axis=1), 1.0, atol=1e-12,
+                                       err_msg=f"{obj}: 核不守恒")
+            crossed = float(weight[part[index] != part[:, None]].sum())
+            self.assertEqual(crossed, 0.0, f"{obj}: 有 {crossed:.3g} 的权重摊到了别的部件")
+            self.assertTrue((weight >= 0).all(), f"{obj}: 出现负权重")
+
+    def test_scatter_bandwidth_is_physical_not_resolution_dependent(self):
+        """核的空间尺度必须是 sigma，不是采样 pitch。
+
+        判据：被摊到的邻居到中心的**力加权均方根距离**落在 sigma 的量级上，
+        且换一个 sigma 时按比例变。如果实现改回"只给最近点"，这个数会塌到 0。
+        """
+        surface = surface_for("board")
+        spreads = {}
+        for sigma in (SCATTER_SIGMA, 2 * SCATTER_SIGMA):
+            index, weight = surface.scatter_kernel(sigma=sigma)
+            points = np.asarray(surface.points, dtype=np.float64)
+            offset = points[index] - points[:, None, :]
+            spreads[sigma] = float(np.sqrt(
+                (weight * (offset ** 2).sum(axis=2)).sum(axis=1).mean()))
+        self.assertGreater(spreads[SCATTER_SIGMA], 0.3 * SCATTER_SIGMA,
+                           "核塌成了最近点——那正是 P-68 那个实现")
+        ratio = spreads[2 * SCATTER_SIGMA] / spreads[SCATTER_SIGMA]
+        self.assertGreater(ratio, 1.4, f"sigma 翻倍时核宽只变了 {ratio:.2f}×")
 
     def test_all_parts_reachable_at_lowest_level(self):
         """最粗那一档（64 点）也不该整个部件是空的。"""

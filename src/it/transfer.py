@@ -12,6 +12,32 @@ executor 负责把这些物理字段解码成自己的 action。
 可以用，观测不行）。产物中的时间轴是一个没有任务语义的 command sequence index。
 任务名仅留在 meta 供审计，``executor_arrays()`` 永远不返回 meta。
 
+v3 -> v4 改了什么（D-72 / D-73 / D-74，实测依据见 ``out/s5/units_probe.txt``）
+--------------------------------------------------------------------------
+
+三个字段各自依赖了一个**不属于物理**的东西，而三条都不报错、所有单测与验收照样通过。
+共同的形状是：**单元测试查得了"实现有没有 bug"，查不了"这个量的定义对不对"。**
+
+**一、traction 不再随表面采样分辨率放大（P-68 / D-72）。** v3 把接触力整个塞给最近的
+命令格再除以格面积，于是 ``N/m²`` 里的 m² 是我们随手选的分辨率。实测同一批示教从
+64 格换到 1024 格，擦拭 178→2498、旋钮 12711→163033 N/m²，几乎正好按 1/面积 走。
+v4 先用**固定物理带宽**（``SCATTER_SIGMA`` = 4 mm，跟拟传感 taxel pitch 走，不跟
+分辨率走）的同部件守恒核把力散射到冻结表面点，再在格内按 ``|f|`` 加权池化。
+四族池化做法的实测对照见 D-72——只有这一族三档一致（漂移 1.10~1.52×，抽屉那一格
+1.52× 未过 1.50× 的门槛，残差在最粗档，如实记 FAIL 而不放宽门槛）。
+
+**二、payload 补上连续滑移速度（P-69 / D-73）。** ``mode/prob`` 的四档是拿
+``SLIP_SPEED_MIN`` 切出来的，实测把阈值在 1~10 mm/s 之间换，抽屉"黏住"占的力比例
+从 0.592 摆到 0.964（37 个百分点）。S4 侧一直存着连续量，但 v3 **只把切完的标签导进
+payload**，于是 ``r_mode`` 只能追那个任意约定。v4 增加 ``mode/slip_speed/{median,lo,hi}``
+（与 mechanics 同一套标定），``mode/prob`` 降为诊断字段。
+
+**三、effect 两路各带任务无关刻度（P-70 / D-74）。** ``effect/rigid`` 把米和弧度放进
+同一个 6 维向量，而每个任务恰好只有一路非零：抽屉平移 p90 0.046 m / 旋转恒 0，旋钮
+反过来 0.940 rad——直接取 L2 就是 D-31 第 2 个洞（量纲失衡）藏在"统一接口"里面。
+v4 增加 ``effect/rigid/metric``（把 ξ 换算成表面平均位移的 6×6 度量）与两路各自的
+刻度。换算之后抽屉 0.0458 m、旋钮 0.0504 m，从差 20.5× 变成差 1.10×。
+
 v1 -> v2 改了什么（D-65 / D-66，实测依据见 ``out/s5_align/probe.txt``）
 --------------------------------------------------------------------
 
@@ -59,9 +85,9 @@ from typing import Any, Iterable
 import numpy as np
 
 from it.records import EpisodeRecord, META_KEY
-from it.surfaces import Surface, surface_for
+from it.surfaces import SCATTER_K, SCATTER_SIGMA, Surface, surface_for
 
-TRANSFER_SCHEMA_VERSION = "interaction-transfer-v3"
+TRANSFER_SCHEMA_VERSION = "interaction-transfer-v4"
 MODE_COUNT = 4
 N_PHASES = 4
 #: 每个**有帧**的 phase 至少分到的命令格数。松开段的活动量恰好是 0，若按活动量
@@ -95,6 +121,12 @@ EXECUTOR_ARRAYS = frozenset({
     "engage/concentration",
     "engage/valid",
     "mode/prob",
+    "mode/slip_speed/median",
+    "mode/slip_speed/lo",
+    "mode/slip_speed/hi",
+    "effect/rigid/metric",
+    "effect/rigid/scale_m",
+    "effect/surface_state/scale",
     "mech/traction_obj/median",
     "mech/traction_obj/lo",
     "mech/traction_obj/hi",
@@ -116,10 +148,30 @@ TAU_GRID = np.concatenate([np.linspace(0.50, 0.99, 50), [0.995, 0.999, 1.0]])
 #: mechanics 盒子的 k 搜索网格。集合随 k 单调膨胀，同理。
 K_GRID = np.concatenate([np.linspace(0.25, 8.0, 156), [10.0, 14.0, 20.0, 30.0]])
 
+#: traction 的池化方式（P-68 / D-72）。**这是被实测选出来的，不是拍板的**，
+#: 四族候选的对照见 ``tools/s5_units_probe.py`` 与 ``out/s5/units_probe.txt``。
+#:
+#: - ``nearest_area``：v2 的做法——接触力整个塞进最近的那个命令格再除格面积。
+#:   格面积是**我们选的采样分辨率**，不是接触斑块的物理面积，于是 traction
+#:   随分辨率线性放大（实测擦拭 64→1024 格：179→2500 N/m²）。D-58 明文禁止过
+#:   这个实现，但代码里一直是它；
+#: - ``kernel_area``：先按固定带宽核散射到冻结表面点，再在格内按面积平均。
+#:   守恒，但格远大于核时被稀释，仍随分辨率变；
+#: - ``kernel_point``：取该格代表点上的场值。分辨率无关，但粗档下欠采样；
+#: - ``kernel_forcew``：格内按 ``|f_j|`` 加权平均。**现行做法**。
+TRACTION_POOLING = "kernel_forcew"
+TRACTION_POOLINGS = ("nearest_area", "kernel_area", "kernel_point", "kernel_forcew")
+
 #: 每个 cell 上"只在接触过的 episode 之间统计"的字段。它们必须共用同一个
 #: ``contact_frames > 0`` 掩码，否则同一个 cell 上不同字段来自不同的 episode 子集
 #: （v1 就是这么错的）。
-CONTACT_CONDITIONED = ("engage", "mode", "traction", "moment_density")
+CONTACT_CONDITIONED = ("engage", "mode", "slip", "traction", "moment_density")
+
+#: 不按命令时间格索引的 payload 字段：物体几何常量与两路 effect 的刻度。
+#: 它们对整份 artifact 只有一个值，所以首维不是 bins。
+TIME_INVARIANT_ARRAYS = frozenset({
+    "effect/rigid/metric", "effect/rigid/scale_m", "effect/surface_state/scale",
+})
 
 
 class TransferError(ValueError):
@@ -161,6 +213,54 @@ def activity_rate(record: EpisodeRecord, surface: Surface) -> np.ndarray:
         if peak > 0:
             total = total + channel / peak
     return total
+
+
+def surface_metric(surface: Surface) -> np.ndarray:
+    """(6,6) 度量张量 ``M``：把刚体增量 ξ=(dp, dr) 换算成**表面点均方位移**（m²）。
+
+    ``effect/rigid`` 把米和弧度放进同一个定长向量。维度统一了，**量纲没有统一**：
+    实测每个任务恰好只有一路非零（抽屉平移 0.055 m / 旋转恒 0，旋钮反过来），
+    两路量级差一个数量级。下游 ``r_effect`` 若直接对 6 维取 L2，同一组权重下旋钮的
+    effect 项就比抽屉大一个数量级，而擦拭这一路完全没有信号——那正是 D-31 第 2 个洞
+    （量纲失衡，最优解是"不动"），只是它藏在"统一接口"里面（P-70）。
+
+    注意**不是** ``effect/rigid`` 设计错了：把关节量换算成刚体增量正是它消掉任务
+    分支的办法。错在下游拿它算误差时缺一个任务无关的归一化。
+
+    办法：把 ξ 作用在冻结 surface 点上，取表面点位移的均方根。表面点 ``p`` 处的位移是
+    ``dp + dr × p = [I | -[p]_×] ξ``，于是
+
+        mean_j a_j ‖dp + dr × p_j‖² / Σ_j a_j  =  ξᵀ M ξ
+
+    这个 ``M`` 只由物体几何决定：任务无关（同一个公式）、有物理含义（"物体表面平均
+    移动了多远"，单位米）、且自动处理了旋转与半径的关系——大物体转同样的角度表面走得
+    更远，本来就该权重更大。``transfer.activity_rate`` 早就用同一个办法解决同一个
+    问题，当时没想到 ``r_effect`` 也需要它。
+
+    用**全分辨率**表面点做面积加权积分，因此 ``M`` 与命令分辨率无关。
+    """
+    points = np.asarray(surface.points, dtype=np.float64)
+    area = np.asarray(surface.area, dtype=np.float64)
+    total = float(area.sum())
+    if total <= 0:
+        raise TransferError("surface 总面积为零，无法定义 effect 度量")
+    n = len(points)
+    jacobian = np.zeros((n, 3, 6))
+    jacobian[:, 0, 0] = jacobian[:, 1, 1] = jacobian[:, 2, 2] = 1.0
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+    # -[p]_× ，使得 -[p]_× dr = dr × p
+    jacobian[:, 0, 4], jacobian[:, 0, 5] = z, -y
+    jacobian[:, 1, 3], jacobian[:, 1, 5] = -z, x
+    jacobian[:, 2, 3], jacobian[:, 2, 4] = y, -x
+    metric = np.einsum("n,nki,nkj->ij", area, jacobian, jacobian) / total
+    return 0.5 * (metric + metric.T)          # 对称化，消掉浮点不对称
+
+
+def rigid_surface_displacement(rigid: np.ndarray, metric: np.ndarray) -> np.ndarray:
+    """把 (..., 6) 的刚体增量换算成表面平均位移（米）。"""
+    values = np.asarray(rigid, dtype=np.float64)
+    quadratic = np.einsum("...i,ij,...j->...", values, metric, values)
+    return np.sqrt(np.maximum(quadratic, 0.0))
 
 
 def phase_budget(records: Iterable[EpisodeRecord], surface: Surface, *, n_bins: int,
@@ -242,7 +342,9 @@ class InteractionTransfer:
             raise TransferError(
                 f"schema_version 必须是 {TRANSFER_SCHEMA_VERSION!r}，"
                 f"实际是 {self.meta.get('schema_version')!r}。"
-                "v1 的对齐轴与 cell 统计口径都已作废（D-65/D-66），不得混用")
+                "v1 的对齐轴与 cell 统计口径已作废（D-65/D-66）；v3 的 traction "
+                "随分辨率放大、mode 只有阈值化标签、effect 缺任务无关刻度"
+                "（D-72/D-73/D-74）。混用会让下游拿到一半新一半旧的量而看不出来")
         for key in ("transfer_id", "task", "object", "geometry_variant", "surface"):
             if key not in self.meta:
                 raise TransferError(f"meta.{key} 是必填项")
@@ -263,7 +365,7 @@ class InteractionTransfer:
         if np.any(np.diff(fraction) <= 0) or fraction[0] < 0 or fraction[-1] > 1:
             raise TransferError("command/fraction 必须在 [0,1] 内严格递增")
         for name in EXECUTOR_ARRAYS:
-            if name.startswith("surface/"):
+            if name.startswith("surface/") or name in TIME_INVARIANT_ARRAYS:
                 continue
             if arrays[name].shape[0] != bins:
                 raise TransferError(f"{name} 的首维必须是时间格数 {bins}")
@@ -300,6 +402,23 @@ class InteractionTransfer:
                 raise TransferError(f"{name} 必须是 (B,S,3)")
         if arrays["mode/prob"].shape != (bins, n_surface, MODE_COUNT):
             raise TransferError("mode/prob 必须是 (B,S,4)")
+        for name in ("mode/slip_speed/median", "mode/slip_speed/lo", "mode/slip_speed/hi"):
+            if arrays[name].shape != (bins, n_surface, 1):
+                raise TransferError(f"{name} 必须是 (B,S,1)")
+        if np.any(arrays["mode/slip_speed/lo"] < 0):
+            raise TransferError("滑移速率是非负量，lo 不能为负")
+
+        metric = arrays["effect/rigid/metric"]
+        if metric.shape != (6, 6):
+            raise TransferError("effect/rigid/metric 必须是 (6,6)")
+        if not np.allclose(metric, metric.T, atol=1e-6):
+            raise TransferError("effect/rigid/metric 必须对称")
+        if np.linalg.eigvalsh(metric.astype(np.float64)).min() < -1e-9:
+            raise TransferError("effect/rigid/metric 必须半正定——它是一个度量")
+        for name in ("effect/rigid/scale_m", "effect/surface_state/scale"):
+            value = arrays[name]
+            if value.shape != () or not np.isfinite(value) or value <= 0:
+                raise TransferError(f"{name} 必须是正的标量刻度")
 
         support = arrays["region/support"]
         if np.any(support < 0) or np.any(support > arrays["support/episodes"][:, None]):
@@ -315,7 +434,9 @@ class InteractionTransfer:
                      "mech/moment_density_obj/median"):
             if np.any(np.linalg.norm(arrays[name], axis=2)[support == 0] != 0):
                 raise TransferError(f"{name} 在 support==0 的 cell 上必须是 0")
-        for name in ("mech/traction_obj", "mech/moment_density_obj"):
+        if np.any(arrays["mode/slip_speed/median"][support == 0] != 0):
+            raise TransferError("mode/slip_speed 在 support==0 的 cell 上必须是 0")
+        for name in ("mech/traction_obj", "mech/moment_density_obj", "mode/slip_speed"):
             lo, hi = arrays[f"{name}/lo"], arrays[f"{name}/hi"]
             if np.any(hi < lo):
                 raise TransferError(f"{name} 的 hi 必须 ≥ lo")
@@ -419,6 +540,19 @@ def _reference_scale(centre: np.ndarray, occupied: np.ndarray) -> float:
     return float(np.median(magnitude[live])) if live.any() else 1.0
 
 
+
+def _positive_scale(values: np.ndarray) -> float:
+    """一路 effect 通道的刻度：非零量的 p90。整路恒为零时返回 1.0。
+
+    返回 1.0 而不是 0 是有意的：擦拭的 ``effect/rigid`` 与抽屉/旋钮的
+    ``effect/surface_state`` 整条恒为零，除以 0 会让 ``r_effect`` 变成 NaN 而不是
+    "这一路没有要求"。恒零的那一路分子也恒为零，所以除以 1 正好等价于不贡献。
+    """
+    finite = np.asarray(values, dtype=np.float64).ravel()
+    finite = finite[np.isfinite(finite) & (finite > 0)]
+    return float(np.percentile(finite, 90)) if len(finite) else 1.0
+
+
 def _bincount2d(index: np.ndarray, weights: np.ndarray, size: int,
                 shape: tuple[int, ...]) -> np.ndarray:
     """按最后一维逐通道 bincount，再 reshape 回 (B, S, C)。"""
@@ -429,8 +563,126 @@ def _bincount2d(index: np.ndarray, weights: np.ndarray, size: int,
     return flat.reshape(*shape, channels) if channels > 1 else flat.reshape(shape)
 
 
+def _fine_force_field(fine_idx: np.ndarray, force: np.ndarray, frame_of: np.ndarray,
+                      surface: Surface, sigma: float, k: int
+                      ) -> tuple[np.ndarray, np.ndarray]:
+    """把每帧的接触力用**固定物理带宽**的同部件核散射到冻结表面点。
+
+    返回 ``(key, f)``：``key = frame * S + j`` 的升序唯一键，``f`` 是该帧该表面点
+    分到的力 (M, 3)。合力逐帧严格守恒（核每行权重和为 1）。
+
+    为什么核心在这里：traction 要是"每平方米多少牛"，那个平方米必须是**物理尺度**。
+    把接触力整个塞给最近的采样点再除以采样格面积，分母就是我们随手选的分辨率——
+    实测换一档格子数，数字按 1/面积 线性变（P-68）。核带宽 ``sigma`` 只跟拟传感
+    taxel pitch 走，与 ``LEVELS`` 无关，于是同一份示教在 64 / 256 / 1024 档上
+    读出同一个 traction。
+
+    核中心取**接触点被归到的那个采样点**而不是接触点的真实坐标：误差上界是半个
+    采样 pitch（~1.5 mm）且远小于 sigma，换来的是整张核表可以按 surface 预计算
+    并缓存。这个近似必须写下来，因为它是"traction 是在 sigma 尺度上平滑后的面密度"
+    这句话的确切含义的一部分。
+    """
+    kern_idx, kern_w = surface.scatter_kernel(sigma, k)
+    neighbour = kern_idx[fine_idx]                       # (K, k)
+    weight = kern_w[fine_idx]                            # (K, k)
+    keep = weight > 0
+    spread = force[:, None, :] * weight[:, :, None]      # (K, k, 3)
+    flat_key = (frame_of[:, None] * surface.n_points + neighbour)[keep]
+    flat_force = spread[keep]
+    key, inverse = np.unique(flat_key, return_inverse=True)
+    field = np.stack([np.bincount(inverse, weights=flat_force[:, c], minlength=len(key))
+                      for c in range(3)], axis=1)
+    return key, field
+
+
+def _cell_traction(*, fine_idx: np.ndarray, force: np.ndarray, frame_of: np.ndarray,
+                   bin_of: np.ndarray, coarse: np.ndarray, surface: Surface,
+                   n_bins: int, n_surface: int, contact_frames: np.ndarray,
+                   occupied: np.ndarray, cell_area: np.ndarray,
+                   pooling: str, sigma: float, kernel_k: int) -> np.ndarray:
+    """每个命令格 × 表面 cell 的 object-frame traction (N/m²)。
+
+    三层，每层的"对哪些样本求平均"都必须说得出来（P-59）：
+
+    1. **帧内**：接触力散射成表面点上的力场 ``f_j``，``t_j = f_j / a_j``；
+    2. **格内**：把 ``t_j`` 汇成该 cell 这一帧的一个值（``pooling`` 决定怎么汇）；
+    3. **跨帧**：只在**最近点归属**判定该 cell 有接触的那些帧上取平均，
+       除数正是 ``contact_frames``——与 ``engage`` / ``mode`` 用的是同一批帧，
+       D-66 的"同一个 cell 的所有字段来自同一批帧"因此仍然成立。
+
+    ``nearest_area`` 保留 v2 的实现，只为了让 ``tools/s5_units_probe.py`` 能把
+    新旧放在同一张表里对照；它不是可选配置，见 D-72。
+    """
+    if pooling not in TRACTION_POOLINGS:
+        raise TransferError(f"未知的 traction 池化方式 {pooling!r}")
+    shape = (n_bins, n_surface)
+    size = n_bins * n_surface
+    if not len(frame_of):
+        # 整条 episode 一个有效接触都没有。occupied 全 False，各字段照 NaN 填，
+        # 与其余接触条件化字段一致（不是 0——"没碰过"不等于"力为零"，P-59）。
+        return np.full(shape + (3,), np.nan)
+
+    if pooling == "nearest_area":
+        force_sum = _bincount2d(bin_of * n_surface + coarse, force, size, shape)
+        out = np.full(shape + (3,), np.nan)
+        np.divide(force_sum, contact_frames[..., None], out=out, where=occupied[..., None])
+        return out / cell_area[None, :, None]
+
+    n_points = surface.n_points
+    parent = np.asarray(surface.parent[n_surface])
+    area_fine = np.asarray(surface.area, dtype=np.float64)
+    key, field = _fine_force_field(fine_idx, force, frame_of, surface, sigma, kernel_k)
+    frame = key // n_points
+    point = key % n_points
+    traction_fine = field / area_fine[point][:, None]
+    cell = parent[point]
+
+    # 帧内 → 每个 (frame, cell) 一个值。只保留最近点归属认可的那些 (frame, cell)：
+    # 那是 contact_frames 数的同一批，除数与分子才对得上。
+    assigned = np.unique(frame_of.astype(np.int64) * n_surface + coarse)
+    pair = frame.astype(np.int64) * n_surface + cell
+    live = np.isin(pair, assigned)
+    if pooling == "kernel_point":
+        # 代表点就是 fine 点 c 本身（LEVELS 是采样序列的前缀，D-68 之后仍成立）。
+        live &= point == cell
+    pair, traction_fine, field = pair[live], traction_fine[live], field[live]
+
+    unique_pair, inverse = np.unique(pair, return_inverse=True)
+    if pooling == "kernel_forcew":
+        mass = np.linalg.norm(field, axis=1)
+        denominator = np.bincount(inverse, weights=mass, minlength=len(unique_pair))
+        numerator = np.stack(
+            [np.bincount(inverse, weights=mass * traction_fine[:, c],
+                         minlength=len(unique_pair)) for c in range(3)], axis=1)
+        per_pair = np.divide(numerator, denominator[:, None],
+                             out=np.zeros_like(numerator), where=denominator[:, None] > 0)
+    elif pooling == "kernel_area":
+        summed = np.stack([np.bincount(inverse, weights=field[:, c],
+                                       minlength=len(unique_pair)) for c in range(3)], axis=1)
+        per_pair = summed / cell_area[unique_pair % n_surface][:, None]
+    else:                                                   # kernel_point
+        per_pair = np.stack([np.bincount(inverse, weights=traction_fine[:, c],
+                                         minlength=len(unique_pair))
+                             for c in range(3)], axis=1)
+
+    # 跨帧 → 每个 (bin, cell) 一个值。
+    pair_frame = unique_pair // n_surface
+    pair_cell = unique_pair % n_surface
+    frame_to_bin = np.full(int(frame_of.max()) + 1, -1, dtype=np.int64)
+    frame_to_bin[frame_of] = bin_of
+    flat = frame_to_bin[pair_frame] * n_surface + pair_cell
+    if np.any(frame_to_bin[pair_frame] < 0):
+        raise TransferError("散射出的帧不在命令轴上——归属与分格用了不同的帧集合")
+    total = _bincount2d(flat, per_pair, size, shape)
+    out = np.full(shape + (3,), np.nan)
+    np.divide(total, contact_frames[..., None], out=out, where=occupied[..., None])
+    return out
+
+
 def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[int, ...],
-                     n_bins: int, n_surface: int
+                     n_bins: int, n_surface: int,
+                     pooling: str = TRACTION_POOLING,
+                     sigma: float = SCATTER_SIGMA, kernel_k: int = SCATTER_K
                      ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
     """先汇总单条 episode；之后跨 episode 统计才能保证采集者等权。
 
@@ -502,7 +754,15 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
                                                   else occupied))
         return out
 
-    traction = conditioned(force_sum) / cell_area[None, :, None]
+    traction = _cell_traction(
+        fine_idx=idx[frame_of, slot_of], force=live_force, frame_of=frame_of,
+        bin_of=bin_of, coarse=coarse, surface=surface, n_bins=n_bins,
+        n_surface=n_surface, contact_frames=contact_frames, occupied=occupied,
+        cell_area=cell_area, pooling=pooling, sigma=sigma, kernel_k=kernel_k)
+    # ⚠️ moment_density 是**粗粒化残差**，不是分辨率无关的物理场：它是 cell 内的力
+    # 相对代表点的力矩，力臂天然随 cell 边长走，格子越细它越趋近 0。它照旧用接触点的
+    # **真实坐标**算（D-64 要的是 cell wrench 的记账项，核散射反而会把力臂抹掉）。
+    # 因此它不能跨分辨率比较，S4.5 扫描时必须单列——见 D-72 与 out/s5/units_probe.txt。
     moment_density = conditioned(moment_sum) / cell_area[None, :, None]
     # 方向按接触力权重平均后再归一化；没有接触的 cell 留 NaN，跨 episode 统计时排除。
     engage_mean = np.full(shape + (3,), np.nan)
@@ -510,6 +770,17 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
     norm = np.linalg.norm(np.nan_to_num(engage_mean), axis=2, keepdims=True)
     engage_mean = np.divide(engage_mean, norm, out=np.full(engage_mean.shape, np.nan),
                             where=(norm > 1e-12) & occupied[..., None])
+    # 连续滑移速度：``mode/prob`` 的四档是拿 SLIP_SPEED_MIN 切出来的，实测把阈值在
+    # 1~10 mm/s 之间换，抽屉/旋钮「黏住」占的力比例摆动 39 个百分点——那个标签基本是
+    # 阈值的产物。S4 侧一直存着连续量，但 v3 之前**只有离散标签进 payload**，于是
+    # `r_mode` 只能追那个任意约定（P-69）。加权口径与 engage 完全一致：同一批帧、
+    # 同一个法向力权重，D-66 的不变量因此仍然成立。
+    slip_mean = np.full(shape + (1,), np.nan)
+    slip_sum = _bincount2d(flat, live_weight * np.asarray(
+        a["mode/pose_slip"], dtype=np.float64)[frame_of, slot_of], size, shape)
+    np.divide(slip_sum[..., None], region_sum[..., None], out=slip_mean,
+              where=occupied[..., None])
+
     mode_prob = np.full(shape + (MODE_COUNT,), np.nan)
     mode_total = mode_sum.sum(axis=2, keepdims=True)
     np.divide(mode_sum, mode_total, out=mode_prob, where=occupied[..., None] & (mode_total > 0))
@@ -550,6 +821,7 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
         "duty": duty,
         "engage": engage_mean,
         "mode": mode_prob,
+        "slip": slip_mean,
         "traction": traction,
         "moment_density": moment_density,
         "rigid": effect["rigid"],
@@ -809,6 +1081,12 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
     def zero_unsupported(values: np.ndarray) -> np.ndarray:
         return np.where(occupied[..., None] if values.ndim == 3 else occupied, values, 0)
 
+    slip = stack("slip")
+    slip_median = zero_unsupported(_nan_stat(slip, "median"))
+    slip_scale = np.maximum(
+        zero_unsupported(_nan_stat(slip, "q90") - _nan_stat(slip, "q10")) / 2.0,
+        MECH_FLOOR_RELATIVE * _reference_scale(slip_median, occupied))
+
     traction = stack("traction")
     moment_density = stack("moment_density")
 
@@ -825,6 +1103,22 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
     cell_area = np.bincount(surface.parent[n_surface],
                             weights=np.asarray(surface.area, dtype=np.float64),
                             minlength=n_surface).astype(np.float32)
+
+    # effect 的任务无关刻度（P-70）。metric 只由物体几何决定，用**全分辨率**表面点
+    # 积分，因此与命令分辨率无关；两个 scale 取本 artifact 命令轴上的 p90，是
+    # "这份指令要求的变化有多大"，让 r_effect 的两项可以相加。
+    effect_metric = surface_metric(surface)
+    rigid_median = _nan_stat(stack("rigid"), "median")
+    effect_rigid_scale = _positive_scale(
+        rigid_surface_displacement(np.nan_to_num(rigid_median), effect_metric))
+    # ⚠️ `effect/surface_state` 存的是**被擦掉的 dirt 格数**（`_dirt_field` 把格数
+    # 累加到表面点上），不是面积。乘表面 cell 面积会得到一个既不是格数也不是面积的
+    # 东西——本机实测那样算出来的"擦净面积"是 1.24 m²，而整块板只有 0.30 m²。
+    # 刻度按这一路自己的 L1 量级定，量纲在 r_effect 里被约掉，因此不需要换算。
+    state_median = _nan_stat(stack("state"), "median")
+    effect_state_scale = _positive_scale(
+        np.abs(np.nan_to_num(state_median)).sum(axis=-1))
+
     arrays = {
         "command/fraction": ((np.arange(n_bins, dtype=np.float32) + 0.5) / n_bins),
         "command/valid": present.any(axis=0),
@@ -851,6 +1145,17 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
         "engage/concentration": np.where(occupied, concentration, 0.0).astype(np.float32),
         "engage/valid": np.where(occupied, concentration, 0.0) > 1e-8,
         "mode/prob": zero_unsupported(mode_prob).astype(np.float32),
+        # 连续量。`mode/prob` 降级为可解释性/诊断字段，`r_mode` 用这一路——阈值只在
+        # 画图和讲故事时出现，不进研究结论（P-69）。滑移速度非负，lo 因此夹到 0。
+        "mode/slip_speed/median": slip_median.astype(np.float32),
+        "mode/slip_speed/lo": np.maximum(slip_median - slip_scale, 0.0).astype(np.float32),
+        "mode/slip_speed/hi": (slip_median + slip_scale).astype(np.float32),
+        # effect 两路的任务无关归一化（P-70）。metric 把 (dp, dr) 换算成表面平均位移，
+        # 两个 scale 让 r_effect 的两项都变成无量纲相对误差——权重在成功轨迹上标定，
+        # 不拍（D-31 第 2 个洞）。
+        "effect/rigid/metric": effect_metric.astype(np.float32),
+        "effect/rigid/scale_m": np.float32(effect_rigid_scale),
+        "effect/surface_state/scale": np.float32(effect_state_scale),
         "mech/traction_obj/median": traction_median.astype(np.float32),
         "mech/traction_obj/lo": (traction_median - traction_scale).astype(np.float32),
         "mech/traction_obj/hi": (traction_median + traction_scale).astype(np.float32),
@@ -893,14 +1198,20 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
         k_moment = _calibrate_box(moment_median.astype(np.float64),
                                   moment_scale.astype(np.float64), "moment_density",
                                   calibration_summaries, occupied, TARGET_COVERAGE)
+        k_slip = _calibrate_box(slip_median.astype(np.float64),
+                                slip_scale.astype(np.float64), "slip",
+                                calibration_summaries, occupied, TARGET_COVERAGE)
         for name, centre, scale, k in (
                 ("mech/traction_obj", traction_median, traction_scale, k_traction),
-                ("mech/moment_density_obj", moment_median, moment_scale, k_moment)):
+                ("mech/moment_density_obj", moment_median, moment_scale, k_moment),
+                ("mode/slip_speed", slip_median, slip_scale, k_slip)):
             if not np.isfinite(k):
                 raise TransferError(
                     f"{name} 的标定标量发散：校准集里达不到 {POINT_MASS_TARGET:.0%} "
                     "接触点覆盖的 episode 比例已超过 α，任何缩放都不够")
-            arrays[f"{name}/lo"] = (centre - k * scale).astype(np.float32)
+            low = centre - k * scale
+            arrays[f"{name}/lo"] = (np.maximum(low, 0.0) if name == "mode/slip_speed"
+                                    else low).astype(np.float32)
             arrays[f"{name}/hi"] = (centre + k * scale).astype(np.float32)
         calibration_meta = {
             "calibrated": True,
@@ -911,6 +1222,7 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
             "region_tau": float(tau),
             "mech_traction_k": float(k_traction),
             "mech_moment_k": float(k_moment),
+            "mode_slip_speed_k": float(k_slip),
             "set_form": "object_frame_axis_aligned_box",
             "claim": ("exchangeability 下的 marginal coverage；对策略/物理/几何子群"
                       "没有条件保证，子群 coverage 必须另报（D-59）"),

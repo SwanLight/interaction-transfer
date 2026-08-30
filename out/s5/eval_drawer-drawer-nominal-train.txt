@@ -7,16 +7,17 @@ episodes  calibration 43，in_distribution_test 64，train 323，unseen_physics_
 [DEFER] 1a region coverage（未标定 τ=0.95，仅作对照）: in_distribution_test 0.844 (n=64)；unseen_physics_test 0.909 (n=66)；unseen_strategy_test 0.971 (n=136)；width 1.13%。描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'
 [PASS] 1a' region coverage（conformal）: artifact 自带标定；τ*=0.990（校准 n=43）；留出 in_distribution_test 0.953 (n=64)；unseen_physics_test 0.970 (n=66)；unseen_strategy_test 0.971 (n=136)；门槛 0.9
 [PASS] 2a region width: τ*=0.990 下允许区域占物体表面积 1.35%（未标定时 1.13%）；平均 5.0/256 个 cell。**这才是要最小化的数**
-[PASS] 1b mechanics 集合带内率: artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.989 / 支持≥5 0.989 / 支持≥10 0.989、episode 全中 0.721；in_distribution_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.672；unseen_physics_test 逐点带内 全部 0.968 / 支持≥5 0.968 / 支持≥10 0.968、episode 全中 0.712；unseen_strategy_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.654；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败
-[PASS] 2b mechanics width: traction 集合相对宽度中位数 全部 10.883 / 支持≥5 10.883（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）
+[PASS] 1b mechanics 集合带内率: artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.973 / 支持≥5 0.973 / 支持≥10 0.973、episode 全中 0.651；in_distribution_test 逐点带内 全部 0.969 / 支持≥5 0.969 / 支持≥10 0.969、episode 全中 0.672；unseen_physics_test 逐点带内 全部 0.966 / 支持≥5 0.966 / 支持≥10 0.966、episode 全中 0.591；unseen_strategy_test 逐点带内 全部 0.981 / 支持≥5 0.981 / 支持≥10 0.981、episode 全中 0.662；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败
+[PASS] 1c 连续滑移速度集合带内率: `mode/prob` 的四档是拿 5 mm/s 这个阈值切出来的，实测把阈值换成 1~10 mm/s，抽屉「黏住」占的力比例从 0.554 摆到 0.989。所以跟踪目标用连续量，阈值只留在画图里（D-73）。calibration 逐点带内 全部 0.974 / 支持≥5 0.974；in_distribution_test 逐点带内 全部 0.962 / 支持≥5 0.962；unseen_physics_test 逐点带内 全部 0.937 / 支持≥5 0.937；unseen_strategy_test 逐点带内 全部 0.911 / 支持≥5 0.911
+[PASS] 2b mechanics width: traction 集合相对宽度中位数 全部 10.626 / 支持≥5 10.626（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）
 [FAIL] 3 策略子群 coverage: τ*=0.990 下 asym_primary 0.971（均值 0.995, n=136）；hook_both 1.000（均值 1.000, n=41）；pinch_center 1.000（均值 1.000, n=38）；pinch_offset 0.833（均值 0.972, n=48）；single_finger 1.000（均值 1.000, n=46）；落差 0.167。conformal 只保证 marginal coverage，子群落差必须另报（D-59）
 [DEFER] 4 family envelope 距离: asym_primary* 0.379；hook_both 0.296；pinch_center 0.298；pinch_offset 0.145；single_finger 0.310；落差 0.234（* = 未参与构造的留出族；判据要 S6 的下游成功率，现在只报数）
 [DEFER] 5 多峰性: pooled→episode 0.402 vs episode 两两 0.463（比值 0.87，>1 即质心落在示教之外）；最近邻 0.093（n=323，随样本量缩，只作辅助）；engage 集中度中位数 0.983；mode 熵中位数 0.092。判据要 S6 的下游成功率，现在只报数
 [DEFER] 6 跨实现可互换: 数据里只有 1 种 implementation（非擦拭任务正常）
-[PASS] 7a 结构不变量: 632 条对半分，31 个数组维度全部一致
+[PASS] 7a 结构不变量: 632 条对半分，37 个数组维度全部一致
 [DEFER] 7b 接触体数量不变量: 训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据
 [DEFER] 8 跨几何 coverage: 以下成功 episode 因为几何变体不同（各有各的冻结 surface 与点序）无法在这条命令轴上打分：unseen_geometry_test 83 条；unseen_strategy_test 24 条。跨几何要么各建各的 artifact（那就不再是「未见几何」），要么需要一张表面对应表；本步不做，如实记为未完成
 ==============================================================================
-PASS 5  FAIL 1  DEFER 6
+PASS 6  FAIL 1  DEFER 6
 ⚠️ 判据是退出码，不是这份文件的开头（P-55）。DEFER 的项目不得引用成通过。
 There was an error running python

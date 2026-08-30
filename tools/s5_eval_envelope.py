@@ -321,6 +321,15 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
         + "。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；"
           "'episode 全中'那一列因此天然更低，不是失败",
         band))
+    slip = _mechanics_band_report(transfer, summaries, "mode/slip_speed", "slip")
+    checks.append(Check(
+        "1c 连续滑移速度集合带内率", "PASS" if calibrated else "DEFER",
+        ("`mode/prob` 的四档是拿 5 mm/s 这个阈值切出来的，实测把阈值换成 1~10 mm/s，"
+         "抽屉「黏住」占的力比例从 0.554 摆到 0.989。所以跟踪目标用连续量，"
+         "阈值只留在画图里（D-73）。" if calibrated else "artifact 未标定；")
+        + "；".join(f"{k} 逐点带内 全部 {v['all']:.3f} / 支持≥5 {v['support>=5']:.3f}"
+                    for k, v in sorted(slip["per_split"].items()) if k != "train"),
+        slip))
     checks.append(Check(
         "2b mechanics width", "PASS",
         f"traction 集合相对宽度中位数 全部 {band['relative_width_median']:.3f} / "
@@ -333,16 +342,22 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
 
 
 def _mechanics_band_report(transfer: InteractionTransfer,
-                           summaries: dict[str, list[dict[str, np.ndarray]]]) -> dict:
-    """traction 带的带内率与宽度，**按 cell 支持度分层报**。
+                           summaries: dict[str, list[dict[str, np.ndarray]]],
+                           field: str = "mech/traction_obj",
+                           summary_key: str = "traction") -> dict:
+    """一个标定过的联合盒的带内率与宽度，**按 cell 支持度分层报**。
 
     只有 1 条 episode 支持的 cell 上 q10 = q90，带宽恒为 0，留出 episode 几乎必然落在
     带外。不分层的话整体带内率会被这些 cell 拖低，看不出"支持足够的地方带够不够用"。
+
+    ``field`` 让同一套口径也能用在 ``mode/slip_speed`` 上：连续滑移速度是 D-73 补进
+    payload 的，如果这里不给它一条能失败的检查，那个字段就只是"存在"而没有被验证过
+    ——P-69 修了一半和没修一样。
     """
     arrays = transfer.arrays
-    low = np.asarray(arrays["mech/traction_obj/lo"], dtype=np.float64)
-    high = np.asarray(arrays["mech/traction_obj/hi"], dtype=np.float64)
-    median = np.asarray(arrays["mech/traction_obj/median"], dtype=np.float64)
+    low = np.asarray(arrays[f"{field}/lo"], dtype=np.float64)
+    high = np.asarray(arrays[f"{field}/hi"], dtype=np.float64)
+    median = np.asarray(arrays[f"{field}/median"], dtype=np.float64)
     support = np.asarray(arrays["region/support"], dtype=np.int64)
     strata = {"all": support > 0, "support>=5": support >= 5, "support>=10": support >= 10}
 
@@ -355,7 +370,7 @@ def _mechanics_band_report(transfer: InteractionTransfer,
         pointwise = {name: [] for name in strata}
         simultaneous = []
         for summary in items:
-            traction = summary["traction"]
+            traction = summary[summary_key]
             finite = np.isfinite(traction).all(axis=2)
             inside = ((traction >= low - 1e-9) & (traction <= high + 1e-9)).all(axis=2)
             for name, mask in strata.items():

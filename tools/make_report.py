@@ -701,11 +701,24 @@ def s5_section(s5_dir):
 <tr><td><code>engage/dir</code><br><code>engage/concentration</code></td><td>32×256×3<br>32×256</td>
 <td><b>该从哪个方向压上去</b>，以及各示教在这个方向上有多一致
 （1 = 所有人方向一样，0 = 完全发散）</td></tr>
-<tr><td><code>mode/prob</code></td><td>32×256×4</td>
-<td><b>接触该处于什么状态</b>：没接触 / 黏住不动 / 滑动 / 正在分离</td></tr>
+<tr><td><code>mode/slip_speed/{median,lo,hi}</code><br><code>mode/prob</code></td>
+<td>32×256×1<br>32×256×4</td>
+<td><b>接触该滑得多快。</b>跟踪目标是<b>连续的滑移速率</b>；后面那路
+「没接触 / 黏住 / 滑动 / 正在分离」四档只是给人看的。
+原因很实在：那四档是拿「5 mm/s 以上算滑」切出来的，而把这个数换成 1 或 10 mm/s，
+抽屉上「黏住」占的力比例会从 59% 跳到 96%——<b>标签基本是那个阈值的产物</b>，
+不能拿它当研究结论</td></tr>
 <tr><td><code>mech/traction_obj/{median,lo,hi}</code></td><td>32×256×3</td>
 <td><b>该格子上单位面积的力，允许在什么范围内。</b>用「每平方米多少牛」而不是
-「多少牛」，是因为不同执行器的接触面积差很多，只有除掉面积才可比</td></tr>
+「多少牛」，是因为不同执行器的接触面积差很多，只有除掉面积才可比。
+这里的「平方米」是<b>物理尺度</b>（4 mm，跟触觉传感器的分辨率走），
+不是我们把表面切成了几格——早先的版本是后者，于是把表面从 64 格改成 1024 格，
+同一批示教报出来的「压强」会大十几倍</td></tr>
+<tr><td><code>effect/rigid/metric</code><br><code>effect/*/scale</code></td><td>6×6<br>标量</td>
+<td><b>怎么把上面那两路 effect 的误差算成一个能比的数。</b>
+刚体那路混着「米」和「弧度」，直接求平方和等于把两种单位当成同一种；
+metric 把它换算成「物体表面平均移动了多远」（米）。
+换算前抽屉和旋钮差 20 倍，换算后差 10%</td></tr>
 <tr><td><code>region/support</code><br><code>region/duty</code></td><td>32×256</td>
 <td><b>这一格的话是几个人说的、他们有多少时间在接触。</b>
 用来分辨「12 个人都压在这」和「只有 1 个人蹭到过」——

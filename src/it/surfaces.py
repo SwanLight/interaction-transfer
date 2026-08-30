@@ -74,6 +74,21 @@ _OVERSAMPLE = 4
 _BURY_MARGIN = 0.5e-3
 
 
+#: 力散射用的**固定物理带宽**（m）。它是"我们假设的触觉分辨率"，
+#: 与表面采样分辨率**无关**——这一点是整件事的关键。
+#:
+#: ⚠️ D-58 早就写明"直接 nearest-point force/area 会随分辨率产生伪尖峰，禁止使用"，
+#: 但代码里一直是最近点散射。实测把命令表面从 64 格换到 1024 格，擦拭的 traction
+#: 中位数从 179 涨到 2500 N/m²——几乎正好按 1/面积 线性放大，因为接触斑块远小于格子，
+#: 力整个落进一格，于是 F/A 里的 A 是**我们任意选的采样分辨率**（P-68）。
+#:
+#: 取 4 mm 是与 `plan/07` 的触觉 taxel pitch 同量级；它必须随产物一起记录，
+#: 因为 traction 的数值含义就是"在这个尺度上平滑后的面密度"。
+SCATTER_SIGMA = 4.0e-3
+#: 每个表面点保留多少个同部件邻居。3σ 截断 + 3 mm pitch 下约 50 个，取 64 留余量。
+SCATTER_K = 64
+
+
 @dataclass(frozen=True)
 class Surface:
     """一个物体的冻结表面采样（物体局部系，单位 m）。"""
@@ -106,6 +121,56 @@ class Surface:
     @property
     def n_points(self) -> int:
         return int(self.points.shape[0])
+
+    def scatter_kernel(self, sigma: float = SCATTER_SIGMA, k: int = SCATTER_K
+                       ) -> tuple[np.ndarray, np.ndarray]:
+        """把一个接触点的力摊到邻近表面点的核。返回 (邻居下标 (S,k), 权重 (S,k))。
+
+        三条性质缺一不可：
+
+        1. **同部件**。跨部件摊力会把正面的接触摊到背面去——薄物体上尤其致命，
+           与 D-68 修的池化是同一条规矩（`plan/02` 的力学量都定义在部件内部）；
+        2. **合力守恒**。每行权重归一化到 1，散射前后合力逐位相等；
+        3. **带宽是固定物理尺度**，不随表面分辨率变。这样 traction 才是
+           "在 4 mm 尺度上的面密度"，而不是"力 ÷ 我们碰巧选的格子"（P-68）。
+
+        权重按代表面积加权，避免采样密度不均的地方被高估。
+        """
+        cache = getattr(self, "_kernel_cache", None)
+        if cache is not None and cache[0] == (sigma, k):
+            return cache[1], cache[2]
+        points = np.asarray(self.points, dtype=np.float64)
+        part = np.asarray(self.part)
+        area = np.asarray(self.area, dtype=np.float64)
+        n = len(points)
+        width = min(k, n)
+        index = np.zeros((n, width), dtype=np.int32)
+        weight = np.zeros((n, width), dtype=np.float64)
+        cutoff = (3.0 * sigma) ** 2
+        for label in np.unique(part):
+            rows = np.flatnonzero(part == label)
+            local = points[rows]
+            for start in range(0, len(rows), 512):
+                block = local[start:start + 512]
+                d2 = ((block[:, None, :] - local[None, :, :]) ** 2).sum(-1)
+                d2 = np.where(d2 <= cutoff, d2, np.inf)
+                take = min(width, len(rows))
+                order = np.argpartition(d2, take - 1, axis=1)[:, :take]
+                picked = np.take_along_axis(d2, order, axis=1)
+                w = np.where(np.isfinite(picked), np.exp(-picked / (2 * sigma ** 2)), 0.0)
+                w = w * area[rows[order]]
+                total = w.sum(axis=1, keepdims=True)
+                # 孤立点（3σ 内只有自己）退化成把力全给自己——仍然守恒。
+                degenerate = total[:, 0] <= 0
+                if degenerate.any():
+                    w[degenerate] = 0.0
+                    w[degenerate, 0] = 1.0
+                    order[degenerate, 0] = np.arange(len(rows))[start:start + 512][degenerate]
+                    total[degenerate] = 1.0
+                index[rows[start:start + 512], :take] = rows[order]
+                weight[rows[start:start + 512], :take] = w / total
+        object.__setattr__(self, "_kernel_cache", ((sigma, k), index, weight))
+        return index, weight
 
     @property
     def total_area(self) -> float:

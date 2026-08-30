@@ -4,149 +4,149 @@
     "forms": {
       "box_obj": {
         "coverage": {
-          "in_distribution_test": 0.890625,
-          "unseen_physics_test": 0.8333333333333334,
-          "unseen_strategy_test": 0.8308823529411765
+          "in_distribution_test": 0.875,
+          "unseen_physics_test": 0.8181818181818182,
+          "unseen_strategy_test": 0.8529411764705882
         },
-        "k": 2.8202972429823534,
-        "median_linear_extent_N_per_m2": 7361.235413474105,
-        "median_log_volume": 26.711949158185266
+        "k": 2.812373676659983,
+        "median_linear_extent_N_per_m2": 29146.943783123963,
+        "median_log_volume": 30.84031602537698
       },
       "box_surface": {
         "coverage": {
-          "in_distribution_test": 0.921875,
+          "in_distribution_test": 0.875,
           "unseen_physics_test": 0.8484848484848485,
-          "unseen_strategy_test": 0.8602941176470589
+          "unseen_strategy_test": 0.8308823529411765
         },
-        "k": 3.6944788740645063,
-        "median_linear_extent_N_per_m2": 9553.952432656806,
-        "median_log_volume": 27.49413064544771
+        "k": 3.5832681558544763,
+        "median_linear_extent_N_per_m2": 35644.584305916644,
+        "median_log_volume": 31.444057504274994
       },
       "cone": {
         "coverage": {
-          "in_distribution_test": 0.90625,
-          "unseen_physics_test": 0.9242424242424242,
-          "unseen_strategy_test": 0.8970588235294118
+          "in_distribution_test": 0.9375,
+          "unseen_physics_test": 0.9090909090909091,
+          "unseen_strategy_test": 0.9191176470588235
         },
-        "k": 4.3667587687211515,
-        "median_linear_extent_N_per_m2": 17764.1929569662,
-        "median_log_volume": 29.354820235801768
+        "k": 4.337311582631372,
+        "median_linear_extent_N_per_m2": 71530.01701500939,
+        "median_log_volume": 33.53361737692426
       },
       "ellipsoid": {
         "coverage": {
-          "in_distribution_test": 0.921875,
-          "unseen_physics_test": 0.8484848484848485,
+          "in_distribution_test": 0.859375,
+          "unseen_physics_test": 0.7878787878787878,
           "unseen_strategy_test": 0.8823529411764706
         },
-        "k": 4.1693659044802995,
-        "median_linear_extent_N_per_m2": 8745.004513138747,
-        "median_log_volume": 27.228713710604275
+        "k": 4.206655880069244,
+        "median_linear_extent_N_per_m2": 36319.45153269893,
+        "median_log_volume": 31.500326194887787
       }
     },
     "point_mass_target": 0.95,
-    "scale_floor_N_per_m2": 136.2379229463304,
+    "scale_floor_N_per_m2": 534.4820849115825,
     "target_coverage": 0.9,
     "task": "drawer",
-    "train": 300
+    "train": 323
   },
   {
     "calibration": 127,
     "forms": {
       "box_obj": {
         "coverage": {
-          "in_distribution_test": 0.9210526315789473,
-          "unseen_physics_test": 0.91324200913242,
-          "unseen_strategy_test": 1.0
+          "in_distribution_test": 0.9105263157894737,
+          "unseen_physics_test": 0.8904109589041096,
+          "unseen_strategy_test": 0.9973684210526316
         },
-        "k": 15.331521246734743,
-        "median_linear_extent_N_per_m2": 1274.2366380046556,
-        "median_log_volume": 21.45030768900147
+        "k": 14.386197399799254,
+        "median_linear_extent_N_per_m2": 20962.38419377377,
+        "median_log_volume": 29.851454645006754
       },
       "box_surface": {
         "coverage": {
-          "in_distribution_test": 0.9210526315789473,
-          "unseen_physics_test": 0.91324200913242,
-          "unseen_strategy_test": 1.0
+          "in_distribution_test": 0.9105263157894737,
+          "unseen_physics_test": 0.8904109589041096,
+          "unseen_strategy_test": 0.9973684210526316
         },
-        "k": 15.331521246734743,
-        "median_linear_extent_N_per_m2": 1274.2366380046556,
-        "median_log_volume": 21.45030768900147
+        "k": 14.386197399799254,
+        "median_linear_extent_N_per_m2": 20962.384193773734,
+        "median_log_volume": 29.85145464500675
       },
       "cone": {
         "coverage": {
-          "in_distribution_test": 0.9263157894736842,
-          "unseen_physics_test": 0.9223744292237442,
+          "in_distribution_test": 0.9157894736842105,
+          "unseen_physics_test": 0.954337899543379,
           "unseen_strategy_test": 1.0
         },
-        "k": 956.484256597061,
-        "median_linear_extent_N_per_m2": 71567.44358349785,
-        "median_log_volume": 33.53518665296251
+        "k": 924.3587424796382,
+        "median_linear_extent_N_per_m2": 1196316.0383957936,
+        "median_log_volume": 41.984272274208536
       },
       "ellipsoid": {
         "coverage": {
-          "in_distribution_test": 0.9157894736842105,
-          "unseen_physics_test": 0.9041095890410958,
-          "unseen_strategy_test": 1.0
+          "in_distribution_test": 0.9052631578947369,
+          "unseen_physics_test": 0.8904109589041096,
+          "unseen_strategy_test": 0.9973684210526316
         },
-        "k": 15.590785459720202,
-        "median_linear_extent_N_per_m2": 1065.08913010588,
-        "median_log_volume": 20.912441294645866
+        "k": 14.11426346313891,
+        "median_linear_extent_N_per_m2": 16645.417222315384,
+        "median_log_volume": 29.159670646858817
       }
     },
     "point_mass_target": 0.95,
-    "scale_floor_N_per_m2": 32.24536535821185,
+    "scale_floor_N_per_m2": 566.5111512617062,
     "target_coverage": 0.9,
     "task": "wipe",
-    "train": 300
+    "train": 400
   },
   {
     "calibration": 87,
     "forms": {
       "box_obj": {
         "coverage": {
-          "in_distribution_test": 0.8615384615384616,
-          "unseen_physics_test": 0.7803468208092486,
-          "unseen_strategy_test": 0.013333333333333334
+          "in_distribution_test": 0.8846153846153846,
+          "unseen_physics_test": 0.5433526011560693,
+          "unseen_strategy_test": 0.005333333333333333
         },
-        "k": 3.372967424516985,
-        "median_linear_extent_N_per_m2": 46582.342821415026,
-        "median_log_volume": 32.2469305166932
+        "k": 2.752846216807868,
+        "median_linear_extent_N_per_m2": 39680.52966642691,
+        "median_log_volume": 31.765847729273936
       },
       "box_surface": {
         "coverage": {
-          "in_distribution_test": 0.8923076923076924,
-          "unseen_physics_test": 0.7803468208092486,
-          "unseen_strategy_test": 0.01
+          "in_distribution_test": 0.8846153846153846,
+          "unseen_physics_test": 0.6011560693641619,
+          "unseen_strategy_test": 0.0026666666666666666
         },
-        "k": 3.6123251459718397,
-        "median_linear_extent_N_per_m2": 38835.378739301595,
-        "median_log_volume": 31.70126079999305
+        "k": 2.713534992302113,
+        "median_linear_extent_N_per_m2": 34633.64183871753,
+        "median_log_volume": 31.35774238841539
       },
       "cone": {
         "coverage": {
-          "in_distribution_test": 0.9230769230769231,
-          "unseen_physics_test": 0.5549132947976878,
+          "in_distribution_test": 0.9384615384615385,
+          "unseen_physics_test": 0.5838150289017341,
           "unseen_strategy_test": 0.0
         },
-        "k": 4.631270042946052,
-        "median_linear_extent_N_per_m2": 45951.939977157956,
-        "median_log_volume": 32.20605403859896
+        "k": 4.797595397572385,
+        "median_linear_extent_N_per_m2": 72054.63329349755,
+        "median_log_volume": 33.555539718003814
       },
       "ellipsoid": {
         "coverage": {
-          "in_distribution_test": 0.9076923076923077,
-          "unseen_physics_test": 0.7341040462427746,
-          "unseen_strategy_test": 0.006666666666666667
+          "in_distribution_test": 0.9230769230769231,
+          "unseen_physics_test": 0.5838150289017341,
+          "unseen_strategy_test": 0.0
         },
-        "k": 3.80370363595827,
-        "median_linear_extent_N_per_m2": 31932.8938157569,
-        "median_log_volume": 31.114175734793086
+        "k": 3.5146779636259224,
+        "median_linear_extent_N_per_m2": 31787.6375850463,
+        "median_log_volume": 31.10049821398847
       }
     },
     "point_mass_target": 0.95,
-    "scale_floor_N_per_m2": 2470.081362599867,
+    "scale_floor_N_per_m2": 1969.370699281433,
     "target_coverage": 0.9,
     "task": "knob",
-    "train": 300
+    "train": 400
   }
 ]

@@ -1,0 +1,257 @@
+[
+  {
+    "effect": {
+      "cleaned_area_p90_m2": 0.0,
+      "rotation_p90_rad": 0.0,
+      "surface_displacement_p90_m": 0.045775153487920765,
+      "translation_p90_m": 0.045775153487920765
+    },
+    "kernel": {
+      "cross_part_weight": 0.0,
+      "force_conservation_error": 0.0,
+      "neighbours": 64,
+      "row_sum_max_error": 4.440892098500626e-16,
+      "sigma_m": 0.004
+    },
+    "mode": {
+      "current_threshold_mm_s": 5.0,
+      "slip_p50_mm_s": 0.2774899185169488,
+      "stick_force_share": {
+        "10mm_s": 0.9636894559766878,
+        "1mm_s": 0.592117914496156,
+        "2mm_s": 0.7359073936931462,
+        "3mm_s": 0.8048298879932155,
+        "5mm_s": 0.8977204489584134
+      },
+      "swing_pp": 37.15715414805317
+    },
+    "moment": {
+      "64": {
+        "cell_pitch_mm": 64.07186816557278,
+        "median_N_per_m": 257.85524304277374
+      },
+      "256": {
+        "cell_pitch_mm": 32.794779880460865,
+        "median_N_per_m": 41.2408129535936
+      },
+      "1024": {
+        "cell_pitch_mm": 16.463911010937398,
+        "median_N_per_m": 70.3108909303134
+      }
+    },
+    "n_bins": 32,
+    "num_episodes": 40,
+    "object": "drawer",
+    "payload_has_continuous_mode": true,
+    "payload_has_effect_scale": true,
+    "task": "drawer",
+    "traction": {
+      "kernel_area": {
+        "drift": 2.0323829729990064,
+        "drift_without_coarsest": 1.912621762414319,
+        "median_N_per_m2": {
+          "64": 3867.858030802635,
+          "256": 4110.0488127133785,
+          "1024": 7860.968803780741
+        }
+      },
+      "kernel_forcew": {
+        "drift": 1.519530517799173,
+        "drift_without_coarsest": 1.1222452919522454,
+        "median_N_per_m2": {
+          "64": 22513.41614281906,
+          "256": 16627.224643460282,
+          "1024": 14816.034215243397
+        }
+      },
+      "kernel_point": {
+        "drift": 4196656694678.3223,
+        "drift_without_coarsest": 8.436924310650726,
+        "median_N_per_m2": {
+          "64": 0.0,
+          "256": 497.4154727665965,
+          "1024": 4196.656694678322
+        }
+      },
+      "nearest_area": {
+        "drift": 2.830854731457322,
+        "drift_without_coarsest": 2.7773203619363933,
+        "median_N_per_m2": {
+          "64": 3867.858030802635,
+          "256": 3942.4131105526394,
+          "1024": 10949.344207102838
+        }
+      }
+    }
+  },
+  {
+    "effect": {
+      "cleaned_area_p90_m2": 0.0088,
+      "rotation_p90_rad": 0.0,
+      "surface_displacement_p90_m": 0.0,
+      "translation_p90_m": 0.0
+    },
+    "kernel": {
+      "cross_part_weight": 0.0,
+      "force_conservation_error": 0.0,
+      "neighbours": 64,
+      "row_sum_max_error": 4.440892098500626e-16,
+      "sigma_m": 0.004
+    },
+    "mode": {
+      "current_threshold_mm_s": 5.0,
+      "slip_p50_mm_s": 158.82720053195953,
+      "stick_force_share": {
+        "10mm_s": 0.1258624568376886,
+        "1mm_s": 0.12528876712020928,
+        "2mm_s": 0.12528876712020928,
+        "3mm_s": 0.12528876712020928,
+        "5mm_s": 0.12545650239089956
+      },
+      "swing_pp": 0.05736897174793143
+    },
+    "moment": {
+      "64": {
+        "cell_pitch_mm": 97.95806575780894,
+        "median_N_per_m": 6.95240855511585
+      },
+      "256": {
+        "cell_pitch_mm": 51.41389142306862,
+        "median_N_per_m": 11.783392456290006
+      },
+      "1024": {
+        "cell_pitch_mm": 25.273245400414933,
+        "median_N_per_m": 20.50446456457177
+      }
+    },
+    "n_bins": 32,
+    "num_episodes": 40,
+    "object": "board",
+    "payload_has_continuous_mode": true,
+    "payload_has_effect_scale": true,
+    "task": "wipe",
+    "traction": {
+      "kernel_area": {
+        "drift": 11.017869142152506,
+        "drift_without_coarsest": 3.5787177043537532,
+        "median_N_per_m2": {
+          "64": 171.72087351013084,
+          "256": 528.6804575306401,
+          "1024": 1891.9981133107442
+        }
+      },
+      "kernel_forcew": {
+        "drift": 1.104844230481545,
+        "drift_without_coarsest": 1.0686771174432546,
+        "median_N_per_m2": {
+          "64": 10410.805369127871,
+          "256": 10763.137021466147,
+          "1024": 11502.318246747218
+        }
+      },
+      "kernel_point": {
+        "drift": 807108818227.4395,
+        "drift_without_coarsest": 807108818227.4395,
+        "median_N_per_m2": {
+          "64": 0.0,
+          "256": 0.0,
+          "1024": 807.1088182274395
+        }
+      },
+      "nearest_area": {
+        "drift": 14.06962079889028,
+        "drift_without_coarsest": 3.9489480044445453,
+        "median_N_per_m2": {
+          "64": 177.54864619723605,
+          "256": 632.5842028155081,
+          "1024": 2498.042125351444
+        }
+      }
+    }
+  },
+  {
+    "effect": {
+      "cleaned_area_p90_m2": 0.0,
+      "rotation_p90_rad": 0.9394976675510408,
+      "surface_displacement_p90_m": 0.050387219550020526,
+      "translation_p90_m": 0.0
+    },
+    "kernel": {
+      "cross_part_weight": 0.0,
+      "force_conservation_error": 0.0,
+      "neighbours": 64,
+      "row_sum_max_error": 4.440892098500626e-16,
+      "sigma_m": 0.004
+    },
+    "mode": {
+      "current_threshold_mm_s": 5.0,
+      "slip_p50_mm_s": 0.8400317456107587,
+      "stick_force_share": {
+        "10mm_s": 0.9770281245002319,
+        "1mm_s": 0.5826928213440763,
+        "2mm_s": 0.7933734960593437,
+        "3mm_s": 0.8670319149124857,
+        "5mm_s": 0.9473824152717506
+      },
+      "swing_pp": 39.43353031561556
+    },
+    "moment": {
+      "64": {
+        "cell_pitch_mm": 22.363964411239888,
+        "median_N_per_m": 121.98251416319361
+      },
+      "256": {
+        "cell_pitch_mm": 12.412683764557801,
+        "median_N_per_m": 324.33093200379335
+      },
+      "1024": {
+        "cell_pitch_mm": 6.305649615010343,
+        "median_N_per_m": 386.28408685350473
+      }
+    },
+    "n_bins": 32,
+    "num_episodes": 40,
+    "object": "knob",
+    "payload_has_continuous_mode": true,
+    "payload_has_effect_scale": true,
+    "task": "knob",
+    "traction": {
+      "kernel_area": {
+        "drift": 4.742156576675612,
+        "drift_without_coarsest": 1.728255766375749,
+        "median_N_per_m2": {
+          "64": 9870.903256935006,
+          "256": 27084.74619804971,
+          "1024": 46809.368797603056
+        }
+      },
+      "kernel_forcew": {
+        "drift": 1.253732824058379,
+        "drift_without_coarsest": 1.1442805984113011,
+        "median_N_per_m2": {
+          "64": 41445.53150128633,
+          "256": 45409.86129263295,
+          "1024": 51961.62325370821
+        }
+      },
+      "kernel_point": {
+        "drift": 56147300380077.23,
+        "drift_without_coarsest": 2.2572183193589117,
+        "median_N_per_m2": {
+          "64": 0.0,
+          "256": 24874.55462262242,
+          "1024": 56147.30038007723
+        }
+      },
+      "nearest_area": {
+        "drift": 12.8265525158794,
+        "drift_without_coarsest": 2.903363531019599,
+        "median_N_per_m2": {
+          "64": 12710.583491596175,
+          "256": 56153.13580975318,
+          "1024": 163032.96666242808
+        }
+      }
+    }
+  }
+]

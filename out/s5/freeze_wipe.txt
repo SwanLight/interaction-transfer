@@ -1,7 +1,4 @@
 === /tmp/s4_wipe
-  STALE board/g1：64 档有 7449 个点（45.5%）的代表点跨了部件，重新生成
-  WROTE board/g1 -> board-g1.npz (16384 点, 0.64400 m²)
-  STALE board/g2：64 档有 7449 个点（45.5%）的代表点跨了部件，重新生成
-  WROTE board/g2 -> board-g2.npz (16384 点, 0.64400 m²)
-  STALE board/nominal：64 档有 7449 个点（45.5%）的代表点跨了部件，重新生成
-  WROTE board/nominal -> board-nominal.npz (16384 点, 0.64400 m²)
+  SKIP  board/g1 已冻结 board-g1.npz
+  SKIP  board/g2 已冻结 board-g2.npz
+  SKIP  board/nominal 已冻结 board-nominal.npz

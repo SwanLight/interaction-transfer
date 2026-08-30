@@ -1,13 +1,14 @@
 [
   {
     "artifact": "wipe-board-nominal-train.npz",
-    "artifact_sha256": "154267e7c1d77dcfed01b2b1dab79124ee70f00f79951be0462eab52f08e1253",
+    "artifact_sha256": "36febfa4cb47d6b27c08a2cd887799d0760b088997a29d9d0743b65b427b9f21",
     "calibration": {
       "calibrated": true,
       "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
       "mech_floor_relative": 0.05,
       "mech_moment_k": 1.9745642423554748,
-      "mech_traction_k": 1.9920409694672478,
+      "mech_traction_k": 1.9946270923501748,
+      "mode_slip_speed_k": 1.9991201769540154,
       "num_episodes": 127,
       "point_mass_target": 0.95,
       "region_tau": 0.94,
@@ -43,7 +44,8 @@
         "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
         "mech_floor_relative": 0.05,
         "mech_moment_k": 1.9745642423554748,
-        "mech_traction_k": 1.9920409694672478,
+        "mech_traction_k": 1.9946270923501748,
+        "mode_slip_speed_k": 1.9991201769540154,
         "num_episodes": 127,
         "point_mass_target": 0.95,
         "region_tau": 0.94,
@@ -1968,7 +1970,7 @@
       },
       "num_episodes": 950,
       "object": "board",
-      "schema_version": "interaction-transfer-v3",
+      "schema_version": "interaction-transfer-v4",
       "strategy_family_counts": {
         "tool_center": 241,
         "tool_heavy_slow": 246,

@@ -1,13 +1,14 @@
 [
   {
     "artifact": "drawer-drawer-nominal-train.npz",
-    "artifact_sha256": "c6235f607dc78bb307e6f2e69828b9ee80ff689e59175a8b7c0244c3d42a047c",
+    "artifact_sha256": "de685528d4403f322a70fe2857e2af807858b3eb1db1b1c063dd655a8820cba8",
     "calibration": {
       "calibrated": true,
       "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
       "mech_floor_relative": 0.05,
       "mech_moment_k": 4.199150610673497,
-      "mech_traction_k": 2.820459713247705,
+      "mech_traction_k": 2.812373708751991,
+      "mode_slip_speed_k": 2.8467822356473995,
       "num_episodes": 43,
       "point_mass_target": 0.95,
       "region_tau": 0.99,
@@ -43,7 +44,8 @@
         "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
         "mech_floor_relative": 0.05,
         "mech_moment_k": 4.199150610673497,
-        "mech_traction_k": 2.820459713247705,
+        "mech_traction_k": 2.812373708751991,
+        "mode_slip_speed_k": 2.8467822356473995,
         "num_episodes": 43,
         "point_mass_target": 0.95,
         "region_tau": 0.99,
@@ -714,7 +716,7 @@
       },
       "num_episodes": 323,
       "object": "drawer",
-      "schema_version": "interaction-transfer-v3",
+      "schema_version": "interaction-transfer-v4",
       "strategy_family_counts": {
         "hook_both": 92,
         "pinch_center": 69,
