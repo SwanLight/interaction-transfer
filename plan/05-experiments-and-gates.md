@@ -109,7 +109,7 @@ S5 用的是热图与部件占比，对绝对点数不敏感，不构成阻塞�
 | C1 +区域 | 检验 interaction region 的增量价值 |
 | C2 +engage 方向 | **≈ KITE 几何接触意图**，本工作的直接对照点 |
 | C3 +接触模式 | 检验 stick/slide/separate |
-| C4 完整功能交互 | 加入 task-agnostic local traction 的方向锥与范围 |
+| C4 完整功能交互 | 加入 task-agnostic local traction 的标定允许集合（D-71）|
 | C5 精确 source 受力 | 检验复制 source exact traction/wrench realization 是否必要或过度 |
 
 C1→C2→C4 的两段增量，就是本工作相对 KITE 的差值。这两段若都不显著，`00-positioning.md` §5 的第 3 条声称作废。

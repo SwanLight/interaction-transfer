@@ -115,7 +115,8 @@ Oracle Record 可以保留三种候选量，但**只有定长、无任务语义�
    随采样分辨率产生任意尖峰。核带宽只由表面 pitch / 拟传感 pitch 决定，不按任务调；
    积分 traction 的合力必须逐帧等于原始合力，合力矩与 raw contact wrench 的误差必须
    设硬阈值并落报告。每个 phase / region 上记录法向 traction 的稳健区间、切向
-   traction 的方向锥与幅值区间。此后不再按“抽屉/旋钮/擦拭”选择投影轴。
+   traction 的**标定允许集合**（物体系三维盒 + 校准集上标定的联合标量，D-71）。
+   此后不再按“抽屉/旋钮/擦拭”选择投影轴。
 
 Exact source realization 不能直接被宣布为最终 functional representation。C4 vs C5
 仍检验“允许范围是否足够、复制 source 是否多余”，但这不是相对 CHORD 的直接差异。
@@ -153,7 +154,7 @@ envelope 本身由上游产生，这不构成循环论证（`05` §3.3）。
 - 共同的目标 effect；
 - 可接受的 interaction region 集合或概率热图；
 - 必须满足的 mode 约束；
-- task-agnostic local traction 的方向锥和稳健范围；
+- task-agnostic local traction 的**标定允许集合**（D-71 实测否决了方向锥形式）；
 - 允许变化的时长和 phase 边界。
 
 第一版把它严格称为**多示教 interaction 统计表征**：它描述同一任务示教中反复出现的
@@ -218,7 +219,7 @@ source 和 target 不能按绝对墙上时钟硬同步。executor 根据自己�
 | **C1** +区域（+Region） | 再给允许交互的表面区域 | |
 | **C2** +方向（+Direction） | 再给 engage 方向 | **≈ KITE 的几何接触意图** |
 | **C3** +模式（+Mode） | 再给接触/滑动约束 | |
-| **C4** 完整功能交互（Functional） | 再给 task-agnostic local traction 方向锥与范围 | **本工作提出的表示** |
+| **C4** 完整功能交互（Functional） | 再给 task-agnostic local traction 的标定允许集合 | **本工作提出的表示** |
 | **C5** 精确 source 受力（Exact-Realization） | 给 source 的精确 traction/wrench realization | 非最小强基线 |
 
 C2 为本版本新增。它是本框架内对 KITE 几何意图的重新实现，论文中表述为 "KITE-style geometric contact intent, reimplemented within our framework"，**不表述为 KITE**——理由见 `00-positioning.md` §2.1。
@@ -286,6 +287,12 @@ C2 为本版本新增。它是本框架内对 KITE 几何意图的重新实现�
 
 **2b 与 2c 是一对**：单有 2b，"什么都不读"也能通过（那正是 D-49 初版守错规矩的
 下场）；单有 2c，读了指令位姿也能通过。
+
+> **2026-08-30 修订（D-71）**：C4 里 traction 的表示形式原写作"方向锥 + 幅值区间"
+> （D-58）。四族候选集合在同一 coverage 目标下的实测比较显示，**方向锥形式体积最大**
+> （抽屉 2.4×、擦拭 56×）且无 coverage 收益，已按实测否决。现行形式是**物体系三维
+> 轴对齐盒 + 在冻结校准集上标定的联合标量**。实测表在 `out/s5/mech_setform.txt`。
+> 坐标只是换基（执行器拿 `surface/normals_obj` 自己就能转），待定的是**形状**不是坐标。
 
 ### 7.1.1 第 4、8 条在 S5 的落地状态（2026-08-30）
 
