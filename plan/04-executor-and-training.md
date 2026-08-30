@@ -139,10 +139,18 @@ r = w_e · r_effect + w_r · r_region + w_m · r_mode + w_f · r_mech + r_safety
 "统一接口"里面。正确做法：
 
 ```text
-r_effect = -( ‖Δξ‖_M / effect/rigid/scale_m
-            + ‖Δstate‖₁ / effect/surface_state/scale )
-其中 ‖Δξ‖_M = sqrt(Δξᵀ · effect/rigid/metric · Δξ)  ——「物体表面平均移动了多远」，单位米
+效果幅度 e(ξ, s) = ‖ξ‖_M / effect/rigid/scale_m + ‖s‖₁ / effect/surface_state/scale
+其中 ‖ξ‖_M = sqrt(ξᵀ · effect/rigid/metric · ξ)  ——「物体表面平均移动了多远」，单位米
+
+r_effect = -clamp(1 - 本格累计完成量 / 本格要求量, 0, 1)
 ```
+
+⚠️ **是"本格的完成缺口"，不是"实测与指令之差"**（D-80）。照后者实现时，E-I 环境的
+dry-run 上 `r_effect` 报到 **−26647 且逐步线性增长**，比其余三项大六个数量级。两个原因：
+**命令格的时长是弹性的**（§5 的"按自己的进度选窗口"），所以指令 effect 是"这一格总共
+要发生多少"而不是速率，拿它跟每步位移比量纲就不对；而且除以一个可能趋零的刻度会炸。
+缺口形式让刻度在分子分母里约掉，取值有界 [0,1]，且是势函数式的——悬停时缺口恒为 1，
+刷不了分。
 
 `metric` 与两个 `scale` 都在 payload 里，任务无关（同一个公式）。换算后抽屉 0.0458 m、
 旋钮 0.0504 m，差 1.10×。擦拭的刚体一路恒为零、effect 全在 `surface_state`——这正是

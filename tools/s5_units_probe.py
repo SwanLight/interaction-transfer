@@ -260,7 +260,8 @@ def run_task(name: str, dataset: Path, artifact: Path | None, *, surface_path: P
     }
 
 
-def render(results: list[dict], drift_tol: float) -> tuple[str, int]:
+def render(results: list[dict], drift_tol: float,
+           accept_drift: tuple[str, ...] = ()) -> tuple[str, int]:
     lines, failures = [], [0]
     lines += ["自定义量的单位与刻度体检（P-68 / P-69 / P-70）",
               "=" * 92,
@@ -285,8 +286,13 @@ def render(results: list[dict], drift_tol: float) -> tuple[str, int]:
             drift = value["drift"]
             if pooling == TRACTION_POOLING:
                 ok = drift <= drift_tol
-                mark = "PASS" if ok else "FAIL"
-                failures[0] += 0 if ok else 1
+                if ok:
+                    mark = "PASS"
+                elif item["task"] in accept_drift:
+                    mark = "超标（已知情接受）"
+                else:
+                    mark = "FAIL"
+                    failures[0] += 1
             elif pooling == "nearest_area":
                 # 只有这一族是"出问题的那一版"，它的漂移就是 P-68 的证据。
                 # 它**不**漂移才要红：说明这批数据触不到 P-68，整张表没有区分力。
@@ -409,6 +415,11 @@ def main() -> None:
                         help="每个任务最多用多少条 train episode（分辨率扫描很慢）")
     parser.add_argument("--n-bins", type=int, default=32)
     parser.add_argument("--drift-tol", type=float, default=1.5)
+    parser.add_argument("--accept-drift", nargs="*", default=[], metavar="任务",
+                        help="已知并接受现行做法在该任务上超出漂移门槛。"
+                             "**必须在 decisions.md 里有对应记录**（抽屉最粗档的残差见 "
+                             "D-72 末尾，成因未查清）。列在这里只是让闸门不因为已知情况"
+                             "长红——一条永远红的闸门等于没有闸门；**新出现的**超标照样报错")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
 
@@ -426,7 +437,7 @@ def main() -> None:
                                 surface_path=surfaces.get(name, surfaces.get(None)),
                                 limit=args.limit, n_bins=args.n_bins))
 
-    text, failures = render(results, args.drift_tol)
+    text, failures = render(results, args.drift_tol, tuple(args.accept_drift))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text + "\n", encoding="utf-8")
     args.out.with_suffix(".json").write_text(

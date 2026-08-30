@@ -43,8 +43,8 @@ from isaaclab.utils.math import quat_apply, quat_conjugate, quat_mul
 from it import assets as A
 from it.contact_utils import extract_contact_points_padded
 from it.ei_command import CommandBank, WindowTracker
-from it.ei_reward import (assign_cells, effect_magnitude, interaction_reward,
-                          surface_traction)
+from it.ei_reward import (assign_cells, effect_deficit, effect_magnitude,
+                          interaction_reward, surface_traction)
 from it.envs.base import FloatingBaseAction
 from it.float_ctrl import FloatingPD
 
@@ -246,16 +246,14 @@ class InteractionEnv(DirectRLEnv):
         slip_cell.scatter_reduce_(1, cell_index, slip, reduce="amax", include_self=True)
 
         allowed = self.bank.gather_bin("region/allowed", cmd, b)
-        # effect：比**速率**而不是累计量。悬停时实测速率为零、指令非零，罚得到；
-        # 指令要求不动时两者都是零，不罚——这条让塑形项没法靠悬停刷分（D-31 第 1 洞）。
+        # effect：本控制步物体实际发生了多少变化（无量纲，两路各除各自刻度）。
+        # 它先喂给窗口跟踪器累计，reward 用的是**本格的完成缺口**而不是逐步差值——
+        # 命令格的时长是弹性的，指令 effect 是"这一格里总共要发生多少"，
+        # 不是一个速率。逐步差值那一版在 dry-run 上炸到 −26647（见 ei_reward.effect_deficit）。
         got_rigid, got_state = self._effect_rate()
         metric = self.bank.gather("effect/rigid/metric", cmd)
         scale_r = self.bank.gather("effect/rigid/scale_m", cmd)
         scale_s = self.bank.gather("effect/surface_state/scale", cmd)
-        want = effect_magnitude(
-            self.bank.gather_bin("effect/rigid/median", cmd, b)[:, 0, :],
-            self.bank.gather_bin("effect/surface_state/median", cmd, b)[:, 0, :],
-            metric=metric, scale_rigid=scale_r, scale_state=scale_s)
         got = effect_magnitude(got_rigid, got_state, metric=metric,
                                scale_rigid=scale_r, scale_state=scale_s)
 
@@ -263,8 +261,14 @@ class InteractionEnv(DirectRLEnv):
         smooth = (self.actions - self.prev_actions).pow(2).sum(-1)
         safety = -(self.cfg.w_force * over + self.cfg.w_action * smooth)
 
+        # 先推窗口：缺口要用**累计到本步为止**的完成量算，所以顺序不能反。
+        region_force = (mass * allowed.float()).sum(-1)
+        progress = self.tracker.step(effect_increment=got,
+                                     region_normal_force=region_force)
+        self.progress_obs = torch.stack(list(progress.values()), dim=-1)
+
         terms = interaction_reward(
-            effect_error=(got - want).abs(),
+            effect_deficit=effect_deficit(self.tracker.achieved, self.tracker.demand()),
             traction=traction, mass=mass, slip_speed=slip_cell, allowed=allowed,
             traction_lo=self.bank.gather_bin("mech/traction_obj/lo", cmd, b),
             traction_hi=self.bank.gather_bin("mech/traction_obj/hi", cmd, b),
@@ -272,10 +276,6 @@ class InteractionEnv(DirectRLEnv):
             slip_hi=self.bank.gather_bin("mode/slip_speed/hi", cmd, b),
             force_penalty=safety)
 
-        # 窗口推进用的实测量，与 reward 用的是同一批（不许两套口径）。
-        region_force = (mass * allowed.float()).sum(-1)
-        self.progress_obs = torch.stack(list(self.tracker.step(
-            effect_increment=got, region_normal_force=region_force).values()), dim=-1)
         self.contact_obs = torch.stack([
             c["valid"].float().sum(-1) / MAX_CONTACTS,
             c["normal_force"].sum(-1) / self.cfg.max_contact_force,

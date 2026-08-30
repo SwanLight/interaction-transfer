@@ -27,8 +27,8 @@ from it.ei_command import (  # noqa: E402
     WindowTracker, spatial_features, temporal_features)
 from it.ei_policy import InteractionActorCritic, InteractionPolicy  # noqa: E402
 from it.ei_reward import (  # noqa: E402
-    _GAUSS_NORM, assign_cells, box_violation, effect_magnitude, interaction_reward,
-    surface_traction)
+    _GAUSS_NORM, assign_cells, box_violation, effect_deficit, effect_magnitude,
+    interaction_reward, surface_traction)
 from it.surfaces import SCATTER_SIGMA  # noqa: E402
 
 
@@ -98,7 +98,7 @@ class TestReward(unittest.TestCase):
         common = dict(traction=torch.zeros(1, 2, 3), slip_speed=torch.zeros(1, 2),
                       traction_lo=-torch.ones(1, 2, 3), traction_hi=torch.ones(1, 2, 3),
                       slip_lo=torch.zeros(1, 2, 1), slip_hi=torch.ones(1, 2, 1),
-                      force_penalty=torch.zeros(1), effect_error=torch.zeros(1))
+                      force_penalty=torch.zeros(1), effect_deficit=torch.zeros(1))
         full_in = interaction_reward(mass=torch.tensor([[3.0, 0.0]]), allowed=allowed,
                                      **common)
         full_out = interaction_reward(mass=torch.tensor([[0.0, 3.0]]), allowed=allowed,
@@ -108,6 +108,26 @@ class TestReward(unittest.TestCase):
         self.assertAlmostEqual(float(full_out.region), -2.0, places=6)
         self.assertAlmostEqual(float(none.region), 0.0, places=6,
                                msg="完全没接触时 region 项应为 0，由 effect 项去驱动建立接触")
+
+    def test_effect_deficit_is_bounded_and_scale_free(self):
+        """第一版 `r_effect` 取"实测与指令之差"，dry-run 上炸到 −26647、逐步线性增长，
+        比其余三项大六个数量级。两个错叠在一起：比的不是同一段时间（命令格的时长是
+        弹性的，指令 effect 是"这一格总共要发生多少"而不是速率），以及除以了一个
+        可能接近零的刻度。缺口形式把两个问题一起消掉——刻度在分子分母里约掉。
+        """
+        demand = torch.tensor([1.0, 1.0, 1.0, 0.0])
+        achieved = torch.tensor([0.0, 0.5, 2.0, 5.0])
+        d = effect_deficit(achieved, demand)
+        self.assertAlmostEqual(float(d[0]), 1.0, places=6, msg="一点没动 = 满缺口")
+        self.assertAlmostEqual(float(d[1]), 0.5, places=6)
+        self.assertAlmostEqual(float(d[2]), 0.0, places=6, msg="超额完成不该有负缺口")
+        self.assertAlmostEqual(float(d[3]), 0.0, places=6,
+                               msg="这一格不要求物体变化时，不该因为物体没动挨罚")
+        self.assertTrue(bool(((d >= 0) & (d <= 1)).all()), "缺口必须有界 [0,1]")
+        # 刻度约掉：把两边同乘一个因子，结果不变
+        for factor in (1e-6, 1e6):
+            torch.testing.assert_close(effect_deficit(achieved * factor,
+                                                      demand * factor), d)
 
     def test_effect_magnitude_separates_metres_and_radians(self):
         """P-70：两路各自归一化，不对 6 维取 L2。"""

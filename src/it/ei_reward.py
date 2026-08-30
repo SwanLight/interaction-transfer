@@ -61,6 +61,34 @@ def effect_magnitude(rigid: torch.Tensor, state: torch.Tensor, *,
             + state.abs().sum(-1) / scale_state.clamp_min(_EPS))
 
 
+def effect_deficit(achieved: torch.Tensor, demand: torch.Tensor) -> torch.Tensor:
+    """本命令格的 effect 完成缺口 ∈[0,1]。0 = 已经做到，1 = 一点没动。
+
+    **为什么不是"实测 effect 与指令 effect 之差"。** 那是我第一版的写法，dry-run 上
+    `r_effect` 报到 −26647 且逐步线性增长，比其余三项大六个数量级——两个错叠在一起：
+
+    1. **比的不是同一段时间**。`effect/rigid[b, 0]` 是未来 0.1 s 的位移，而实测取的是
+       一个控制步（0.02 s）的位移，差一个 5 倍；更要紧的是**命令格的时长本来就是
+       弹性的**（`plan/02` §5：执行器按自己的进度选窗口，允许有限时间缩放），
+       所以指令 effect 根本不是一个"速率"，而是"在这一格里总共要发生多少变化"。
+       拿它跟每步位移比，量纲上就不对；
+    2. **除以了一个可能接近零的刻度**。探针物体上"按住不动"那类原语的 effect 中位数
+       几乎为零，`effect/rigid/scale_m` 跟着趋零，随机策略把物体碰飞之后
+       `got/scale` 直接炸掉。
+
+    改成缺口之后两个问题一起没了：**分子分母用同一个刻度，刻度约掉**；而且它是
+    **势函数式**的——悬停时缺口一直是 1（一直被罚），推进时缺口单调下降，
+    没法靠悬停刷分（D-31 第 1 个洞）。取值有界 [0,1]，与其余三项同量级。
+
+    这一格不要求物体变化时（``demand`` ≈ 0）缺口恒为 0：接近段与松开段本来就不该
+    因为"物体没动"挨罚。
+    """
+    wanted = demand > 1e-9
+    ratio = torch.where(wanted, achieved / demand.clamp_min(1e-9),
+                        torch.ones_like(demand))
+    return (1.0 - ratio.clamp(0.0, 1.0)) * wanted.float()
+
+
 def assign_cells(contact_pos: torch.Tensor, contact_normal: torch.Tensor,
                  contact_valid: torch.Tensor, cell_points: torch.Tensor,
                  cell_normals: torch.Tensor) -> torch.Tensor:
@@ -165,7 +193,7 @@ class RewardTerms:
         return {f"reward/{k}": v for k, v in self.__dict__.items()}
 
 
-def interaction_reward(*, effect_error: torch.Tensor,
+def interaction_reward(*, effect_deficit: torch.Tensor,
                        traction: torch.Tensor, mass: torch.Tensor,
                        slip_speed: torch.Tensor,
                        allowed: torch.Tensor,
@@ -176,7 +204,8 @@ def interaction_reward(*, effect_error: torch.Tensor,
     """五项 reward。全部是**负的误差**（越大越好，上界 0），safety 另计。
 
     Args:
-        effect_error: (N,) 无量纲 effect 跟踪误差，由 `effect_magnitude` 之差算。
+        effect_deficit: (N,) 本命令格的 effect **完成缺口** ∈[0,1]，
+            由 `effect_deficit()` 算。0 = 这一格要求的变化已经做到。
         traction: (N,S,3) 实测逐格 traction。
         mass: (N,S) 逐格力质量，既是权重也是"这里有没有接触"。
         slip_speed: (N,S) 实测逐格滑移速率。
@@ -198,5 +227,5 @@ def interaction_reward(*, effect_error: torch.Tensor,
     mech = -(weight * box_violation(traction, traction_lo, traction_hi)).sum(-1) / weight_sum
     mode = -(weight * box_violation(slip_speed[..., None], slip_lo, slip_hi)
              ).sum(-1) / weight_sum
-    return RewardTerms(effect=-effect_error, region=region, mode=mode, mech=mech,
+    return RewardTerms(effect=-effect_deficit, region=region, mode=mode, mech=mech,
                        safety=force_penalty)

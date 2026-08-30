@@ -103,15 +103,21 @@ def main() -> None:
     cfg.command_glob = paths[0] if len(paths) == 1 else "/tmp/s6/probe/*.npz"
     cfg.forbid = HELD_OUT[args.executor]
 
+    # ⚠️ P-19 要求脚本末尾用 os._exit() 收场（SimulationApp.close() 会挂起、
+    # 进程变僵尸占显存），**但 os._exit 不刷 stdout 缓冲**——非 tty 下 print 全进缓冲，
+    # 于是日志里只剩 Isaac 自己的输出，退出码还是 0，看起来像"跑了但什么都没做"。
+    # 实测踩过一次。所以这里全程 flush。
+    say = lambda *a: print(*a, flush=True)  # noqa: E731
+
     env = InteractionEnv(cfg=cfg)
     torch.manual_seed(args.seed)
     policy = InteractionActorCritic(env.bank, action_dim=cfg.action_space,
                                     proprio_dim=PROPRIO_DIM,
                                     privileged_dim=PRIVILEGED_DIM).to(env.device)
-    print(f"[S6] 课程 {args.stage} / 执行器 {args.executor} / 物体 {args.object}")
-    print(f"[S6] 指令 {len(env.bank)} 份，留出禁令 {cfg.forbid}")
-    print(f"[S6] 策略参数 {sum(p.numel() for p in policy.parameters()):,}")
-    print(f"[S6] reward scale {scale}")
+    say(f"[S6] 课程 {args.stage} / 执行器 {args.executor} / 物体 {args.object}")
+    say(f"[S6] 指令 {len(env.bank)} 份，留出禁令 {cfg.forbid}")
+    say(f"[S6] 策略参数 {sum(p.numel() for p in policy.parameters()):,}")
+    say(f"[S6] reward scale {scale}")
 
     obs, _ = env.reset()
     assert obs["policy"].shape[-1] == PROPRIO_DIM + 6, (
@@ -121,12 +127,13 @@ def main() -> None:
             action = policy.act(obs["policy"])
         obs, reward, done, timeout, extras = env.step(action)
         log = extras.get("log", {})
-        print(f"  step {step}: reward {float(reward.mean()):+.4f}  "
+        say(f"  step {step}: reward {float(reward.mean()):+.4f}  "
               + "  ".join(f"{k.split('/')[-1]} {float(v):+.4f}" for k, v in log.items()))
     if args.dry_run:
-        print("[S6] dry-run 结束：装配通过，各项量级见上。")
+        say("[S6] dry-run 结束：装配通过，各项量级见上。")
         env.close()
         simulation_app.close()
+        sys.stdout.flush(); sys.stderr.flush()
         os._exit(0)
 
     raise SystemExit(

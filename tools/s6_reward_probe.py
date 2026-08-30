@@ -45,7 +45,8 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from it.ei_reward import (  # noqa: E402
-    assign_cells, box_violation, effect_magnitude, interaction_reward, surface_traction)
+    assign_cells, box_violation, effect_deficit, effect_magnitude, interaction_reward,
+    surface_traction)
 from it.records import load_episode, read_manifest  # noqa: E402
 from it.surfaces import SCATTER_SIGMA, load_surface  # noqa: E402
 from it.transfer import bin_index, episode_summary, load_transfer, phase_budget  # noqa: E402
@@ -188,7 +189,8 @@ def score_episode(record, surface, transfer, budget, n_bins, n_surface):
     want = effect_magnitude(want_rigid, want_state, metric=metric.expand(n, -1, -1),
                             scale_rigid=scale_r.expand(n), scale_state=scale_s.expand(n))
     terms = interaction_reward(
-        effect_error=(got - want).abs(),
+        # 与环境同一个口径：本格的完成缺口，不是逐步差值（见 ei_reward.effect_deficit）。
+        effect_deficit=effect_deficit(got.cumsum(0), want.clamp_min(1e-9)),
         traction=traction, mass=mass, slip_speed=slip_cell,
         allowed=take("region/allowed").bool(),
         traction_lo=take("mech/traction_obj/lo"), traction_hi=take("mech/traction_obj/hi"),
@@ -315,6 +317,10 @@ def main() -> None:
               "-" * 88,
               "  怎么读：四项都是负的误差，0 最好。某一项若比别人小两个数量级，",
               "        它在合成 reward 里就等于不存在；若大两个数量级，别的项就等于不存在。",
+              "  ⚠️ effect 这一列在本工具里是**整条 episode 累计**算的，而环境里是**逐格**",
+              "     累计（每推进一格清零）。所以这一列偏乐观，只用来看量级配比，",
+              "     不能当作训练时 r_effect 的预期值。第二节的 AUC 不受影响——",
+              "     自评分与错配分用的是同一个口径。",
               ""]
     lines.append("      " + f"{'任务':<8s}{'effect':>12s}{'region':>12s}"
                  f"{'mode':>12s}{'mech':>12s}")
