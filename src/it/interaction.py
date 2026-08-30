@@ -397,8 +397,16 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
         pos, fn, active, len(bodies), inst_slip, dt)
     live_trust = trusted_body[body_has_data]
     pose_slip = _pose_slip(record.arrays, bodies, pos, normal_out, meta, dt)
-    slip = pose_slip if pose_slip is not None else patch_slip
-    slip_source = "pose_diff" if pose_slip is not None else "patch_drift"
+    if pose_slip is None:
+        # 拿不到物体的**世界系**位姿，就算不出正确的相对速度。**宁可炸**——
+        # 退回斑块位移会悄悄产出一份看起来正常、mode 却是错的记录（P-54）。
+        # 采集器必须把被操作物体的 root pose 记进 episode（一列常量也行）。
+        raise ValueError(
+            f"{meta.get('episode_id')}：拿不到被操作物体的世界位姿"
+            "（source/<物体>_pos_w 与 _quat_w）。没有它就算不出接触点的相对速度，"
+            "mode 字段无从谈起——见 P-54，采集器要把物体的 root pose 记下来")
+    slip = pose_slip
+    slip_source = "pose_diff"
     mu = np.full(n_slots, _default_friction(spec.obj))
     part_mu = _part_friction(spec.obj)
     mu_point = np.full((n_frames, n_slots), float(mu[0]))
@@ -549,6 +557,27 @@ def _pose_measured(arrays: dict, meta: dict) -> bool:
     return bool(op[2]) if op is not None else False
 
 
+#: 接触点到接触体原点的距离上限（m）。接触点就长在接触体表面上，几十毫米而已；
+#: 出现米级只有一个可能——两个坐标系混用了（P-54 实测 8~9 m）。
+#: **这条不变量是那一类 bug 的唯一硬防线**：它零征兆，逐帧数值全部正常，
+#: 接触部位分布、动力学一致性、单元测试也全部正常。
+MAX_LEVER_M = 0.5
+
+
+def _assert_lever(world: np.ndarray, pose: np.ndarray, rot: np.ndarray,
+                  key: str) -> None:
+    """接触点相对接触体原点的力臂必须物理合理，否则直接炸。"""
+    loc = np.einsum("tij,tkj->tki", rot[1:-1].transpose(0, 2, 1),
+                    world - pose[1:-1, None, :3])
+    d = np.linalg.norm(loc, axis=-1)
+    finite = d[np.isfinite(d) & (d > 0)]
+    if finite.size and float(np.median(finite)) > MAX_LEVER_M:
+        raise ValueError(
+            f"{key} 与接触点的力臂中位 {float(np.median(finite)):.3f} m，"
+            f"超过 {MAX_LEVER_M} m —— 接触点长在接触体表面上，不可能这么远。"
+            "几乎肯定是物体位姿与接触体位姿不在同一个坐标系（P-54）")
+
+
 def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
                normal_out: np.ndarray, meta: dict, dt: float) -> np.ndarray | None:
     """由**位姿差分**算接触点处的相对切向速度。(T, A) 或 None（缺位姿时）。
@@ -592,6 +621,7 @@ def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
     for b, key in enumerate(keys):
         pose = np.asarray(arrays[key], dtype=np.float64)
         rot = _quat_to_rot(pose[:, 3:7])
+        _assert_lever(world[1:-1], pose, rot, key)
         rel = (carried(rot, pose[:, :3]) - d_obj) / (2.0 * dt)
         # ⚠️ `rel` 算在**世界系**，而法向是**物体系**的——不转回来就等于拿两个
         # 不同坐标系的矢量做投影，切向分量整个是错的。这个 bug 是被
@@ -609,33 +639,26 @@ def _pose_slip(arrays: dict, bodies: list, pos: np.ndarray,
 
 
 def _object_pose(arrays: dict, meta: dict):
-    """被操作物体的世界位姿，返回 ``(位置, 旋转, 是不是量出来的)``。
+    """被操作物体的**世界系**位姿，返回 ``(位置, 旋转, 是不是量出来的)``。
 
-    ⚠️ **擦拭平面的位姿在 S3 数据里根本没记**（它是 kinematic、全程不动），
-    这里只能假定"在原点、姿态恒等"。对真实数据无害——静止物体的常量偏移在
-    位姿差分里会抵消——但它是一条**写死的假定**，必须让下游知道：
-    `plan/02` §7 第 1 条的场景旋转检查在这份数据上**没法如实进行**
-    （场景一转，平面也该跟着转，而记录里没有那个自由度）。
-    第三个返回值就是给那条检查看的，不许它在假定之上报"通过"。
+    ⚠️ **必须是世界系，而且必须与接触体位姿同一个系。** 这是 P-54 的教训：
+    接触体位姿（``source/*/root_pose``）是**含 env 原点偏移的世界坐标**，
+    而 ``object/state`` 对自由体记的是**减去 env 原点**的相对坐标
+    （`s3_source_probe.py` 的 ``obj_state()``）。两者混用会算出 8~9 m 的力臂，
+    姿态误差乘上去就是几十毫米的假位移——**而逐帧数值全部正常，零征兆**。
 
-    下一轮采集擦拭时应当把平面的 root pose 也记下来（一列常量，几乎零成本），
-    那条检查才能在主任务上真正跑起来。
+    所以这里只认 ``source/<物体>_pos_w`` / ``_quat_w`` 这一族世界系字段，
+    **绝不回退到 `object/state`**；拿不到就返回 None，让 `extract` 直接报错。
+    宁可炸，也不要在一个假定之上悄悄算出一份看起来正常的记录——
+    擦拭平面曾经走过一条"假定它在原点"的分支，那正是 P-54 的另一半。
     """
-    # 自由体的位姿本来就在 `object/state` 里（位置 + 四元数），优先用它——
-    # 那是模型可见字段，用不着走 source 追查字段。
-    st = arrays.get("object/state")
-    if st is not None and np.asarray(st).shape[-1] == 7:
-        st = np.asarray(st, dtype=np.float64)
-        return st[:, :3], _quat_to_rot(st[:, 3:7]), True
     for pk, qk in (("source/drawer_pos_w", "source/drawer_quat_w"),
                    ("source/disc_pos_w", "source/disc_quat_w"),
+                   ("source/board_pos_w", "source/board_quat_w"),
                    ("source/object_pos_w", "source/object_quat_w")):
         if pk in arrays and qk in arrays:
             return (np.asarray(arrays[pk], dtype=np.float64),
                     _quat_to_rot(np.asarray(arrays[qk], dtype=np.float64)), True)
-    if str(meta.get("task")) == "wipe":
-        n = len(arrays["phase"])
-        return (np.zeros((n, 3)), np.tile(np.eye(3), (n, 1, 1)), False)
     return None
 
 

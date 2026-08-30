@@ -316,6 +316,12 @@ class Buffers:
         self.src_tgt = z(2, n, 7)
         self.src_cmd = z(2, n, 6)
         self.tool_pose = z(n, 7)
+        #: 被操作物体（平面）的**世界位姿**。平面是 kinematic、全程不动，
+        #: 所以这是一列常量——但它必须被记下来：S4 要用"接触体位姿 − 物体位姿"
+        #: 算接触点的相对速度，两者必须在**同一个世界系**里。缺了它只能假定
+        #: 平面在原点，而板的位姿含 env 原点偏移（env 间距 2.2 m），
+        #: 混用会算出 8 m 的力臂、几十毫米的假滑移，**且零征兆**（P-54）。
+        self.board_pose = z(n, 7)
         self.foreign = z(3)
         self.dropped = z(3)
         self.rot_err = z(2, n)
@@ -650,6 +656,8 @@ def run_batch(scene, sim, camera, fam_of_env, rng, device, batch):
             buf.progress[frame] = buf.cleared[frame]
             buf.tool_pose[frame] = torch.cat(
                 [eraser.data.root_pos_w, eraser.data.root_quat_w], dim=-1)
+            buf.board_pose[frame] = torch.cat(
+                [board.data.root_pos_w, board.data.root_quat_w], dim=-1)
             ok = torch.ones(n, dtype=torch.bool, device=device)
             for k, pl in enumerate(plates):
                 buf.src_pose[frame, k] = torch.cat(
@@ -767,6 +775,10 @@ def to_arrays(buf: Buffers, e: int) -> dict[str, np.ndarray]:
         "object/dirt_grid": cpu(buf.dirt[:, e]),
         "object/dirt_cleared": cpu(buf.cleared[:, e]).astype(np.float32)[:, None],
         "source/tool_pose": cpu(buf.tool_pose[:, e]).astype(np.float32),
+        # 平面的世界位姿。它进 `source/*` 是因为**世界系的量一律进 source**
+        # （不进表示），但 S4 必须能读到它才能把接触体位姿转到物体系（P-54）。
+        "source/board_pos_w": cpu(buf.board_pose[:, e, :3]).astype(np.float32),
+        "source/board_quat_w": cpu(buf.board_pose[:, e, 3:7]).astype(np.float32),
     }
     for bi, nm in enumerate(("tool", "plate0", "plate1")):
         c = f"contact/{nm}"

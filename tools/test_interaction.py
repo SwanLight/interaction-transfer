@@ -42,6 +42,10 @@ CONTACT_X = 0.030
 FN = 5.0
 FT = 0.5
 SLIP = 0.010
+#: env 原点偏移。真实数据里 env 之间隔 2.2 m，物体与接触体的世界坐标都含这一项，
+#: 而 `object/state` 不含——P-54 就是这两套混用出来的。夹具必须照搬这个结构，
+#: 否则测不出那一类错。
+ENV_ORIGIN = np.array([7.2, -5.4, 0.0])
 
 
 def make_episode(*, bodies=("plate0", "plate1"), reported_normal_sign=+1.0,
@@ -67,13 +71,18 @@ def make_episode(*, bodies=("plate0", "plate1"), reported_normal_sign=+1.0,
         "valid_frame": np.ones(T, dtype=bool),
     }
 
-    # 物体位姿：沿 +Y 匀速平移 1 mm/帧，姿态不变
+    # 物体位姿：沿 +Y 匀速平移 1 mm/帧，姿态不变。
+    # ⚠️ **两套坐标要与真实数据一致**（P-54）：`object/state` 是**减去 env 原点**的
+    # 相对坐标，`source/object_*_w` 才是含 env 偏移的世界坐标；接触体位姿也是世界系。
+    # 夹具里如果只写 `object/state`，提取器会拿不到世界位姿而直接报错——那是有意的。
     pos = np.zeros((T, 3))
     pos[:, 1] = np.arange(T) * 1e-3
     quat = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (T, 1))
-    state = np.concatenate([pos @ rot.T, _quat_mul_left(rot, quat)], axis=1)
-    arrays["object/state"] = state.astype(np.float32)
-    arrays["source/object_pos_w"] = np.zeros((T, 3), dtype=np.float32)
+    rel = np.concatenate([pos @ rot.T, _quat_mul_left(rot, quat)], axis=1)
+    arrays["object/state"] = rel.astype(np.float32)              # env 相对
+    world = pos + ENV_ORIGIN                                     # 含 env 偏移
+    arrays["source/object_pos_w"] = (world @ rot.T).astype(np.float32)
+    arrays["source/object_quat_w"] = _quat_mul_left(rot, quat).astype(np.float32)
 
     outward = np.array([1.0, 0.0, 0.0])          # 方块 +X 面的外法向
     # 滑移时接触点沿 +Y 在 +X 面上移动（面在 Y 上有 ±22.5 mm，走得下）
@@ -112,7 +121,8 @@ def make_episode(*, bodies=("plate0", "plate1"), reported_normal_sign=+1.0,
         # 写一堆零等于告诉提取器"板一动没动"，滑移就无从谈起。
         # 物体沿 +Y 走 1 mm/帧；滑移时板再多走 SLIP，不滑时与物体同速。
         plate_y = np.arange(T) * (1e-3 + (SLIP / 50.0 if slide else 0.0))
-        plate_p = np.stack([np.full(T, CONTACT_X + 0.02), plate_y, np.zeros(T)], axis=1)
+        plate_p = (np.stack([np.full(T, CONTACT_X + 0.02), plate_y, np.zeros(T)], axis=1)
+                   + ENV_ORIGIN)          # 板也在世界系里，同样含 env 偏移
         arrays[f"source/{body}/root_pose"] = np.concatenate(
             [plate_p @ rot.T, _quat_mul_left(rot, quat)], axis=1).astype(np.float32)
 
@@ -279,6 +289,28 @@ class TestExtract(unittest.TestCase):
         self.assertFalse(bool(np.asarray(out.arrays["valid_s4"])[5]))
         self.assertTrue(bool(np.asarray(out.arrays["valid_frame"])[5]))
         self.assertTrue(bool(np.asarray(out.arrays["valid_s4"])[4]))
+
+    def test_mixed_frames_must_raise(self):
+        """物体位姿与接触体位姿不在同一个系时，必须**直接报错**（P-54）。
+
+        这是那一类 bug 的唯一硬防线：它零征兆——逐帧数值、接触部位分布、
+        动力学一致性、其余单元测试**全部正常**，只有力臂大得离谱。
+        """
+        rec = make_episode()
+        # 把物体的世界位姿换成 env 相对的（正是 P-54 里那半个错）
+        rec.arrays["source/object_pos_w"] = np.asarray(
+            rec.arrays["object/state"])[:, :3].copy()
+        with self.assertRaises(ValueError) as cm:
+            extract(rec)
+        self.assertIn("坐标系", str(cm.exception))
+
+    def test_missing_object_pose_must_raise(self):
+        """拿不到物体的世界位姿时宁可炸，也不许假定它在原点（P-54 的另一半）。"""
+        rec = make_episode()
+        for k in ("source/object_pos_w", "source/object_quat_w"):
+            rec.arrays.pop(k)
+        with self.assertRaises((ValueError, KeyError, TypeError)):
+            extract(rec)
 
     def test_region_lands_on_the_right_part(self):
         """接触点必须归到 +X 面上，不是别的面。"""
