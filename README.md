@@ -13,6 +13,7 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 | 目录 | 内容 |
 |---|---|
 | `HANDOFF.md` | **接手先读**：当前状态、服务器用法、已知的坑 |
+| `log/takeover-audit-2026-08-30.md` | Codex 接管审计：idea 对齐、证据边界、S5 前阻塞项与文献复核 |
 | `plan/` | 实验计划。**唯一权威**，按 `00` → `07` 顺序读 |
 | `log/` | 工程日志：进度、踩坑、技术决策 |
 | `src/it/` | 资产生成、控制器、接触工具、任务环境 |
@@ -25,17 +26,25 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 > **接手这个项目？先读 [`HANDOFF.md`](HANDOFF.md)** —— 当前进度、
 > 服务器怎么用、哪些坑会浪费你半天，都在那里。
 
+随后读 [`log/takeover-audit-2026-08-30.md`](log/takeover-audit-2026-08-30.md)：它记录
+本轮接管时对原始 idea、现有证据和 S5 架构契约的完整复核。
+
 1. [`plan/00-positioning.md`](plan/00-positioning.md) — 定位、相对 KITE/ART-Glove/CHORD 的差异、可声称的边界
-2. [`plan/README.md`](plan/README.md) — 系统结构、两个执行器、五个信息条件、步骤与闸门
-3. [`log/decisions.md`](log/decisions.md) — 39 条技术决策及其被否决的备选
+2. [`plan/README.md`](plan/README.md) — 系统结构、两个执行器、六个信息条件、步骤与闸门
+3. [`log/decisions.md`](log/decisions.md) — append-only 技术决策及其被否决的备选
 
-## 本轮的核心主张
+## 核心系统与本轮验证
 
-> 执行器是**任务无关**的：在任务 A、B 的交互分布上训练的执行器，可对**留出任务 C** 的交互规格零样本执行，不需要 C 的 reward、不需要微调。
+> 多位采集者为同一任务产生不同示教，上游把它们形成物体中心 interaction；每种
+> embodiment 各自训练 decoder/executor，把同一 interaction 解码成自己的 action，
+> 再由触觉或其他反馈闭环稳定执行。
 
-对应 `plan/05` 实验二，Gate E。这是主实验，其余实验为支撑。
+本轮先验证 interaction 是否能跨示教者、跨执行器传递，以及 richer physical
+interaction 是否优于 effect-only / KITE-style geometry-only。留出任务 Gate E 是对
+executor 泛化能力的强测试，不是这套传递协议本身的定义。
 
-明确**不**声称的内容见 `plan/00-positioning.md` §4——尤其：不声称任务泛化（那是上游 interaction model 的事），不声称零样本控制未见形态。
+明确**不**声称的内容见 `plan/00-positioning.md` §4——尤其：不把上游的新任务生成
+能力混进传递协议，也不声称零样本控制未训练过的新形态。
 
 ## 环境
 

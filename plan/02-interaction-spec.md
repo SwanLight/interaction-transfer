@@ -102,13 +102,27 @@ PointNet 吃 4096 点 × 2048 并行环境 × 50 Hz 很可能成为训练瓶颈�
 
 ### 3.5 Mechanics
 
-同时保留三种候选表示，用实验决定哪种更合适：
+Oracle Record 可以保留三种候选量，但**只有定长、无任务语义的通道能进入 E-I**：
 
-1. **Exact 6D wrench**：source 实际产生的合力和合力矩，只作为强信息对照（C5）；
-2. **Task-relevant generalized force**：旋钮为绕轴力矩，抽屉为沿导轨力，擦拭为法向压力和切向作用；
-3. **Required range**：任务需要的方向和允许幅值范围（C4）。
+1. **Exact source realization**：source 实际产生的表面 traction field 与合力/合力矩，
+   只作为强信息对照（C5）；
+2. **Task-relevant generalized force**：旋钮绕轴力矩、抽屉沿导轨力、擦拭法向压力
+   与切向作用。它维度和语义随任务变化，**只允许做标签构造后的诊断投影与评估，
+   不得进入 Functional Envelope、E-I 观测或 E-I reward**；
+3. **Task-agnostic traction constraints（C4）**：把每个 object-frame contact force 按
+   同一部件上的邻域核散射到冻结表面点，核权重归一化以严格守恒合力，再除以各点代表
+   面积得到 traction density。不能把单个 PhysX 接触点直接塞给最近点再除面积——那会
+   随采样分辨率产生任意尖峰。核带宽只由表面 pitch / 拟传感 pitch 决定，不按任务调；
+   积分 traction 的合力必须逐帧等于原始合力，合力矩与 raw contact wrench 的误差必须
+   设硬阈值并落报告。每个 phase / region 上记录法向 traction 的稳健区间、切向
+   traction 的方向锥与幅值区间。此后不再按“抽屉/旋钮/擦拭”选择投影轴。
 
-Exact wrench 不能直接被宣布为最终 functional representation。C4 vs C5 是本工作的最小性结论所在。
+Exact source realization 不能直接被宣布为最终 functional representation。C4 vs C5
+仍检验“允许范围是否足够、复制 source 是否多余”，但这不是相对 CHORD 的直接差异。
+
+实现前必须冻结一份 `FunctionalEnvelope` schema 和 E-I **exact allowlist**。S4 Record
+里的 `mech/generalized`、任务原生 `effect/current|future`、`phase`、`progress` 即使为
+标签/诊断而保留，也必须在 E-I dataloader 入口硬报错，不能只靠调用者自觉不取。
 
 ### 3.6 Temporal Phase
 
@@ -139,24 +153,51 @@ envelope 本身由上游产生，这不构成循环论证（`05` §3.3）。
 - 共同的目标 effect；
 - 可接受的 interaction region 集合或概率热图；
 - 必须满足的 mode 约束；
-- task-relevant mechanics 的方向和稳健范围；
+- task-agnostic local traction 的方向锥和稳健范围；
 - 允许变化的时长和 phase 边界。
 
-它是**约束集合**，不是所有轨迹的数值平均。
+第一版把它严格称为**多示教 interaction 统计表征**：它描述同一任务示教中反复出现的
+effect、接触与受力规律，不把这些统计量冒充任务的必要且充分条件。成功数据只能说明
+“这些 interaction 曾经成功”，不能排除未被采集的替代实现。
 
-### 4.1 范围如何得到：分位数回归 + conformal 校准
+### 4.0 第一版：直接的多示教统计传递
+
+先按归一化 interaction progress 对齐示教。每条 episode 在每个时间格内先汇总，
+然后跨 episode 等权统计，避免长轨迹或高采样率采集者获得更大权重。输出包括：
+
+- 同一时间格的 effect 中位数与 10/90 分位数；
+- 物体表面上的接触质量分布、engage 方向和 mode 概率；
+- 在固定低分辨率 surface cells 上守恒聚合的 object-frame traction 与局部 moment
+  density；二者积分必须同时恢复原始合力与合力矩；
+- 每个时间格与未来窗口的 episode support count。
+
+这些字段组成同一条按时间索引的 command，不从各边缘区间任意拼出新 candidate。
+如果真实数据显示明显多峰，先报告多峰与平均化失败，再比较聚类/条件模型；**不能在
+没有结果时预先规定“联合分量并集”就是本工作的核心算法**。失败与 near-success
+不混进成功示教统计，只作为独立诊断数据。
+
+### 4.1 统计范围与后续校准的边界
 
 初版把"稳健范围"留作描述性说法，没有可操作定义，于是"必须覆盖成功示教但不过度宽泛"无法判定。落地做法：
 
-**Mechanics 范围**：用 **pinball loss** 直接回归 τ = 0.1 / 0.9 分位数，得到下界和上界。不做"均值 ± k·标准差"——那个假设了对称分布，而接触力的分布通常是单侧截断的。
+第一版的 10/90 分位数只是**描述性统计**，没有有限样本 coverage 保证。先用冻结
+测试集测 coverage、width、多策略差异与下游控制，确认表征有用之后，才决定是否需要
+CQR、混合模型或其他校准；不得先写一个复杂统计名词再假定它就是算法创新。
 
-**Region 允许集合**：模型输出热图后，阈值由 **conformal prediction** 在校准集上标定，使 envelope 具有形式保证：
+**Region 允许集合**：模型输出热图后，对每个校准 episode 计算“使至少 95% 法向力
+加权接触质量落入允许集合所需的最小阈值”作为 nonconformity score，再用 split
+conformal 的有限样本分位数标定。可声称的保证严格限定为：
 
-> 在校准分布下，至少 90% 的成功示教其实际接触区域完全落在 envelope 的允许集合内。
+> 在 exchangeability 假设与该校准分布下，至少 90% 的成功 episode 有至少 95% 的
+> 法向力加权接触质量落在 envelope 允许区域内。
+
+不能写“实际接触区域完全落在内”：一个极小的碰撞噪点就会把“完全”击穿或迫使
+区域无限变宽。若后续真的使用 split conformal，可声称的也只是交换性假设下的
+marginal coverage，不是任意新任务、新物理或每个 subgroup 的 conditional guarantee。
 
 **为什么值得这么做**：这把 `03` §9 那条模糊的通过条件变成两个可测量的数——**coverage**（envelope 覆盖了多少比例的成功示教）与 **width**（envelope 有多宽）。目标函数明确：在 coverage ≥ 90% 的约束下最小化 width。过宽的 envelope 会在 coverage 上通过但在 width 上暴露，无处可藏。
 
-校准集必须独立于训练集和确认集，单独划出。
+校准集继续独立划出，但在第一版 descriptive artifact 中不冒充已完成校准。
 
 ## 5. 时间同步
 
@@ -177,8 +218,8 @@ source 和 target 不能按绝对墙上时钟硬同步。executor 根据自己�
 | **C1** +区域（+Region） | 再给允许交互的表面区域 | |
 | **C2** +方向（+Direction） | 再给 engage 方向 | **≈ KITE 的几何接触意图** |
 | **C3** +模式（+Mode） | 再给接触/滑动约束 | |
-| **C4** 完整功能交互（Functional） | 再给 task-relevant mechanics 方向与范围 | **本工作提出的表示** |
-| **C5** 精确示教力（Exact-Wrench） | 给 source 精确 6D wrench | 非最小强基线 |
+| **C4** 完整功能交互（Functional） | 再给 task-agnostic local traction 方向锥与范围 | **本工作提出的表示** |
+| **C5** 精确 source 受力（Exact-Realization） | 给 source 的精确 traction/wrench realization | 非最小强基线 |
 
 C2 为本版本新增。它是本框架内对 KITE 几何意图的重新实现，论文中表述为 "KITE-style geometric contact intent, reimplemented within our framework"，**不表述为 KITE**——理由见 `00-positioning.md` §2.1。
 
@@ -211,11 +252,20 @@ C2 为本版本新增。它是本框架内对 KITE 几何意图的重新实现�
 2. **source 的动作与身份**（指令、目标位姿、本体速度、板编号、策略家族）
    不进入任何模型输出；**接触面与物体的测量位姿不在此列**，见 §6.1；
 3. 改变 source 板数量后，表示维度不变；
-4. source 策略分类器应能从原始动作识别策略，但不应轻易从 Functional Envelope 识别策略；
+4. source 策略分类器应能从原始动作识别策略，但不应轻易从 Functional Envelope 识别策略。
+   ⚠️ **落地时要改写这一条的操作定义**：一个任务只产出**一份**聚合 artifact，上面没有
+   可分类的标签，"从 envelope 分类策略"无从谈起。真正的风险是**聚合塌到某一族上**——
+   整体 coverage 好看而其余族被系统性排除。因此实际检验的是
+   **按 strategy family 分开的 episode 级 coverage 落差**，外加 pooled envelope 与各族
+   自建 envelope 的距离谱（`tools/s5_eval_envelope.py` 第 3、4 项）；
 5. target executor 看不到 source 身份；
 6. 物理参数不直接写入表示，只能通过实际 interaction 体现；
 7. 同一 Functional Envelope 不能包含某个执行器专属 joint 或 contact 编号；
-8. **擦拭的 envelope 不得包含工具的存在与否、工具位姿或工具几何**——两种实现必须产生可互换的 envelope。检验方式：把实现 (a) 的 envelope 喂给只会实现 (b) 的垫头杆，反之亦然；
+8. **擦拭的 envelope 不得包含工具的存在与否、工具位姿或工具几何**——两种实现必须产生可互换的 envelope。
+   S5 能做到的是**必要条件**：payload 里没有工具/实现相关字段，且只用 `tool_wipe` 与
+   只用 `direct_wipe` 各建的 envelope 在同一条命令轴上足够接近
+   （`tools/s5_eval_envelope.py` 第 6 项）。**充分条件仍要 S6**：把实现 (a) 的 envelope
+   喂给只会实现 (b) 的垫头杆，反之亦然。两者不得混称；
 9. **region 可推导性检查（新增，重要）**：训练一个只看 `effect + 物体点云` 的探针网络去预测 oracle region。若探针准确率接近直接给 region 的上限，说明该任务上 region 在信息论上是冗余的，**该任务不能用于检验 region 的必要性**，应如实报告而非调参掩盖。
 
 第 9 条是本版本新增。初版的泄漏清单只查"表示里有没有混进 source 信息"，没有查"表示里的字段是否互相可推导"。对刚性单自由度铰接物体，后者是真实存在的问题（见 `01` §3.1）。
@@ -236,6 +286,21 @@ C2 为本版本新增。它是本框架内对 KITE 几何意图的重新实现�
 
 **2b 与 2c 是一对**：单有 2b，"什么都不读"也能通过（那正是 D-49 初版守错规矩的
 下场）；单有 2c，读了指令位姿也能通过。
+
+### 7.1.1 第 4、8 条在 S5 的落地状态（2026-08-30）
+
+S4 阶段这两条如实标了 DEFER，因为它们要 envelope。S5 有了 artifact 之后，
+`tools/s5_eval_envelope.py` 把八项检查逐项收退出码（P-55），其中：
+
+| 项 | 对应 §7 | S5 能给的 | 还欠什么 |
+|---|---|---|---|
+| 3 策略子群 coverage | 第 4 条 | 各族 episode 级 coverage 与落差 | 下游成功率才能判"落差多大算塌陷" |
+| 4 family envelope 距离 | 第 4 条 | pooled 与各族 envelope 的距离谱 | 同上，S5 只报数 |
+| 6 跨实现可互换 | 第 8 条 | payload 无工具字段 + 两实现 envelope 距离 | 交叉喂给另一形态，要 S6 |
+| 7a/7b 接口不变量 | 第 3、7 条 | 维度不随 episode 子集/接触体数量变 | 7b 需要 `n_bodies` 真的不同的数据 |
+| 8 跨几何 coverage | — | 如实报告被几何变体排除的 episode 数 | 表面对应表，本步不做 |
+
+**没有一项可以被引用成"第 4/8 条通过"**——它们给的是必要条件与诊断量。
 
 ### 7.2 第 9 条实测：`family` 是家族级参照，不是上界
 

@@ -26,9 +26,9 @@
 
 - desired与actual region热图；
 - 各表面点contact mode；
-- task-relevant force/torque方向和幅值；
+- task-agnostic surface traction 方向和幅值；task-relevant force/torque 只作诊断投影；
 - phase与progress对齐；
-- exact wrench与generalized force对比。
+- exact source traction/wrench realization 与 task-agnostic traction range 对比。
 
 tracking指标与task success分开报告。成功但tracking差，说明executor可能绕过了interaction；tracking好但任务失败，说明interaction定义可能不充分。
 
@@ -36,16 +36,17 @@ tracking指标与task success分开报告。成功但tracking差，说明executo
 
 按 `03` §8.1，每次评估必须同时报两个数，缺一不可：
 
-- **coverage**：实际接触/受力完全落在 envelope 内的成功示教比例，目标 ≥90%；
+- **coverage**：满足预注册 episode-level joint score 的成功示教比例，目标 ≥90%；
+  region 子指标要求至少 95% 法向力加权接触质量落入允许集合；
 - **width**：region 允许集合占物体表面积的比例；mechanics 上下界的相对宽度。
 
 只报 coverage 会让过宽的 envelope 蒙混过关；只报 width 会让过窄的 envelope 看起来精确。
 
 ### 2.4 E-I 专属指标（新增）
 
-- **留出任务零样本成功率**（主指标，见 `05` 实验二）；
-- **可行性评价器 AUC**，以及"有评价器 vs 允许集合内随机取"的下游成功率差；
-- **评价器高分区域与 empirical capability map 的重合度**——两者应互相印证（`04` §12），不重合处必须查明原因；
+- 留出任务零样本成功率（executor 的强泛化指标，见 `05` 实验二）；
+- 训练/测试 interaction 的最近邻距离、局部密度、tracking error 与任务成功率；
+- 若启用可选 executability evaluator，另报 AUC、calibration 和实际下游增益；
 - 训练指令 vs 留出指令的跟踪质量差距。
 
 ### 2.5 扰动恢复指标（新增，对应 `05` 实验四）
@@ -111,7 +112,7 @@ tracking指标与task success分开报告。成功但tracking差，说明executo
 - oracle shared envelope（含 conformal 阈值后的允许集合边界）；
 - model-predicted envelope；
 - target actual contact；
-- **可行性评价器在该 envelope 上的打分场**（`04` §5.3），用于看"允许集合里执行器实际选了哪一块"。
+- target executor 的实际接触与 command 误差场；若启用可选 evaluator，再单独叠加其分数。
 
 不要只画柱状图。分辨率按 `02` §2 的 S4.5 结论，可视化用高分辨率版本。
 
@@ -172,7 +173,10 @@ tracking指标与task success分开报告。成功但tracking差，说明executo
 
 如果 Gate A–F 通过，可以声称：
 
-> 在受控的刚性/工具操作任务中，从多种 source 策略学习出的 object-centric functional envelope，比仅描述 object effect、也比仅描述几何接触意图，更能支持接触主导任务；且一个**任务无关**的执行器可以在从未见过该任务的情况下，仅凭这份规格零样本实现它，多种形态差异明显的末端执行器均如此。
+> 在受控的刚性/工具操作任务中，从多种 source 策略学习出的 object-centric interaction，
+> 比仅描述 object effect、也比仅描述几何接触意图，更能支持接触主导任务；同一份
+> interaction 可由多种形态各自训练的 executor 用不同动作实现。若 Gate E 也通过，
+> 才追加“当前 executor/data 在留出任务上实现零样本组合泛化”。
 
 若 Gate D' 亦通过，可追加：
 
@@ -185,4 +189,3 @@ tracking指标与task success分开报告。成功但tracking差，说明executo
 - 上游 interaction model 能泛化到新任务/新物体；
 - 已实现**未见形态**零样本泛化（本轮每个形态各训一个执行器）；
 - exact source force 就是最终答案。
-

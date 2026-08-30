@@ -1,0 +1,19 @@
+S5 envelope 评估 — drawer-drawer-nominal-train
+artifact  out/s5_transfer_smoke/drawer/drawer-drawer-nominal-train.npz
+manifest  /Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/drawer/manifest.json  (s4_s3_drawer_source)
+episodes  train 12
+命令轴    phase budget [2, 3, 25, 2]，32 格
+==============================================================================
+[DEFER] 1a region coverage: 没有留出划分可评估
+[PASS] 2a region width: 允许区域面积占物体表面积 1.49%（越小越好，与 1a 并读）
+[DEFER] 1b mechanics band（只报数，不设门槛）: 10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；
+[PASS] 2b mechanics width: traction 带相对宽度中位数 2.215
+[DEFER] 3 策略子群 coverage: 留出划分里只有 0 个策略族，无法比较落差
+[DEFER] 4 family envelope 距离: hook_both 0.331；pinch_center 0.450；pinch_offset 0.227；single_finger 0.421；落差 0.224（判据要 S6 的下游成功率，现在只报数）
+[DEFER] 5 多峰性: pooled→episode 0.435 vs episode→最近邻 0.145（比值 3.01）；engage 集中度中位数 0.984；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数
+[DEFER] 6 跨实现可互换: 只有 1 种实现有 ≥2 条训练 episode（非擦拭任务正常）
+[PASS] 7a 结构不变量: 12 条对半分，30 个数组维度全部一致
+[DEFER] 7b 接触体数量不变量: 训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据
+==============================================================================
+PASS 3  FAIL 0  DEFER 7
+⚠️ 判据是退出码，不是这份文件的开头（P-55）。DEFER 的项目不得引用成通过。

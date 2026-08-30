@@ -1,0 +1,105 @@
+{
+  "artifact": "wipe-board-nominal-train.npz",
+  "artifact_sha256": "144288193d0938e0b11d5c45aad95b4a393c2446aff32e047d3ccdb820bb2185",
+  "manifest": "/Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/wipe/manifest.json",
+  "manifest_dataset": "s4_s3_wipe_source",
+  "meta": {
+    "aggregation": {
+      "alignment": "phase_segmented_activity_bins_offline_only",
+      "cell_statistics": "contact_conditioned_over_contacting_episodes",
+      "claim": "descriptive_demonstration_statistics",
+      "episode_weighting": "equal_after_within_episode_bin_summary",
+      "mechanics": "per-cell contact-conditioned traction + local moment density; the 6D wrench identity holds per episode before aggregation and is NOT preserved by cross-episode medians/quantiles",
+      "n_bins": 32,
+      "phase_budget": [
+        2,
+        4,
+        23,
+        3
+      ],
+      "phase_floor": 2,
+      "quantiles": [
+        0.1,
+        0.9
+      ]
+    },
+    "diagnostics": {
+      "cell_support_median": 5.0,
+      "cell_support_under_half_fraction": 0.673202614379085,
+      "dropped_force_mass_fraction_max": 0.0,
+      "empty_bin_fraction_max": 0.0,
+      "episode_valid_frame_fraction": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "projection_residual_force_N": 8.020270986815218e-06,
+      "projection_residual_torque_Nm": 4.517467995854836e-07
+    },
+    "episode_ids": [
+      "wipe-tool_center-b00e000",
+      "wipe-tool_center-b00e006",
+      "wipe-tool_center-b00e012",
+      "wipe-tool_heavy_slow-b00e003",
+      "wipe-tool_heavy_slow-b00e027",
+      "wipe-tool_heavy_slow-b00e033",
+      "wipe-tool_light_fast-b00e004",
+      "wipe-tool_light_fast-b00e016",
+      "wipe-tool_light_fast-b00e040",
+      "wipe-tool_offset-b00e001",
+      "wipe-tool_offset-b00e019",
+      "wipe-tool_offset-b00e037"
+    ],
+    "geometry_variant": "nominal",
+    "implementation_counts": {
+      "with_tool": 12
+    },
+    "num_episodes": 12,
+    "object": "board",
+    "schema_version": "interaction-transfer-v2",
+    "strategy_family_counts": {
+      "tool_center": 3,
+      "tool_heavy_slow": 3,
+      "tool_light_fast": 3,
+      "tool_offset": 3
+    },
+    "surface": {
+      "command_n_points": 256,
+      "parts": [
+        "work_face",
+        "side",
+        "back"
+      ],
+      "sha256": "abe5a6edbe41a92ec25af3455d590710eb8f756889b2c58960b576a5fefcce2b",
+      "source_n_points": 16384,
+      "total_area_m2": 0.6439999938011169
+    },
+    "task": "wipe",
+    "transfer_id": "wipe-board-nominal-train"
+  },
+  "source_split": "train",
+  "source_surface_sha256": "abe5a6edbe41a92ec25af3455d590710eb8f756889b2c58960b576a5fefcce2b",
+  "support": {
+    "cell_support_median": 5.0,
+    "cell_support_under_half_fraction": 0.673202614379085,
+    "empty_bins": 0,
+    "max_episodes_per_bin": 12,
+    "min_episodes_per_bin": 12,
+    "occupied_cells": 459,
+    "phase_budget": [
+      2,
+      4,
+      23,
+      3
+    ]
+  }
+}

@@ -6,12 +6,12 @@
 |---|---|---|---|---|:---:|
 | 零 | 分辨率与位姿噪声敏感度 | E-T (C4) | 表示分辨率该定多少；物体位姿精度要求 | — | 部分 |
 | 一 | 信息条件对照 C0–C5 | E-T | 哪类信息有增量价值；精确力是否冗余 | Gate D | 是 |
-| **二** | **留出任务零样本** | **E-I** | **执行器是否任务无关** | **Gate E** | 是 |
+| **二** | **留出任务零样本** | **E-I** | **当前 executor/data 的任务组合泛化边界** | **Gate E** | 强扩展主张 |
 | 三 | Cross-embodiment | E-I | 同一 envelope 能否被多形态实现 | Gate F | 否 |
 | 四 | 扰动恢复 | E-T + E-I | 交互信息在偏离时是否提供纠正方向 | Gate D' | **否** |
 | 五 | Matched counterfactual | E-T + E-I | executor 是否真的在用某个字段 | Gate C | 否 |
 | 六 | Shared Structure | 两者 | 模型 envelope 能否替代 oracle envelope | Gate C | 否 |
-| **七** | **传感可观测性（S4.6）** | **S4 记录** | **装置能测的子集够不够重建交互规格** | 无硬闸门 | **否** |
+| **七** | **仿真传感可观测性（S4.6）** | **S4 记录** | **给定观测模型时，拟测量子集能以何种误差重建交互规格** | 无硬闸门 | **否** |
 
 实验三、四、五、六都是**纯评估**，在已有 checkpoint 上跑，代价接近零。这是把它们全部排进计划的理由。
 
@@ -21,8 +21,8 @@
 
 **为什么必须有**：idea 的核心是"不采人手动作，只采各接触面的位姿 + 面上的触觉"。
 在本实验之前，整轮计划**没有一处碰这句话**——`00` §4 把它整个推给 Phase II，
-于是留下的内容与 CHORD（object-centric contact wrench）、接触中心抓取迁移
-（`00` §2.4）高度重叠。**属于本方案自己的那一条主张必须自己给证据。**
+于是留下的内容与 CHORD（object-centric contact wrench）、跨手 force-position transfer
+（`00` §2.4）高度重叠。**属于本方案自己的那一条前提必须先给可观测性证据。**
 
 **做法**（`tools/s4_sensing.py`，纯离线、不需新训练）：拿已验收的 S4 Oracle
 Record 当真值，模拟装置的观测模型再重建一遍 region / mode / mechanics：
@@ -40,6 +40,11 @@ Record 当真值，模拟装置的观测模型再重建一遍 region / mode / me
 
 **按 `00` §2.5 的既有结论，结论必须按执行器形态分别陈述**，不得写成一个
 全局数字。
+
+**证据边界**：本实验只比较“由模拟装置观测重建的字段”与 oracle 字段，尚未把
+重建字段送入 E-I，也没有真实装置、真实配准误差或人体数据。它只能叫 simulated
+observability。S6 checkpoint 出来后必须补“oracle command vs reconstructed command”
+冻结策略评估，才可讨论下游 control sufficiency；真机 sensor sufficiency 仍是 Phase II。
 
 ---
 
@@ -104,8 +109,8 @@ S5 用的是热图与部件占比，对绝对点数不敏感，不构成阻塞�
 | C1 +区域 | 检验 interaction region 的增量价值 |
 | C2 +engage 方向 | **≈ KITE 几何接触意图**，本工作的直接对照点 |
 | C3 +接触模式 | 检验 stick/slide/separate |
-| C4 完整功能交互 | 加入 task-relevant mechanics 范围 |
-| C5 精确示教力 | 检验复制 source exact wrench 是否必要或过度 |
+| C4 完整功能交互 | 加入 task-agnostic local traction 的方向锥与范围 |
+| C5 精确 source 受力 | 检验复制 source exact traction/wrench realization 是否必要或过度 |
 
 C1→C2→C4 的两段增量，就是本工作相对 KITE 的差值。这两段若都不显著，`00-positioning.md` §5 的第 3 条声称作废。
 
@@ -175,13 +180,13 @@ effect 预测 region 热图的可解释方差为 **旋钮 0.687 / 擦拭 0.120 /
 
 ---
 
-## 3. 实验二：留出任务零样本（E-I）—— 主实验
+## 3. 实验二：留出任务零样本（E-I）—— 强泛化实验
 
 ### 3.1 协议
 
 按 `04` §5.4 的划分。对每个执行器：
 
-1. 冻结其 E-I checkpoint 和可行性评价器；
+1. 冻结其 E-I checkpoint；若另做可选 executability evaluator，也同时冻结并单列；
 2. 取**留出任务**确认集的 envelope（由 oracle 统计程序或 Shared Structure Model 产生）；
 3. 直接执行。**不给 reward，不微调，不重训，不改 envelope。**
 
@@ -191,7 +196,7 @@ effect 预测 region 热图的可解释方差为 **旋钮 0.687 / 擦拭 0.120 /
 |---|---|
 | 零样本成功率 | 主指标 |
 | 相对 E-T 同任务 C4 的差距 | E-T 在该任务上是训过的，这是上限参考而非公平对手 |
-| 有无可行性评价器的差异 | 检验 §5.3 那一层是否真的有用 |
+| 可选 evaluator 的有/无差异 | 仅在启用该增强时报告，不属于主协议必需项 |
 | 跟踪质量 vs 任务成功 | 分开报告，见 `06` §2.2 |
 
 ### 3.3 为什么这个实验没有循环论证
@@ -202,7 +207,10 @@ E-I 用交互跟踪 reward 训练，看起来"给了交互信息当然能跟踪�
 
 ### 3.4 失败时怎么办
 
-若留出任务差而训练任务好：扩 `03` §2.4 的预训练物体集，**不得把留出任务加进训练**。后者会立刻让数字好看，也会立刻让主张归零。若扩了两轮仍不成立，如实报告 Gate E 未通过。
+若留出任务差而训练任务好：先如实报告当前 executor/data 的泛化边界。若预注册协议
+允许扩 `03` §2.4，仍不得把留出任务加进原训练后倒写结果。Gate E 未通过会阻止
+“未见任务零样本”这条强声称，但**不会单独否定已采集任务的 interaction transfer**；
+后者由 Gate D/F 与实际跨形态执行判断。
 
 ---
 
@@ -220,7 +228,8 @@ E-I 用交互跟踪 reward 训练，看起来"给了交互信息当然能跟踪�
 
 ### 4.2 可行性适配（可选、单独报告）
 
-若允许 target 在 envelope 的"允许区域/允许力范围"内选择具体实现，这仍是同一 functional specification——这正是 `04` §5.3 可行性评价器做的事。
+若允许 target 在 interaction 的统计范围内形成自己的动作与接触实现，这正是各自 E-I
+decoder 应学习的事情；不要求额外显式求交。可选 evaluator 只能作为独立增强报告。
 
 如果直接把 region、mode 或 wrench 替换成 envelope **之外**的值，则属于 embodiment-specific adaptation，不能再称为同一 interaction，必须单独成节报告。
 
@@ -304,9 +313,12 @@ Shared Structure 成立需要同时满足：
 
 ## 8. Mechanics 最小化比较
 
-特别比较：exact source 6D wrench（C5）/ task-relevant generalized force / 只给方向 / 给允许范围（C4）。
+特别比较：exact source traction/wrench realization（C5）/ task-relevant generalized
+force（**仅离线诊断，不进 E-I**）/ 只给方向 / task-agnostic local traction 允许范围（C4）。
 
-**若 C4 与 C5 相当，说明 source 的其他 6D 分量是形态特异的冗余，应从 functional representation 中删除。** 这是本工作可发表的最小性结论，也是相对 CHORD 的差异点（见 `00-positioning.md` §2.3）。
+**若 C4 与 C5 相当，说明复制 source 的精确受力实现对本 benchmark 是冗余的。**
+这是本项目内部的最小性结论；CHORD 自身使用带容差的 wrench-space support function，
+所以不得再把本对照表述为“CHORD exact wrench vs our range”（见 `00` §2.3）。
 
 ---
 
@@ -361,11 +373,18 @@ C4 输入下，可行 task×executor 组合在冻结测试集 ≥80%。否则先
 
 实验四中，C4 相对 C0 的恢复率差距显著大于无扰动时的成功率差距。这一条不通过不阻断后续实验，但会削弱硬件必要性的论证，须在论文限制一节明确写出。
 
-### Gate E：执行器任务无关（**主闸门**）
+### Gate E：executor 留出任务泛化（强扩展闸门）
 
 至少两个执行器在**留出任务**上零样本成功率 ≥60%，且其中至少一个是垫头杆或钩杆这类 0 自由度形态。
 
-不通过 → 主张不成立，退回 `04` §5.2 检查指令多样性，或如实降级为"E-T 的表示消融"这一较弱的工作。
+60% 是预注册的项目推进阈值，不是统计证明本身。每个结果还必须报告跨 seed bootstrap
+置信区间，并显著优于最近训练 command、C0/effect-only 等可比基线；同时按
+`03` §2.4.6 报成功率对最近邻距离、kNN 密度和未见轴组合的曲线。
+若只在高密度/近邻区域成功，结论降级为“训练分布内组合泛化”，不能写成任意规格执行。
+
+不通过 → 删除“未见任务零样本”声称，并报告与训练 interaction 的距离/密度关系；
+不能据此把已经通过的跨采集者、跨形态 transfer 降格成不存在，也不能偷偷加入留出
+任务数据后继续叫零样本。
 
 ### Gate F：跨形态成立
 

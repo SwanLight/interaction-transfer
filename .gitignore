@@ -54,4 +54,7 @@ out/*.mp4
 out/*.png
 out/*.html
 
+# S5 本地 smoke 下载的真实 S4 输入（服务器数据的临时子集，不是项目产物）
+out/s5_smoke_inputs/
+
 .git_sha

@@ -36,8 +36,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -140,6 +143,109 @@ class Surface:
             parent=self.parent, sha256=self.sha256, solids=self.solids,
             rot=rot if self.rot is None else rot @ self.rot,
         )
+
+
+SURFACE_SCHEMA_VERSION = "frozen-surface-v1"
+
+
+def _surface_sha256(obj: str, geom_tag: str, points: np.ndarray,
+                    normals: np.ndarray, part: np.ndarray) -> str:
+    """与历史 S4 surface hash 完全相同的摘要算法。"""
+    digest = hashlib.sha256()
+    digest.update(f"{obj}|{geom_tag}|{len(points)}".encode("utf-8"))
+    for arr in (np.round(points, 9), np.round(normals, 9)):
+        digest.update(np.ascontiguousarray(arr, dtype=np.float64).tobytes())
+    digest.update(np.ascontiguousarray(part, dtype=np.int8).tobytes())
+    return digest.hexdigest()
+
+
+def _surface_content_sha256(points: np.ndarray, normals: np.ndarray, part: np.ndarray,
+                            area: np.ndarray, parent: dict[int, np.ndarray]) -> str:
+    """对实际落盘数组做可重算的完整摘要（历史 surface.sha256 做不到这一点）。"""
+    digest = hashlib.sha256()
+    for arr in (points, normals, part, area):
+        value = np.asarray(arr)
+        digest.update(str(value.dtype).encode("ascii"))
+        digest.update(np.asarray(value.shape, dtype=np.int64).tobytes())
+        digest.update(np.ascontiguousarray(value).tobytes())
+    for level, value in sorted(parent.items()):
+        digest.update(str(level).encode("ascii"))
+        digest.update(np.ascontiguousarray(value).tobytes())
+    return digest.hexdigest()
+
+
+def save_surface(surface: Surface, path: str | os.PathLike[str]) -> str:
+    """保存冻结 surface 本身，而不要求下游在另一 NumPy 环境重新生成。
+
+    FPS 在几何对称点上可能出现跨 BLAS/NumPy 版本的 tie-breaking 差异；只在 S4
+    record 中写 hash 仍不足以复现点序。S4 数据集应把这个 artifact 与 manifest 同存。
+    """
+    destination = Path(path)
+    if destination.suffix != ".npz":
+        raise ValueError("frozen surface 路径必须以 .npz 结尾")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "schema_version": SURFACE_SCHEMA_VERSION,
+        "object": surface.obj,
+        "geom_tag": surface.geom_tag,
+        "parts": list(surface.parts),
+        "sha256": surface.sha256,
+        "content_sha256": _surface_content_sha256(
+            surface.points, surface.normals, surface.part, surface.area, surface.parent),
+    }
+    payload = {
+        "__meta__": np.asarray(json.dumps(meta, ensure_ascii=False, sort_keys=True)),
+        "points": np.asarray(surface.points),
+        "normals": np.asarray(surface.normals),
+        "part": np.asarray(surface.part),
+        "area": np.asarray(surface.area),
+    }
+    payload.update({f"parent/{level}": np.asarray(parent)
+                    for level, parent in surface.parent.items()})
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    with open(temporary, "wb") as handle:
+        np.savez_compressed(handle, **payload)
+    os.replace(temporary, destination)
+    return str(destination.resolve())
+
+
+def load_surface(path: str | os.PathLike[str]) -> Surface:
+    """读取冻结 surface，并校验点序 hash 与全部数组形状。"""
+    with np.load(path, allow_pickle=False) as data:
+        if "__meta__" not in data.files or data["__meta__"].ndim != 0:
+            raise ValueError(f"{path} 缺少标量 __meta__")
+        meta = json.loads(str(data["__meta__"].item()))
+        if meta.get("schema_version") != SURFACE_SCHEMA_VERSION:
+            raise ValueError(f"不支持的 surface schema：{meta.get('schema_version')!r}")
+        points = np.array(data["points"], copy=True)
+        normals = np.array(data["normals"], copy=True)
+        part = np.array(data["part"], copy=True)
+        area = np.array(data["area"], copy=True)
+        parent = {int(name.split("/", 1)[1]): np.array(data[name], copy=True)
+                  for name in data.files if name.startswith("parent/")}
+    n = len(points)
+    if points.shape != (n, 3) or normals.shape != (n, 3):
+        raise ValueError("surface points/normals 必须是 (S,3)")
+    if part.shape != (n,) or area.shape != (n,) or np.any(area <= 0):
+        raise ValueError("surface part/area 形状或数值非法")
+    if any(value.shape != (n,) or np.any(value < 0) or np.any(value >= level)
+           for level, value in parent.items()):
+        raise ValueError("surface parent 映射非法")
+    content_hash = _surface_content_sha256(points, normals, part, area, parent)
+    if meta.get("content_sha256") is not None and content_hash != meta["content_sha256"]:
+        raise ValueError("frozen surface 内容与 meta.content_sha256 不一致")
+    # 历史 surface.sha256 是对 cast float32 *之前*的 float64 点计算的，无法从 S4
+    # 保存的 float32 surface 反算。它继续作为 record 与 artifact 的 identity key；
+    # 新增的 content_sha256 才承担文件内容完整性校验。
+    identity_hash = str(meta.get("sha256", ""))
+    if len(identity_hash) != 64:
+        raise ValueError("frozen surface meta.sha256 非法")
+    return Surface(
+        obj=str(meta["object"]), geom_tag=str(meta["geom_tag"]),
+        points=points, normals=normals, part=part,
+        parts=tuple(str(item) for item in meta["parts"]), area=area,
+        parent=parent, sha256=identity_hash,
+    )
 
 
 # ---------------------------------------------------------------- 参数化面片
@@ -705,18 +811,14 @@ def _build(obj: str, geom_tag: str, n_points: int | None) -> Surface:
             continue
         parent[level] = _nearest(sel_pts, sel_pts[:level]).astype(np.int32)
 
-    digest = hashlib.sha256()
-    digest.update(f"{obj}|{geom_tag}|{n_points}".encode("utf-8"))
-    for arr in (np.round(sel_pts, 9), np.round(sel_nrm, 9)):
-        digest.update(np.ascontiguousarray(arr, dtype=np.float64).tobytes())
-    digest.update(np.ascontiguousarray(sel_lab, dtype=np.int8).tobytes())
+    surface_hash = _surface_sha256(obj, geom_tag, sel_pts, sel_nrm, sel_lab)
 
     return Surface(
         obj=obj, geom_tag=geom_tag,
         points=sel_pts.astype(np.float32), normals=sel_nrm.astype(np.float32),
         part=sel_lab.astype(np.int8), parts=tuple(parts),
         area=area.astype(np.float32), parent=parent,
-        sha256=digest.hexdigest(), solids=tuple(solids),
+        sha256=surface_hash, solids=tuple(solids),
     )
 
 

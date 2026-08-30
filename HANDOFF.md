@@ -5,7 +5,7 @@
 本文件回答：这个项目在做什么、现在做到哪、下一步做什么、怎么在服务器上跑东西、
 以及哪些坑会浪费你半天。
 
-最后更新：2026-08-30（S4 + S4.6 收尾，泄漏检查全绿）
+最后更新：2026-08-30（S5 契约按实测重做为 v2，全量构造与冻结留出评估已跑）
 
 ---
 
@@ -24,8 +24,9 @@
 
 **本轮只做仿真算法验证。** 真实触觉硬件、RGB-D、sim-to-real 都不在范围内。
 
-主张是：**执行器是任务无关的**——在任务 A、B 上训练的执行器，
-能对**留出任务 C** 零样本执行，不需要 C 的奖励、不需要微调。
+主系统是：**每种执行器各训自己的 interaction-conditioned decoder/executor**，收到
+同一 interaction 后生成自己的动作。留出任务零样本是检验 executor 泛化的一项强实验，
+不是传递协议本身；上游能否生成未采集任务取决于模型、数据和规模（D-63）。
 
 ---
 
@@ -34,17 +35,18 @@
 | 顺序 | 文件 | 为什么必读 |
 |---|---|---|
 | 1 | `plan/00-positioning.md` | 相对 KITE / ART-Glove / CHORD 的差异；**能声称什么、不能声称什么** |
-| 2 | `plan/README.md` | 系统结构、两个执行器、五个信息条件、步骤与闸门 |
-| 3 | `log/decisions.md` | **56 条技术决策及其被否决的备选**。改任何设计前先查这里，否则会重新提出已经被否决过的方案 |
-| 4 | `log/pitfalls.md` | 56 条坑。**第 3 节「已知会静默失败的坑」尤其重要**，那些不报错、只让结论作废 |
-| 5 | `log/progress.md` | 环境版本表 + 每一步的实测数据 |
+| 2 | `plan/README.md` | 系统结构、两个执行器、六个信息条件、步骤与闸门 |
+| 3 | `log/takeover-audit-2026-08-30.md` | 原始 idea 对齐、证据边界、S5 前架构阻塞与文献复核 |
+| 4 | `log/decisions.md` | **64 条 append-only 技术决策及其被否决的备选**。改任何设计前先查这里，否则会重新提出已经被否决过的方案 |
+| 5 | `log/pitfalls.md` | 57 条坑。**第 3 节「已知会静默失败的坑」尤其重要**，那些不报错、只让结论作废 |
+| 6 | `log/progress.md` | 环境版本表 + 每一步的实测数据 |
 | 6 | `plan/01`–`plan/07` | 具体设计 |
 
 `idea/` 目录是**原始构想，已被 `plan/` 取代**，只作背景，不要照它执行。
 
 ---
 
-## 3. 十二个步骤是什么（S0–S10）
+## 3. 十三个标号阶段是什么（S0–S10，含 S4.5 / S4.6）
 
 前三步是**准备**，S7 才是要证明的东西。
 
@@ -55,11 +57,11 @@
 | **S2** | 每个执行器物理上能不能完成任务 | 抽屉×钩杆 ✅，其余按需 |
 | S3 | 双板采集器模拟人，产生多样示教 | ✅ 抽屉 / 旋钮 / 擦拭 / 探针集 15/15 / 多样性 |
 | **S4** | 从示教里提取交互信息 | ✅ |
-| **S4.6** | 装置能测的子集够不够重建交互规格（实验七） | ✅ |
+| **S4.6** | 仿真观测模型下重建交互规格（实验七）；不是下游/真机充分性 | ✅ 离线 |
 | S4.5 | 表示分辨率该定多少 | ⛔ **要 S6 的 checkpoint，做不了** |
-| **S5** | **从多条示教归纳出共享的交互要求 ← 下一步** | ⬜ |
-| S6 | 训练「实现任意交互规格」的执行器 | ⬜ |
-| **S7** | **留出任务零样本 ← 本工作的主张** | ⬜ |
+| **S5** | 从多条示教形成可传递 interaction | 🟨 `v2` 契约 + 全量 artifact + 八项闸门检查已跑；conformal 与下游判据待 S6 |
+| S6 | 每种形态各训 interaction-conditioned executor | ⬜ |
+| **S7** | 留出任务零样本（executor 强泛化测试，不是协议定义） | ⬜ |
 | S8 | 信息条件对照（哪类信息有用） | ⬜ |
 | S9 | 扰动恢复 | ⬜ |
 | S10 | 跨形态 + 反事实 | ⬜ |
@@ -79,6 +81,9 @@ out/
   s3_wipe/         擦拭：dirt 覆盖图 + 三个家族录像 + 验收
   s3_knob/         旋钮：接触部位与受力方向核对 + 五个家族截图 + 验收
   s4_records/      Oracle Interaction Record：提取/验收/泄漏检查/region 探针四套报告 + 热图
+  s5_align/        命令轴选型的实测对比（D-65 的依据）
+  s5_transfer_smoke/ 本地小样本 smoke（33 条真实 record）+ 契约说明
+  s5/              **全量 train artifact 摘要 + 冻结留出划分上的八项闸门检查**
 ```
 
 - **`out/`** = 产物，给别人看
@@ -95,9 +100,39 @@ out/
 | S2 Expert | ✅ 收尾 | 抽屉×钩杆，固定 43.1% / 随机 49.3%，Gate A 按 D-32 通过 |
 | **S3 Source** | ✅ **完成** | 抽屉 ✅ 探针集 ✅（15/15 格）擦拭 ✅ **旋钮 ✅** 多样性 ✅ |
 | **S4 提取** | ✅ **完成** | 16 640 条全部提取；独立验收全通过；泄漏检查 **抽屉 9/擦拭 10/旋钮 9 条 PASS，0 FAIL**，其余如实 DEFER 到 S5 |
-| **S4.6 传感** | ✅ **完成** | 实验七：装置能测的子集重建 region/mode/mechanics，硬件指标定成"≤ 功能尺寸的 ~10%" |
+| **S4.6 传感** | ✅ **离线可观测性完成** | 实验七：在仿真观测模型下重建 region/mode/mechanics；"≤ 功能尺寸的 ~10%"是候选指标，不是下游控制或真机充分性结论 |
 | S4.5 分辨率 | ⛔ **卡住** | 判据是"下游成功率"，要 S6 的 E-T C4 checkpoint。**编号排在 S4 之后是错的**，别被它误导 |
-| **S5 及之后** | ⬜ 未开始 | **下一步从 S5 开始** |
+| **S5** | 🟨 **v2 契约 + 全量评估已跑** | `interaction-transfer-v2`（D-65/D-66 重做）；三任务全量 train artifact + 冻结留出划分上的八项检查 |
+| **S6 及之后** | ⬜ 未开始 | S5 全量诊断后进入最小 E-I decoder |
+
+### S5 的当前状态（接手时先看这里）
+
+**契约是 `interaction-transfer-v2`，v1 已作废、读到即报错。** v1 的两处缺陷都
+**不报错、只让指令失效**，而且当时所有校验都通过——接手前务必读 P-58 / P-59 / P-60。
+
+| v1 的问题 | 实测 | 修法 |
+|---|---|---|
+| 按任务完成度 `progress` 分格 | 抽屉 **83.9%**、旋钮 **73.3%** 的帧挤进 32 格里的 2 格；中间 30 格每格中位数 2 帧。`support/episodes` 满格、`empty_bins` 报 0 | 改按 phase 分段 + 段内按累计交互活动量（D-65），选型实测见 `out/s5_align/probe.txt` |
+| region/engage/mode 用 NaN、traction 用 0 表示"没碰过" | 每 cell 支持中位数只有 5/12，于是 **抽屉 57.9% / 擦拭 80.7% / 旋钮 48.7%** 的 occupied cell 同时被要求"接触"和"零力" | per-cell 字段一律接触条件化，新增 `region/support` / `region/duty` / `engage/concentration`（D-66） |
+| 用"6D wrench 重建误差 6e-6 N"当验证 | **那是代数恒等式**，换成任何错误的 cell 划分也还是 1e-6 | 改报表面投影完整性：残差 + 被滤掉的力占比，两个都能失败（P-60） |
+
+**跑 S5 就一条命令**（服务器上）：
+
+```bash
+IT_PY=/isaac-sim/python.sh ./tools/run_remote.sh \
+    "IT_PY=/isaac-sim/python.sh bash tools/s5_all.sh" s5all
+```
+
+它依次做三件事，逐项收退出码（P-55）：`freeze_*` 把 P-57 的冻结 surface 补写进既有
+S4 数据集 → `build_*` 从 train split 构造 artifact → `eval_*` 在**冻结的**
+calibration / test 划分上跑八项检查。产物在服务器 `/tmp/s5/`，摘要在 `out/s5/`。
+
+⚠️ **服务器的系统 python3 没有 numpy**，必须 `IT_PY=/isaac-sim/python.sh`。
+S5 本身是纯 numpy、不需要 Isaac，但解释器得用那一个。
+
+⚠️ P-57 仍然有效：S4 记录只存 surface identity hash，跨 NumPy 环境重新 FPS 会改点序。
+`tools/s5_freeze_surfaces.py` 已在**产生数据的那台机器上**核对 hash 后落盘
+`frozen-surface-v1` 并写回 manifest；之后一律走 `--surface`，不再现场重算。
 
 ### S4 的当前状态（接手时先看这里）
 
@@ -183,9 +218,10 @@ ssh root@10.0.6.98 'cd /workspace/interaction_transfer && PYTHONPATH=src \
 执行器就已经掌握了同一个任务"——**这不是误解，是真实的逻辑漏洞**：
 物体照着留出任务反推，执行器在"摸索能力"阶段学到的就是留出任务本身。
 
-现在（D-41）改为从一套**独立于本项目三个任务的交互分类学**推出物体集，
-判据是**张满分类学**，不是"覆盖留出任务"。外部依据是 Huang 的接触模式枚举、
-Bullock/Ma/Dollar 的手中心分类、Lynch & Mason 的非抓握原语谱系。
+现在（D-41）改为从一套**独立于本项目三个任务的交互分类框架**推出物体集，
+判据是预先覆盖五个轴的边缘值，不是"覆盖留出任务"。外部依据是 Huang 的接触模式
+枚举、Bullock/Ma/Dollar 的手中心分类、Lynch & Mason 的非抓握原语谱系；五轴本身
+是本项目的工程综合，**边缘覆盖不等于张满轴的笛卡尔积**（D-60）。
 另加硬规则：**每条原语至少两个几何不同的物体承载**。
 
 ```bash
@@ -317,6 +353,7 @@ src/it/
   geom_cfg.py       **几何参数（不依赖 pxr，本机可读）**，build_assets 原样再导出
   surfaces.py       **物体表面采样**：点+法向+部件标签，嵌套多分辨率，hash 冻结（D-50）
   interaction.py    **Oracle Interaction Record 提取器**（纯 numpy）
+  transfer.py       **S5 多示教聚合**：相分段活动量对齐 + 接触条件化 per-cell 统计
   records.py        episode 数据契约（npz + manifest，前缀隔离，fail-closed）
   envs/
     base.py         增量动作接口 + 定长接触摘要
@@ -350,6 +387,11 @@ tools/
   s4_all.sh               **S4 全套验收的唯一入口**：逐项收退出码，任一非零则整体失败（P-55）
   s4_region_probe.py      第 9 条：region 能不能从 effect 推出来（不设通过门槛）
   s4_region_map.py        region 热图渲染成 png——录像看不到接触落在哪
+  s5_align_probe.py       **命令轴选型**：五种对齐做法的实测对比（D-65 的依据）
+  s5_freeze_surfaces.py   把 P-57 的冻结 surface 补写进既有 S4 数据集（**只能在产生数据的机器上跑**）
+  s5_build_transfer.py    从 S4 manifest 构造 train split 的 interaction transfer
+  s5_eval_envelope.py     **S5 闸门**：coverage / width / 策略子群 / 多峰性 / 跨实现 / 接口不变量
+  s5_all.sh               **S5 全套的唯一入口**：逐项收退出码，任一非零则整体失败（P-55）
   test_surfaces.py        本机单元测试（表面采样）
   test_interaction.py     本机单元测试（提取器：法向定向/等变/mode/合并/采集侧动作零影响）
   test_records.py         本机单元测试（数据契约）
@@ -361,6 +403,7 @@ tools/
 PYTHONPATH=src python3 tools/test_surfaces.py
 PYTHONPATH=src python3 tools/test_interaction.py
 PYTHONPATH=src python3 tools/test_records.py
+PYTHONPATH=src python3 tools/test_transfer.py
 ```
 
 ---
@@ -397,6 +440,9 @@ PYTHONPATH=src python3 tools/test_records.py
 | **P-50** 只录 env 0 而家族分配周期与 envs 同步 | 45 个批次只录到一个家族；拷产物时通配符又把服务器上的旧文件带了回来 | 家族按 `(b + i) % len(fams)` 轮换；产物**先清空再生成再逐个显式拷**，最后查文件数与内容重复 |
 | **P-51** 夹持三个动作同时给 ⭐ | 直上直下落 -> 工具被楔飞；先张开落到位再夹 -> 压力归零（位置误差被消掉） | 顺序必须是**张开落下 → 夹拢 → 再下压**；位置控制里"压力"就是位置误差的产物 |
 | **P-52** 板角速度顶在 PhysX 上限 ⭐ | 接触点相对速度整体虚高：积出来 59 mm 滑移，而接触点在物体系里一动没动；**姿态误差均值看着正常** | 用几何量（间隙、接触点坐标）卡速度；mode 改判斑块位移（D-49）。下轮采集显式设 `max_angular_velocity` |
+| **P-58** 按任务完成度分格 ⭐ | 84% 的帧挤进 32 格里的 2 格，中间 30 格每格 2 帧；而 `support/episodes` 满格、`empty_bins` 报 0，**校验全过** | 分桶变量在样本里有大片平台区就会退化。把**逐格帧数**当一等诊断量报出来；选型用不受格子大小混淆的判据 |
+| **P-59** NaN 策略不一致 ⭐⭐ | 同一个 cell 同时说"该接触"和"力必须为零"，占比 48~81%；**每个字段单独看都正常** | 给每个聚合数组问一句"这个位置的数是对哪些样本求的"；不同字段答案不一样就已经错了，写断言钉住 |
+| **P-60** 恒等式对拍 | "重建误差 6e-6"看起来像验证过了，其实左右是同一个式子，换成任何错误实现也还是 1e-6 | **先问这个对拍能不能失败**。想不出让它变大的错误，它就不是验证 |
 
 ### 7.2 会让你卡住的
 

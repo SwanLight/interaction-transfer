@@ -1,7 +1,7 @@
 """S4：把一份 S3 source 数据集批量转成 Oracle Interaction Record。
 
 `plan/02` §3 的表示提取。输入是 S3 的 episode（`s3-episode-v1`），输出是
-`s4-record-v1`：物体中心的 effect / region / engage 方向 / mode / mechanics / phase。
+`s4-record-v2`：物体中心的 effect / region / engage 方向 / mode / mechanics / phase。
 划分**原样继承** S3 manifest——重新划会让校准集混进训练集，而 `plan/02` §4.1 的
 conformal 覆盖率保证正是建立在"校准集独立"上的。
 
@@ -43,7 +43,7 @@ from it.records import (  # noqa: E402
     save_episode,
     write_manifest,
 )
-from it.surfaces import surface_for  # noqa: E402
+from it.surfaces import save_surface, surface_for  # noqa: E402
 
 MODE_NAMES = ("no_contact", "sticking", "sliding", "separating")
 
@@ -282,6 +282,19 @@ def process(src: Path, out: Path, jobs: int, limit: int | None) -> tuple[list[di
                for e in entries]
     splits = {k: [i for i in v if i in paths]
               for k, v in (man.get("splits") or {}).items()}
+    # 冻结点序必须跟数据一起保存。只存 hash 然后让另一 NumPy/BLAS 环境重新跑 FPS，
+    # 对抽屉/旋钮这类对称几何会在 tie-breaking 上换点序（P-57）。
+    frozen_surfaces = {}
+    for obj, tag in sorted(need):
+        surface = _SURFACES[(obj, tag)]
+        surface_path = out / "surfaces" / f"{obj}-{tag}.npz"
+        save_surface(surface, surface_path)
+        frozen_surfaces[f"{obj}/{tag}"] = {
+            "path": str(surface_path.relative_to(out)),
+            "n_points": surface.n_points,
+            "sha256": surface.sha256,
+            "total_area_m2": surface.total_area,
+        }
     write_manifest(
         records, out / "manifest.json",
         dataset_name=f"s4_{man['dataset_name']}",
@@ -289,13 +302,11 @@ def process(src: Path, out: Path, jobs: int, limit: int | None) -> tuple[list[di
         extra={
             "source_dataset": str(src),
             "source_manifest_sha": man.get("generator_git_sha", "unknown"),
-            "surfaces": {f"{o}/{t}": {"n_points": s.n_points, "sha256": s.sha256,
-                                      "total_area_m2": s.total_area}
-                         for (o, t), s in _SURFACES.items()},
+            "surfaces": frozen_surfaces,
         },
         splits=splits or None,
     )
-    return rows, {f"{o}/{t}": s for (o, t), s in _SURFACES.items()}
+    return rows, {f"{o}/{t}": _SURFACES[(o, t)] for (o, t) in need}
 
 
 def _git_sha() -> str:

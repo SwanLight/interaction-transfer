@@ -1,0 +1,361 @@
+[
+  {
+    "activity_budget": [
+      2,
+      3,
+      25,
+      2
+    ],
+    "episodes": 12,
+    "even_budget": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "families": [
+      "hook_both",
+      "pinch_center",
+      "pinch_offset",
+      "single_finger"
+    ],
+    "keys": {
+      "activity": {
+        "across_family_js": 0.5911865802230521,
+        "budget": [
+          2,
+          3,
+          25,
+          2
+        ],
+        "contact_bin_fraction": 0.8723958333333334,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.3013888888888889,
+        "median_frames_per_bin": 3.0,
+        "n_across_pairs": 1503,
+        "n_within_pairs": 334,
+        "top2_bin_frame_share": 0.47175925925925927,
+        "within_bin_frame_js": 0.11413086734307204,
+        "within_family_js": 0.3073938075796515,
+        "within_over_across": 0.5199607329781964
+      },
+      "phase_effect": {
+        "across_family_js": 0.6238916958818275,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.4479166666666667,
+        "empty_bin_fraction": 0.026041666666666668,
+        "max_bin_frame_share": 0.31782407407407415,
+        "median_frames_per_bin": 7.0,
+        "n_across_pairs": 707,
+        "n_within_pairs": 159,
+        "top2_bin_frame_share": 0.4791666666666667,
+        "within_bin_frame_js": 0.12980696122521343,
+        "within_family_js": 0.36281013806162643,
+        "within_over_across": 0.5815274357015116
+      },
+      "phase_progress": {
+        "across_family_js": 0.6182735832694843,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.4348958333333333,
+        "empty_bin_fraction": 0.010416666666666666,
+        "max_bin_frame_share": 0.32430555555555557,
+        "median_frames_per_bin": 7.0,
+        "n_across_pairs": 678,
+        "n_within_pairs": 156,
+        "top2_bin_frame_share": 0.4916666666666667,
+        "within_bin_frame_js": 0.1342011240352111,
+        "within_family_js": 0.34827454524887047,
+        "within_over_across": 0.5633016752990876
+      },
+      "phase_time": {
+        "across_family_js": 0.6237905492651853,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.1796875,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.06111111111111111,
+        "median_frames_per_bin": 8.0,
+        "n_across_pairs": 289,
+        "n_within_pairs": 63,
+        "top2_bin_frame_share": 0.12222222222222222,
+        "within_bin_frame_js": 0.14558724682729984,
+        "within_family_js": 0.32845339268994583,
+        "within_over_across": 0.5265443554360648
+      },
+      "progress": {
+        "across_family_js": 0.5846160119134235,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.9947916666666666,
+        "empty_bin_fraction": 0.0026041666666666665,
+        "max_bin_frame_share": 0.48009259259259257,
+        "median_frames_per_bin": 2.0,
+        "n_across_pairs": 1710,
+        "n_within_pairs": 380,
+        "top2_bin_frame_share": 0.8393518518518519,
+        "within_bin_frame_js": 0.14485869090276385,
+        "within_family_js": 0.3010007091539177,
+        "within_over_across": 0.5148690816194977
+      }
+    },
+    "n_bins": 32,
+    "task": "drawer"
+  },
+  {
+    "activity_budget": [
+      2,
+      4,
+      23,
+      3
+    ],
+    "episodes": 12,
+    "even_budget": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "families": [
+      "tool_center",
+      "tool_heavy_slow",
+      "tool_light_fast",
+      "tool_offset"
+    ],
+    "keys": {
+      "activity": {
+        "across_family_js": 0.6993600813486062,
+        "budget": [
+          2,
+          4,
+          23,
+          3
+        ],
+        "contact_bin_fraction": 1.0,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.08482905982905985,
+        "median_frames_per_bin": 12.0,
+        "n_across_pairs": 1728,
+        "n_within_pairs": 384,
+        "top2_bin_frame_share": 0.1361111111111111,
+        "within_bin_frame_js": 0.2596561383619148,
+        "within_family_js": 0.3708544868705932,
+        "within_over_across": 0.5302768870586072
+      },
+      "phase_effect": {
+        "across_family_js": 0.5794963808016586,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 1.0,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.10726495726495727,
+        "median_frames_per_bin": 5.0,
+        "n_across_pairs": 1728,
+        "n_within_pairs": 384,
+        "top2_bin_frame_share": 0.20833333333333337,
+        "within_bin_frame_js": 0.3811176396491122,
+        "within_family_js": 0.3403581998468786,
+        "within_over_across": 0.5873344702792396
+      },
+      "phase_progress": {
+        "across_family_js": 0.5662163951693224,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 1.0,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.15534188034188032,
+        "median_frames_per_bin": 5.5,
+        "n_across_pairs": 1728,
+        "n_within_pairs": 384,
+        "top2_bin_frame_share": 0.28311965811965806,
+        "within_bin_frame_js": 0.396575780937851,
+        "within_family_js": 0.3491022118135902,
+        "within_over_across": 0.6165526374579705
+      },
+      "phase_time": {
+        "across_family_js": 0.56951010631456,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 1.0,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.08461538461538463,
+        "median_frames_per_bin": 5.5,
+        "n_across_pairs": 1728,
+        "n_within_pairs": 384,
+        "top2_bin_frame_share": 0.16923076923076927,
+        "within_bin_frame_js": 0.3827735549132389,
+        "within_family_js": 0.33150125486642784,
+        "within_over_across": 0.5820814261078772
+      },
+      "progress": {
+        "across_family_js": 0.7970709407599867,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.8463541666666666,
+        "empty_bin_fraction": 0.15364583333333334,
+        "max_bin_frame_share": 0.25598290598290596,
+        "median_frames_per_bin": 7.0,
+        "n_across_pairs": 1366,
+        "n_within_pairs": 315,
+        "top2_bin_frame_share": 0.37927350427350426,
+        "within_bin_frame_js": 0.304708264193635,
+        "within_family_js": 0.5254388490841235,
+        "within_over_across": 0.6592121506564159
+      }
+    },
+    "n_bins": 32,
+    "task": "wipe"
+  },
+  {
+    "activity_budget": [
+      2,
+      2,
+      26,
+      2
+    ],
+    "episodes": 9,
+    "even_budget": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "families": [
+      "pin_pinch",
+      "pin_push_dual",
+      "pin_push_single"
+    ],
+    "keys": {
+      "activity": {
+        "across_family_js": 0.6862102466898647,
+        "budget": [
+          2,
+          2,
+          26,
+          2
+        ],
+        "contact_bin_fraction": 0.8854166666666666,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.2298724954462659,
+        "median_frames_per_bin": 4.0,
+        "n_across_pairs": 729,
+        "n_within_pairs": 255,
+        "top2_bin_frame_share": 0.3806921675774135,
+        "within_bin_frame_js": 0.2145045917986976,
+        "within_family_js": 0.3538650837883996,
+        "within_over_across": 0.515680267812046
+      },
+      "phase_effect": {
+        "across_family_js": 0.6301837067527517,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.3611111111111111,
+        "empty_bin_fraction": 0.2048611111111111,
+        "max_bin_frame_share": 0.23861566484517305,
+        "median_frames_per_bin": 2.0,
+        "n_across_pairs": 243,
+        "n_within_pairs": 101,
+        "top2_bin_frame_share": 0.35883424408014575,
+        "within_bin_frame_js": 0.3315971818351798,
+        "within_family_js": 0.25581511843025895,
+        "within_over_across": 0.4059373730057833
+      },
+      "phase_progress": {
+        "across_family_js": 0.6406251192863746,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.3819444444444444,
+        "empty_bin_fraction": 0.1701388888888889,
+        "max_bin_frame_share": 0.24845173041894356,
+        "median_frames_per_bin": 6.0,
+        "n_across_pairs": 233,
+        "n_within_pairs": 100,
+        "top2_bin_frame_share": 0.37122040072859747,
+        "within_bin_frame_js": 0.32518762265661666,
+        "within_family_js": 0.2781872394594209,
+        "within_over_across": 0.4342434148840559
+      },
+      "phase_time": {
+        "across_family_js": 0.5974749782240794,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 0.2638888888888889,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.06557377049180328,
+        "median_frames_per_bin": 7.0,
+        "n_across_pairs": 144,
+        "n_within_pairs": 75,
+        "top2_bin_frame_share": 0.13114754098360656,
+        "within_bin_frame_js": 0.3570482977536353,
+        "within_family_js": 0.19769976377193596,
+        "within_over_across": 0.3308921226451593
+      },
+      "progress": {
+        "across_family_js": 0.702970040379151,
+        "budget": [
+          8,
+          8,
+          8,
+          8
+        ],
+        "contact_bin_fraction": 1.0,
+        "empty_bin_fraction": 0.0,
+        "max_bin_frame_share": 0.38397085610200365,
+        "median_frames_per_bin": 2.0,
+        "n_across_pairs": 864,
+        "n_within_pairs": 288,
+        "top2_bin_frame_share": 0.7329690346083789,
+        "within_bin_frame_js": 0.21010475657915587,
+        "within_family_js": 0.38264917837924883,
+        "within_over_across": 0.544332128539738
+      }
+    },
+    "n_bins": 32,
+    "task": "knob"
+  }
+]

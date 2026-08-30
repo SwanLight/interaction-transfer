@@ -1,0 +1,111 @@
+{
+  "artifact": "out/s5_transfer_smoke/drawer/drawer-drawer-nominal-train.npz",
+  "checks": [
+    {
+      "data": {
+        "per_split": {
+          "train": {
+            "episode_coverage": 0.8333333333333334,
+            "episodes": 12,
+            "mean_mass_inside": 0.9644898797896134,
+            "p10_mass_inside": 0.8475335632004118
+          }
+        }
+      },
+      "detail": "没有留出划分可评估",
+      "name": "1a region coverage",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "allowed_area_fraction": 0.014932926704436326,
+        "allowed_cells_mean": 4.071428571428571,
+        "total_area_m2": 0.2776182062661974
+      },
+      "detail": "允许区域面积占物体表面积 1.49%（越小越好，与 1a 并读）",
+      "name": "2a region width",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "per_split": {
+          "train": {
+            "episodes": 12,
+            "pointwise": 0.31338147216867224,
+            "simultaneous": 0.0
+          }
+        },
+        "relative_width_median": 2.2146913203158762
+      },
+      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；",
+      "name": "1b mechanics band（只报数，不设门槛）",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "relative_width_median": 2.2146913203158762
+      },
+      "detail": "traction 带相对宽度中位数 2.215",
+      "name": "2b mechanics width",
+      "status": "PASS"
+    },
+    {
+      "data": {},
+      "detail": "留出划分里只有 0 个策略族，无法比较落差",
+      "name": "3 策略子群 coverage",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "per_family": {
+          "hook_both": 0.3307570514362643,
+          "pinch_center": 0.4502782597401461,
+          "pinch_offset": 0.2267110854699516,
+          "single_finger": 0.42132167201966386
+        },
+        "spread": 0.2235671742701945
+      },
+      "detail": "hook_both 0.331；pinch_center 0.450；pinch_offset 0.227；single_finger 0.421；落差 0.224（判据要 S6 的下游成功率，现在只报数）",
+      "name": "4 family envelope 距离",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "engage_concentration_median": 0.9840756058692932,
+        "episode_to_neighbour": 0.14465515145481495,
+        "mode_entropy_median": 0.0,
+        "pooled_to_episode": 0.4349642393554825,
+        "ratio": 3.006904593310316
+      },
+      "detail": "pooled→episode 0.435 vs episode→最近邻 0.145（比值 3.01）；engage 集中度中位数 0.984；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数",
+      "name": "5 多峰性",
+      "status": "DEFER"
+    },
+    {
+      "data": {},
+      "detail": "只有 1 种实现有 ≥2 条训练 episode（非擦拭任务正常）",
+      "name": "6 跨实现可互换",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "episodes": 12
+      },
+      "detail": "12 条对半分，30 个数组维度全部一致",
+      "name": "7a 结构不变量",
+      "status": "PASS"
+    },
+    {
+      "data": {},
+      "detail": "训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据",
+      "name": "7b 接触体数量不变量",
+      "status": "DEFER"
+    }
+  ],
+  "tally": {
+    "DEFER": 7,
+    "FAIL": 0,
+    "PASS": 3
+  },
+  "transfer_id": "drawer-drawer-nominal-train"
+}

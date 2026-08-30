@@ -1,0 +1,30 @@
+S5 command-axis alignment probe
+==============================================================================
+判据：max/top2 帧占比越低越好（退化格）；within_family_js 越低越好（对齐误差）；
+      binJS = 格内逐帧接触分布的不一致度，**不受格子大小混淆**，越低越好；
+      within_over_across 越低越好，但 across 本身不应被一起压低（那是抹平策略差异）。
+
+--- drawer  (12 eps, 4 families)  activity budget [2, 3, 25, 2]
+key                max%  top2%  empty% contact%  binJS  within  across    w/a
+progress           48.0   83.9     0.3     99.5  0.145   0.301   0.585  0.515
+phase_time          6.1   12.2     0.0     18.0  0.146   0.328   0.624  0.527
+phase_progress     32.4   49.2     1.0     43.5  0.134   0.348   0.618  0.563
+phase_effect       31.8   47.9     2.6     44.8  0.130   0.363   0.624  0.582
+activity           30.1   47.2     0.0     87.2  0.114   0.307   0.591  0.520
+
+--- wipe  (12 eps, 4 families)  activity budget [2, 4, 23, 3]
+key                max%  top2%  empty% contact%  binJS  within  across    w/a
+progress           25.6   37.9    15.4     84.6  0.305   0.525   0.797  0.659
+phase_time          8.5   16.9     0.0    100.0  0.383   0.332   0.570  0.582
+phase_progress     15.5   28.3     0.0    100.0  0.397   0.349   0.566  0.617
+phase_effect       10.7   20.8     0.0    100.0  0.381   0.340   0.579  0.587
+activity            8.5   13.6     0.0    100.0  0.260   0.371   0.699  0.530
+
+--- knob  (9 eps, 3 families)  activity budget [2, 2, 26, 2]
+key                max%  top2%  empty% contact%  binJS  within  across    w/a
+progress           38.4   73.3     0.0    100.0  0.210   0.383   0.703  0.544
+phase_time          6.6   13.1     0.0     26.4  0.357   0.198   0.597  0.331
+phase_progress     24.8   37.1    17.0     38.2  0.325   0.278   0.641  0.434
+phase_effect       23.9   35.9    20.5     36.1  0.332   0.256   0.630  0.406
+activity           23.0   38.1     0.0     88.5  0.215   0.354   0.686  0.516
+

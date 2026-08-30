@@ -1,0 +1,100 @@
+{
+  "artifact": "knob-knob-nominal-train.npz",
+  "artifact_sha256": "9d2218632865e958cac0c6c5219016ad6b1b341558a2a5014efdcd43bfe11c98",
+  "manifest": "/Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/knob/manifest.json",
+  "manifest_dataset": "s4_s3_knob_source",
+  "meta": {
+    "aggregation": {
+      "alignment": "phase_segmented_activity_bins_offline_only",
+      "cell_statistics": "contact_conditioned_over_contacting_episodes",
+      "claim": "descriptive_demonstration_statistics",
+      "episode_weighting": "equal_after_within_episode_bin_summary",
+      "mechanics": "per-cell contact-conditioned traction + local moment density; the 6D wrench identity holds per episode before aggregation and is NOT preserved by cross-episode medians/quantiles",
+      "n_bins": 32,
+      "phase_budget": [
+        2,
+        2,
+        26,
+        2
+      ],
+      "phase_floor": 2,
+      "quantiles": [
+        0.1,
+        0.9
+      ]
+    },
+    "diagnostics": {
+      "cell_support_median": 5.0,
+      "cell_support_under_half_fraction": 0.46808510638297873,
+      "dropped_force_mass_fraction_max": 0.0,
+      "empty_bin_fraction_max": 0.0,
+      "episode_valid_frame_fraction": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "projection_residual_force_N": 8.80268569853437e-06,
+      "projection_residual_torque_Nm": 4.740933546465333e-07
+    },
+    "episode_ids": [
+      "knob-pin_pinch-b00e005",
+      "knob-pin_pinch-b00e020",
+      "knob-pin_pinch-b00e025",
+      "knob-pin_push_dual-b00e002",
+      "knob-pin_push_dual-b00e012",
+      "knob-pin_push_dual-b00e017",
+      "knob-pin_push_single-b00e006",
+      "knob-pin_push_single-b00e016",
+      "knob-pin_push_single-b00e021"
+    ],
+    "geometry_variant": "nominal",
+    "implementation_counts": {
+      "two_plate_pin": 9
+    },
+    "num_episodes": 9,
+    "object": "knob",
+    "schema_version": "interaction-transfer-v2",
+    "strategy_family_counts": {
+      "pin_pinch": 3,
+      "pin_push_dual": 3,
+      "pin_push_single": 3
+    },
+    "surface": {
+      "command_n_points": 256,
+      "parts": [
+        "pin_side",
+        "pin_top",
+        "disc_top",
+        "disc_bottom",
+        "rim_side"
+      ],
+      "sha256": "99eb4d0410b125a93233a1abdd87fe73b0b632d9b2547b805d3b0ad0a6509b3c",
+      "source_n_points": 8192,
+      "total_area_m2": 0.04033482074737549
+    },
+    "task": "knob",
+    "transfer_id": "knob-knob-nominal-train"
+  },
+  "source_split": "train",
+  "source_surface_sha256": "99eb4d0410b125a93233a1abdd87fe73b0b632d9b2547b805d3b0ad0a6509b3c",
+  "support": {
+    "cell_support_median": 5.0,
+    "cell_support_under_half_fraction": 0.46808510638297873,
+    "empty_bins": 0,
+    "max_episodes_per_bin": 9,
+    "min_episodes_per_bin": 9,
+    "occupied_cells": 141,
+    "phase_budget": [
+      2,
+      2,
+      26,
+      2
+    ]
+  }
+}

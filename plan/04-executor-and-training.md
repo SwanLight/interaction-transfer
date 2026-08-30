@@ -28,7 +28,7 @@
 | reward | 任务 reward（角度/开度/清除量） | 交互跟踪 reward，**无任务概念** |
 | 训练数据 | 三个任务 | **预训练物体集 + 部分任务**，留出至少一个任务 |
 | 回答的问题 | 交互信息能否帮助一个学任务的策略 | 该形态能否实现任意交互规格 |
-| 主指标 | 成功率、样本效率 | **留出任务零样本成功率** |
+| 主指标 | 成功率、样本效率 | interaction tracking；留出任务成功率是强泛化指标 |
 | 对应实验 | 实验一（支撑） | **实验二（主）** |
 | 进入最终系统 | 否 | 是 |
 
@@ -127,7 +127,7 @@ r = w_e · r_effect + w_r · r_region + w_m · r_mode + w_f · r_mech + r_safety
 | `r_effect` | 被操作物体实际状态变化与**指令 effect** 的负误差 |
 | `r_region` | 落在指令 region 内的接触法向力占比；region 外的接触受罚 |
 | `r_mode` | 各活跃表面点的实际 stick/slide 与指令 mode 的匹配率 |
-| `r_mech` | task-relevant generalized force 落在指令范围内为 0 代价，越界按 hinge 受罚 |
+| `r_mech` | 实际 object-frame surface traction 对当前 command 统计带的法向、切向方向与幅值误差；并检查其积分 6D wrench 一致性。全程不做任务专用广义力投影 |
 | `r_safety` | 法向力上限、关节限位、动作平滑、非目标碰撞 |
 
 **明令禁止出现在 E-I reward 中的项**：
@@ -144,30 +144,25 @@ r = w_e · r_effect + w_r · r_region + w_m · r_mode + w_f · r_mech + r_safety
 三个来源，混合采样：
 
 1. **回放**：训练任务的 envelope（Allegro 用抽屉+旋钮，等等，见 §5.4）；
-2. **扰动回放**：对回放指令做时间缩放、region 在允许集合内平移、mechanics 幅值在范围内重采样；
+2. **扰动回放**：只对完整、真实出现过的 command sequence 做有限时间缩放和统一
+   物理扰动，不把 region / traction / mode 独立拼接成不存在的交互；
 3. **预训练物体集**：`03` §2.4 的方块/立柱/滑块/斜面上，由双板 source 脚本产生的物理有效指令。
 
 第 3 项必须占相当比例。如果 E-I 只在三个任务的 envelope 上训练，"留出任务零样本"就退化成"三选一的插值"，说服力大打折扣。
 
 **不要随机凭空生成指令**：随机采样的 (region, mode, wrench, effect) 四元组通常物理上互不相容，训出来的执行器会学会忽略指令。所有指令必须来自**真实跑通过的物理轨迹**。
 
-### 5.3 可行性评价器（capability map 进闭环）
+### 5.3 本体能力如何进入系统
 
-初版把 capability map 只当评估指标（`log/progress.md` P5 的 IoU）。但 idea 的核心机制是"执行器摸索完自己的能力后据此生成动作"，那要求 capability 进入决策回路。
+核心不是额外求一次集合交，而是**每种 embodiment 各自完成 interaction-conditioned
+executor 训练**：其 policy、状态表示、动作空间与 replay 已经编码“这个身体怎样实现
+给定 interaction”。部署时直接由该 executor 解码 command。
 
-```text
-f(本体状态, 物体几何, 候选具体指令) → P(可实现)
-```
+只有当 interaction artifact 明确包含多个替代实现，而且直接 decoder 无法稳定选择时，
+才把 empirical executability evaluator 作为可选增强做独立消融。它不是 embodiment
+物理能力真值，不是当前主流程的前置闸门，也不代表 idea 的算法就是“求交”。
 
-- **标签免费**：E-I 训练 rollout 中，每条指令是否达到跟踪阈值，直接就是二分类标签；
-- **训练**：在 E-I 的 replay buffer 上离线训一个二分类器，不额外跑仿真；
-- **部署**：envelope 给出**允许集合**（多峰 region、力的范围）→ 在允许集合内采样 K=32 个具体指令 → 评价器打分 → 取 argmax → 喂给 E-I。
-
-这一层就是 KITE limitation 4 说的那个洞：它的 closest-feasible-contact 是局部启发式，位姿偏移 30 cm 时成功率从 100% 掉到 37%。评价器把"选哪个具体实现"从启发式变成学出来的。
-
-**通过条件**：留出集上 AUC ≥ 0.85；且"有评价器 vs 在允许集合内随机取"的下游成功率差异需在 `06` 中单独报告。
-
-### 5.4 训练/留出划分
+### 5.4 训练/留出划分（泛化评估，不是协议定义）
 
 每个执行器留出一个它**物理上做得到、但训练中从未见过**的任务。
 
@@ -206,9 +201,15 @@ weighted/max pooling
 
 ### 时间指令编码
 
-未来 10 步的 effect、direction、mode 和 mechanics 序列进入两层 GRU，hidden 128。
+未来 10 步的 fixed effect、direction、mode 和 task-agnostic traction constraint 序列
+进入两层 GRU，hidden 128。一次送入一段完整的 time-indexed interaction command，
+不接收 task id 或 source strategy id。
 
 **缺失字段用零值 + 独立 field mask 表示。不同条件保持完全相同的网络结构和参数量**——这是把性能差异归因到信息而非容量的前提。
+
+E-I dataloader 使用 exact allowlist，只允许 `effect/rigid`、`effect/surface_state`、
+surface geometry、region、engage、mode 与 task-agnostic traction constraints。
+`mech/generalized`、任务原生 effect、任务 phase/progress、task id/name 任一出现都硬报错。
 
 ### 自身状态编码
 
@@ -279,7 +280,8 @@ seed 数按 Tier 2 标准（3 seed），只在 Tier 1 组合上跑。
 - **A 单指令跟踪**：固定物体、固定一条指令，确认跟踪 reward 可学、各项量级合理。
 - **B 预训练物体集**：在 `03` §2.4 四类物体上训练，指令随机化。这是"摸索自己形态能力"的主体阶段。
 - **C 加入训练任务 envelope**：按 §5.4 加入该执行器的训练任务。
-- **D 训练可行性评价器**：在 A–C 的 replay buffer 上离线训练，不额外跑仿真。
+- **D 冻结并评估 executor 的 interaction coverage**：在未用于训练的物理指令、物体
+  与任务上分别报告距离、跟踪率和失败模式。额外选择器若启用，另列实验，不并入主链。
 
 **留出任务在 A–D 的任何阶段都不得出现。**
 
@@ -312,7 +314,8 @@ seed 数按 Tier 2 标准（3 seed），只在 Tier 1 组合上跑。
 - 分开记录物理不可达、policy 失败和安全限制失败；
 - 输出称为 empirical capability map，不直接声称物理能力真值。
 
-注意与 §5.3 的可行性评价器区分：评价器是**学出来的、进入闭环的**；capability map 是**枚举出来的、用于评估和可视化的**。两者应互相印证——评价器的高分区域应与 capability map 重合，不重合处要在 `06` 中检查。
+这张图用于理解训练后的覆盖边界，不自动成为部署模块。若未来启用 §5.3 的可选
+evaluator，再单独比较两者并验证它是否真的提升下游成功率。
 
 ## 13. 诊断顺序
 

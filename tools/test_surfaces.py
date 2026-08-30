@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -31,6 +32,8 @@ from it.surfaces import (  # noqa: E402
     assign_to_surface,
     object_geometry,
     object_names,
+    load_surface,
+    save_surface,
     surface_for,
 )
 
@@ -172,6 +175,21 @@ class TestSurfaces(unittest.TestCase):
         _, ok, d = assign_to_surface(deep, s, max_dist=1e-3)
         self.assertTrue(bool(ok[0]))
         self.assertGreater(float(d[0]), 5e-3)
+
+    def test_frozen_surface_round_trip(self):
+        """下游必须能读同一份冻结点序，不能跨 NumPy 环境重新 FPS。"""
+        surface = surface_for("block")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "block.surface.npz"
+            save_surface(surface, path)
+            loaded = load_surface(path)
+        self.assertEqual(loaded.sha256, surface.sha256)
+        self.assertEqual(loaded.parts, surface.parts)
+        for name in ("points", "normals", "part", "area"):
+            np.testing.assert_array_equal(getattr(loaded, name), getattr(surface, name))
+        self.assertEqual(set(loaded.parent), set(surface.parent))
+        for level in surface.parent:
+            np.testing.assert_array_equal(loaded.parent[level], surface.parent[level])
 
 
 if __name__ == "__main__":

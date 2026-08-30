@@ -335,7 +335,7 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
         surface_tol: 接触点离表面采样点多远还算落在这个物体上。
 
     Returns:
-        新的 `EpisodeRecord`，``schema_version = "s4-record-v1"``。
+        新的 `EpisodeRecord`，``schema_version = "s4-record-v2"``。
     """
     if record.meta.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"输入不是 {SCHEMA_VERSION}：{record.meta.get('schema_version')}")

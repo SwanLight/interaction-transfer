@@ -27,6 +27,11 @@ S7 的留出任务零样本全部建立在它上面。这一层错了，下游�
 
 数据集本身在服务器 `/tmp/s4_{drawer,wipe,knob,probe}`，按 D-23 不进版本控制。
 
+⚠️ **S5 smoke 新发现（P-57）**：这批现有数据只在 meta 保存 surface identity hash，
+没有保存 surface 数组；跨 NumPy 环境重新 FPS 会让抽屉/旋钮点序变化。现有数据的
+surface 已从原生成环境导出供 S5 使用；今后 `tools/s4_extract.py` 会把
+`frozen-surface-v1` 与 manifest 同存。不得忽略 hash 在另一环境直接重建。
+
 ## 提取了什么
 
 | 数据集 | S3 源 | S4 记录 | episode | 成功 |

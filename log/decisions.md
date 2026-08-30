@@ -1596,3 +1596,304 @@ oracle envelope 与诊断用，meta 里的 `fields.effect_interface` 写明 E-I 
 **决定**：措辞统一为"可学性检查"。一旦要用它判断"是不是表示信息不够"
 （D-30 的硬规则），必须为那个具体组合**训练出明显更强的 Expert 或 C4 参考**
 并如实报告其成功率；拿 43% 去论证"表示不足"没有依据。
+
+---
+
+## D-57 · 修正 CHORD、跨手接触迁移与 GR00T 的文献定位 ⭐⭐
+
+**日期**：2026-08-30（接管审计，逐段核对论文正文）
+
+**发现的三处事实错误**：
+
+1. CHORD 不是“复制 exact wrench”。它比较由接触位置、法向和摩擦锥构造的
+   wrench-space support function，带相对容差，并明确说没有恢复精确多接触净 wrench
+   polytope；
+2. *Transferring Contact, Not Just Motion* 不是“接触中心抓取”。它保留 15-D MANO
+   pose latent，把各手 effort 标定为关节力矩、指尖力与 load descriptor，并把原语复用
+   到运输/交接流水线；
+3. GR00T 那篇的 74%（contact encoder）、82%（depth）、94%（contact state）是 G1
+   单任务上的**并列配置**，不是逐项累加链，也不能推出所有任务中接触都是最高价值模态。
+
+**决定**：`plan/00` 按原文改写；C4 vs C5 保留为项目内部最小性实验，但不再声称是
+相对 CHORD 的直接差异。OmniContact 升为正面相邻工作，因为它同样用 contact flow
+驱动统一低层执行器；真正差异必须靠 object-centric、无 body target、mode/traction
+范围和留出任务 E-I 的实验来证明。
+
+---
+
+## D-58 · E-I mechanics 改成定长 task-agnostic surface traction contract ⭐⭐⭐
+
+**日期**：2026-08-30（接管审计）
+
+**问题**：D-53 已把 effect 改成固定物理接口，但 mechanics 仍写成“旋钮绕轴力矩、
+抽屉沿导轨力、擦拭法向/切向力”。该向量维度、名字和投影轴都由任务决定；若 E-I
+观测或 reward 使用它，就存在任务分支，“任务无关”在接口层已经失败。
+
+**决定**：
+
+- 把 object-frame contact force 用同部件、归一化的邻域核散射到冻结表面点，再除以点
+  代表面积得到 surface traction density；核带宽只跟 surface/sensor pitch 走，不按任务
+  调。归一化必须守恒合力，积分力矩必须与 raw contact wrench 做硬阈值对拍；禁止
+  “最近点力 / 点面积”这种随分辨率任意尖峰化的实现；
+- C4 给每个联合分量内的法向 traction 区间、切向方向锥与幅值区间；合 6D wrench
+  由表面点位置积分，只作固定维度一致性检查；
+- task-relevant generalized force 只保留为 oracle 标签构造后的诊断投影和论文图，
+  不得进入 FunctionalEnvelope、E-I 观测或 reward；
+- C5 改称 exact source realization（精确 traction/wrench realization），不再含混地叫
+  exact wrench；
+- S5 实现前冻结 `FunctionalEnvelope` schema；S6 的 E-I dataloader 用 exact allowlist，
+  对 `mech/generalized`、任务原生 effect、phase/progress、task id/name 硬报错。
+
+S4 v2 已有 surface index、force 与冻结 surface area，可离线派生 traction，无需重采 S3。
+
+---
+
+## D-59 · Envelope 必须保持字段联合性；成功示教只能给 empirical support ⭐⭐⭐
+
+**日期**：2026-08-30（接管审计）
+
+**两个逻辑漏洞**：
+
+1. 分别学习 region heatmap、mode 和 mechanics 边缘范围后任意拼接，会造出从未共现的
+   物理组合；“区域 A 的方向 + 区域 B 的力”可能各自合法但联合非法；
+2. 只看成功示教无法识别必要条件，也无法排除未出现的替代成功策略。它能估计的是
+   示教分布的 success support，不是任务的必要充分可行域。
+
+**决定**：Functional Envelope 表示为少量**联合分量的并集**。每个分量同时绑定
+phase-conditioned effect / region / engage / mode / traction；分量由物理 interaction
+features 形成，不用 strategy label；部署一次采样完整 candidate，component id 不进 E-I。
+失败与 near-success 独立保存为边界反证和 executability 负例，不混进成功聚合。
+没有负证据和干预前，统一称 **empirical success-support envelope**。
+
+**Conformal 也随之修正**：
+
+- region 用 episode-level score，校准“至少 95% 法向力加权接触质量落入区域”；
+- mechanics 用 CQR，而不只是 pinball quantile；
+- joint score 检查同一分量内各字段同时满足；
+- 可声称的是 exchangeability 下的 marginal coverage，不是任意新任务/每个 subgroup 的
+  conditional guarantee；策略、物理、几何、任务 subgroup coverage 必须另报。
+
+---
+
+## D-60 · 十五原语只证明边缘覆盖，不证明张满交互空间 ⭐⭐
+
+**日期**：2026-08-30（接管审计）
+
+五个轴来自 Huang/Bullock/Lynch-Mason 与本项目字段的工程综合，并非某篇文献给出的
+完备分类学。S1–S3、M1–M4、F1–F3、E1–E5、G1–G3 各出现至少一次，只证明**边缘
+覆盖**；它不覆盖五轴笛卡尔积，也不能推出 E-I 可执行“任意交互规格”。
+
+**决定**：保留并冻结现有 10 物体、15 原语与 10,740 episode，不因本次审计补数据，
+避免看留出结果后改训练分布。措辞统一改为“边缘覆盖”；S7 除最近邻指令距离外，
+增加 kNN 局部密度、五轴 pairwise coverage matrix、leave-one-primitive 和
+leave-one-object 评估。若只在近邻/高密度区成功，主张降级为分布内组合泛化。
+
+---
+
+## D-61 · Capability evaluator 是 policy-conditioned executability，不是物理能力真值 ⭐⭐
+
+**日期**：2026-08-30（接管审计）
+
+只用 E-I replay 的成败训练分类器，会把当前策略没学会的区域误标成形态不可行；部署时
+对 K 个候选裸取单模型 argmax，又会主动利用分类器在低密度区的过度自信。AUC 0.85
+不能证明这个选择器在闭环中有效。
+
+**决定**：统一称 empirical executability evaluator；replay 数据外，按固定预算主动
+评估 envelope 边界和低密度 candidate；用 bootstrap ensemble 与保守分数
+`mean(P)-λ·std(P)` 选完整联合 candidate。验收除 AUC 外必须报 Brier/ECE、OOD 子集、
+top-k selection regret 与下游成功率，并对照随机联合 candidate、最近训练 candidate、
+几何启发式。Gate E 的 60% 只是推进阈值，必须配置信区间、基线和距离/密度曲线。
+
+---
+
+## D-62 · S4.6 只证明仿真可观测性，不证明 sensor sufficiency ⭐⭐
+
+**日期**：2026-08-30（接管审计）
+
+S4.6 用 oracle Record 模拟噪声、pitch 与 tactile modality，再比较重建字段。它没有把
+重建命令送入 E-I，也没有真实装置、真实配准误差或人体数据。因此“装置能测的子集
+够用、下游性能下降有限”超出了证据。
+
+**决定**：本步统一称 simulated sensor observability；当前曲线只给候选硬件指标。
+S6 checkpoint 出来后补 frozen E-I 的 oracle-command vs reconstructed-command 评估，
+才讨论 simulation control sufficiency；真机 sensor sufficiency 仍留 Phase II/III。
+
+---
+
+## D-63 · 冻结真实主流程；撤销“求交/选择器是核心算法”的误读 ⭐⭐⭐
+
+**日期**：2026-08-30（用户重新澄清 idea 后）
+
+**主流程只有四层**：
+
+1. 多位采集者为很多任务采集多条示教，同一任务可以有多人、多策略数据；
+2. 上游针对每个已采集任务形成可传递的 interaction 表征；
+3. 每种 embodiment 各自经过统一的 interaction-conditioned 训练，学会如何把这类
+   interaction 解码为自己的 action；新 embodiment 需要训练自己的 executor，不声称
+   一个旧 executor 零样本控制新形态；
+4. 部署时把 interaction 送给该 embodiment 自己的 decoder/executor，触觉、视觉或其他
+   servo 作为闭环稳定层。
+
+**两项纠正**：
+
+- “能否从已采集任务泛化到未采集任务”取决于上游模型、数据与规模，不是这套传递
+  协议本身的定义。E-I 的留出任务只是一项强泛化测试，不能反过来改写 idea；
+- embodiment 的能力主要编码在它自己训练出的 executor 中。单独的 executability
+  evaluator 只能是有实验增益时的可选增强，不存在一个必须显式计算的“形态能力集合
+  与 interaction 集合求交”。D-59 中“必须用联合分量并集”、D-61 中“评价器进入主
+  闭环”的强制性要求由本决定撤销；其中关于“不把成功数据冒充必要充分条件”和
+  “可选分类器不能冒充物理能力真值”的警告仍保留。
+
+**S5 第一实现**：先做直接、可审计的多示教统计传递。按归一化 interaction progress
+对齐；每条 episode 先在时间格内汇总，再跨 episode 等权统计；输出固定 surface 上的
+effect、region mass、engage direction、mode probability 与守恒 traction。10/90 分位数
+只称描述性统计。真实数据若显示严重多峰或下游无法使用，再用冻结实验比较聚类、条件
+模型或校准方法，不能先凭语义想象出复杂算法再宣称它是创新。
+
+---
+
+## D-64 · Surface mechanics 使用守恒的 coarse cell wrench；surface 必须随数据冻结 ⭐⭐⭐
+
+**日期**：2026-08-30（S5 real-record smoke）
+
+真实 S4 样本暴露两项实现约束：
+
+1. 只保存 surface hash、在下游重新 FPS 会因跨环境 tie-breaking 改变抽屉/旋钮点序；
+2. 把 cell 合力直接放到 256 点代表位置虽守恒合力，但抽屉/旋钮的合力矩误差达
+   0.4–0.5 N·m，不能作为 mechanics contract。
+
+**决定**：S4 数据集必须携带 `frozen-surface-v1`。S5 的每个 coarse surface cell 保存
+traction density 与相对代表点的 local moment density；积分二者恢复 object-frame 6D
+wrench。local moment 是粗粒化 cell wrench 的物理量，不是任务专用 generalized force。
+真实样本 smoke 修后最大误差：合力 6.18e-6 N，合力矩 1.76e-7 N·m。
+
+---
+
+## D-65 · S5 命令轴换成"相分段 + 活动量"，`progress` 单独用会退化 ⭐⭐⭐
+
+**日期**：2026-08-30（接手复核 S5 contract，实测 33 条真实 S4 记录）
+
+**问题**：v1 按全局 `progress` 把每条示教切成 32 格。`progress` 是**任务 effect 完成度**
+（抽屉 `opening/goal`、擦拭 `cleared`），接近段恒为 0、到达目标之后恒为 1。实测：
+
+| 任务 | 帧落进"首格 + 末格"的比例 | 中间 30 格每格帧数中位数 |
+|---|---:|---:|
+| 抽屉 | **83.9%** | 2 |
+| 旋钮 | **73.3%** | 2 |
+| 擦拭 | 37.9%（另有 15.4% 空格） | 7 |
+
+也就是说，抽屉那份 artifact 里 30 个命令格各由 1~2 帧描述，而两个退化格吞掉了
+整条 episode 的 84%。**所有既有校验照常通过**：`support/episodes` 是满的、
+`command/valid` 全 True、`empty_bins` 报 0。见 P-58。
+
+`plan/03` §8 第 1 条原文是"按 **phase 和** object progress 对齐"，v1 只实现了后半句。
+`phase` 是记录里已有的、四个任务共用的 int8（approach / establish / manipulate /
+release），按 D-55 它作为**离线对齐标签**是允许的（进模型观测才不允许）。
+
+**决定**：命令轴改为
+
+1. 先按 `phase` 把 episode 切成四段；
+2. 每段分到的格数按该段的**交互活动量占比**分配，每个**有帧**的段保底 2 格；
+3. 段内也按累计活动量分格。
+
+活动量 = 接触冲量率（`aux/frame_force`）+ effect 变化率，两路**各自在 episode 内
+归一化**后相加，因此不需要在牛顿与米之间拍权重（D-31 的第 2 个洞），也不含任务分支。
+effect 一路不取 `norm(concat(dp,dr))`，而是把固定 effect 契约（D-53）的刚体增量作用在
+冻结 surface 点上取**表面点平均位移**（米），`surface_state` 取面积加权变化量。
+
+**为什么按活动量而不是按帧数**：另一个候选 `phase_time`（四段均分、段内按帧序）在
+占用均匀度上最好看，但它让**抽屉只有 18%、旋钮只有 26% 的命令格里有接触**——接近段和
+松开段本来就没有接触，操作段里到达目标之后还有很长一截无接触的保持，命令通道的容量
+被花在"这一步不需要接触"上。活动量分配后接触格占比是 87% / 88% / 100%。
+
+**判据**：五个候选用 `tools/s5_align_probe.py` 实测（产物 `out/s5_align/probe.txt`）。
+主判据是 **binJS**——同一条 episode、同一格内各接触帧的接触分布不一致度。它**不受格子
+大小混淆**（格子越大越平均、看起来越像），直接回答"这个格有没有把物理上不同的接触状态
+混进同一条命令"：
+
+| key | 抽屉 binJS | 擦拭 binJS | 旋钮 binJS | 接触格占比 | 空格率 |
+|---|---:|---:|---:|---|---|
+| `progress`（v1） | 0.145 | 0.305 | 0.210 | 99.5 / 84.6 / 100 | 0.3 / **15.4** / 0 |
+| `phase_time` | 0.146 | 0.383 | 0.357 | **18.0 / 100 / 26.4** | 0 |
+| `phase_progress` | 0.134 | 0.397 | 0.325 | 43.5 / 100 / 38.2 | 1.0 / 0 / **17.0** |
+| `phase_effect` | 0.130 | 0.381 | 0.332 | 44.8 / 100 / 36.1 | 2.6 / 0 / **20.5** |
+| **`activity`** | **0.114** | **0.260** | 0.215 | **87.2 / 100 / 88.5** | **0 / 0 / 0** |
+
+**如实记下不利的一面**：另一项 `within_family_js`（同族两条示教在同一格上的分布差异）
+在抽屉/旋钮上反而是 `progress` 略低（0.301 vs 0.307、0.383 vs 0.354 —— 旋钮是 activity 更低）。
+**没有按这一项选**，因为它被占用量混淆：把 84% 的帧倒进 2 个格会得到高度平均、
+彼此trivially相似的分布。这一条写在这里，是为了下一个人看到那两个数时不必重新怀疑。
+
+**被否决**：
+
+- **DTW / GCTW 对齐**（Zhou & De la Torre）：原理上更强，但引入不可审计的对齐路径，
+  且本项目的 `phase` 标签已经提供了粗粒度的非线性对齐。数据显示需要时再上；
+- **按帧数比例分配格数**：把容量给了没有接触的段，见上；
+- **固定 2/6/20/4 的格数预算**：四个魔数没有依据。按活动量占比分配只留一个参数
+  （保底格数 = 2），而且它记在 `meta.aggregation.phase_budget` 里可审计。
+
+---
+
+## D-66 · 同一个 cell 的所有字段必须来自同一组 episode 和同一批帧 ⭐⭐⭐
+
+**日期**：2026-08-30（同上，实测 33 条真实 S4 记录）
+
+**问题**：v1 对"这条 episode 没碰过这个 cell"用了**两套不一致的表示**——
+`region` / `engage` / `mode` 填 NaN（跨 episode 统计时被 `nanmedian` 排除），
+而 `traction` / `moment_density` 填 0（被算进统计）。于是同一个 cell 上：
+
+- 方向是"碰过的那几条示教的平均"；
+- 力是"全部示教的平均"，被没碰过的那些用零稀释。
+
+实测每个 occupied cell 的中位支持度只有 **5/12**（擦拭 3/12），所以过半的 cell 上
+零值占多数，中位数直接落到 0。结果是**自相矛盾的指令**——同一格同一个 cell 同时说
+"这里应该接触（region mass > 0）"和"这里的力必须恰好为零（traction median = 0）"：
+
+| 任务 | v1 中出现该矛盾的 occupied cell 占比 |
+|---|---:|
+| 抽屉 | **57.9%** |
+| 擦拭 | **80.7%** |
+| 旋钮 | **48.7%** |
+
+这正是 D-59 警告的"分字段边缘量拼出物理非法组合"，只不过它不是通过显式拼接进来的，
+而是通过 NaN 策略不一致溜进来的——**更隐蔽，因为每个字段单独看都对**。见 P-59。
+
+**决定**：
+
+1. `traction` / `moment_density` 改为**接触条件化**：每条 episode 在每个 cell 上只用
+   **该 cell 实际有接触的那些帧**求平均，没碰过就是 NaN，与 `engage` / `mode` 完全一致。
+   于是同一个 cell 的四个字段来自同一组 episode、同一批帧；
+2. 新增 `region/support` (B,S)：多少条 episode 在这个格里碰过这个 cell。下游此前
+   **完全无法分辨 1/12 与 12/12** —— artifact 里只有逐格的 `support/episodes`；
+3. 新增 `region/duty` (B,S)：碰过的 episode 里，这个格内有多大比例的帧在接触。
+   它是从接触条件化 traction 还原逐帧平均力的那个因子；
+4. 新增 `engage/concentration` (B,S)：各 episode 单位方向的合矢量长度 ∈[0,1]。
+   v1 把它阈值化成 `engage/valid` 一个 bool 就扔了，而它正是**方向多峰性的直接度量**，
+   代价为零；
+5. `validate()` 增加硬约束：`support == 0` 的 cell 上所有接触条件化字段必须为 0，
+   `support > 0` 的 cell 上 `mode/prob` 必须归一化。矛盾指令在契约层就进不来。
+
+**同时更正一处措辞**（这条比上面更容易骗到人）：v1 的 smoke README 把
+"6D wrench 重建误差 6.18e-6 N"当成 mechanics 契约的验证。**那个数在代数上是恒等式**：
+cell 内先算相对代表点的局部力矩、再加上 `cross(representative, F)`，恒等于直接对接触点
+求力矩，所以拿它跟自己对拍只能得到浮点精度。真正有信息量的是**表面投影完整性**——被
+`on_surface` / `weight>0` 滤掉的接触占了多少力，以及由此与 S4 **独立**记的
+`mech/wrench_obj` 差多少。诊断字段改名为 `projection_residual_*` 并增报
+`dropped_force_mass_fraction`。
+
+**并且**：跨 episode 取中位数/分位数之后 6D wrench 守恒**不再成立**（中位数是非线性的）。
+这是任何统计聚合的固有性质，不是缺陷，但**不得再声称"积分恢复 6D wrench"**。守恒只在
+聚合前的单条 episode 上成立，`_projection_diagnostics` 查的就是那一层。
+
+**schema 提到 `interaction-transfer-v2`，v1 读到即报错。** 与 `s4-record-v2` 同一个理由：
+v1/v2 的对齐轴与 cell 统计口径都变了，混用会让下游拿到一半新一半旧而看不出来。
+S6 尚未开始，此时改代价最低。
+
+**被否决**：
+
+- **保留 v1 的逐帧平均 traction，只补 support/duty 让下游自己判**：下游要正确使用就
+  必须自己重做一次条件化，而 `[q10,q90] = [0,0]` 的带在任何跟踪 reward 里都是硬约束
+  "力必须为零"。把矛盾留在产物里、指望消费者绕开，正是 P-11 那类问题的温床；
+- **只把 traction 改成条件化、不加 support**：`support == 1` 的 cell 上 q10 = q90，
+  带宽为零而中位数非零。不暴露支持度，下游分不出"所有人都这么做"与"只有一个人碰过"。
+

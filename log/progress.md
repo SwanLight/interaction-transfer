@@ -522,16 +522,17 @@ counts/start_idx，拿接触的下标去索引它，env0 的摩擦翻倍、env1 
 
 物体集的**选取依据**在 2026-08-29 换过一次，理由是用户指出的一个真实逻辑漏洞：
 原先是照着留出任务需要什么反推物体，那样执行器在"摸索能力"阶段学到的就是
-留出任务本身，只换了个标签。现在改为**张满一套独立于本项目三个任务的交互
-分类学**（Huang 的接触模式枚举 + Bullock 的手中心描述子 + Lynch & Mason 的
+留出任务本身，只换了个标签。现在改为按一套独立于本项目三个任务的五轴框架做
+**边缘覆盖**（Huang 的接触模式枚举 + Bullock 的手中心描述子 + Lynch & Mason 的
 非抓握原语命名），并加一条硬规则：**每条原语至少两个几何不同的物体承载**。
-完整论证见 `../plan/03` §2.4，决策见 D-41 / D-43。
+五轴是项目综合，不是完备分类学，边缘覆盖不等于张满笛卡尔积（D-60）。
+完整论证见 `../plan/03` §2.4，决策见 D-41 / D-43 / D-60。
 
 ```bash
 # 每物体一张卡，batches 按"每条原语 ≥200 条成功轨迹"算
 PYTHONPATH=src /isaac-sim/python.sh tools/s3_source_probe.py \
     --object block --envs 60 --batches 34 --out /tmp/s3_probe/block
-# 覆盖核对（未张满时返回非零）
+# 十五原语与双物体覆盖核对（不声称笛卡尔积完备）
 PYTHONPATH=src /isaac-sim/python.sh tools/s3_coverage.py /tmp/s3_probe
 ```
 
@@ -989,7 +990,7 @@ Tier 1 checkpoint）。那是 S6 的产物。**编号 S4.5 排在 S4 之后是�
 
 | 项 | 目标 | 实测 |
 |---|---|---|
-| coverage | ≥90% | |
+| episode-level field coverage | 描述性统计先实测；region 同时报 ≥95% force-mass 覆盖率 | |
 | width | ≤ oracle 的 1.5× | |
 | 冻结 executor 成功率下降 | ≤10 pt | |
 | 策略身份 probe 准确率 | 显著低于原始动作 | |
@@ -997,29 +998,92 @@ Tier 1 checkpoint）。那是 S6 的产物。**编号 S4.5 排在 S4 之后是�
 
 记录：
 
----
+### 2026-08-30 · S5 第一版 contract + 真实 S4 smoke（`interaction-transfer-v1`，**已作废**）
+
+- 新增 `src/it/transfer.py`：exact allowlist、episode 等权的 32-bin 聚合、save/load；
+  任务名只在审计 meta，不进 executor payload；
+- 新增 `tools/s5_build_transfer.py` 与 5 条本地测试；失败示教、混任务、surface hash
+  不一致、未知输入字段均 fail closed；
+- 发现并修复 P-57：surface 点序必须作为 artifact 随 S4 数据冻结，不能只存 hash 后
+  在另一 NumPy 环境重建。
+
+⚠️ **v1 的两处结论已被同日的复核推翻**（详见下一节）：所谓"6D wrench 重建误差
+6.18e-6 N"是代数恒等式、不构成验证（P-60）；而 v1 的命令轴与 per-cell 统计口径都是
+错的（P-58 / P-59）。**v1 artifact 一律作废，读到即报错。**
+
+### 2026-08-30 · 接手复核 → `interaction-transfer-v2`（D-65 / D-66）
+
+在 33 条真实 S4 记录（抽屉 12 / 擦拭 12 / 旋钮 9）上复核 v1，发现两个**不报错、
+只让指令失效**的缺陷，并据实测重做了契约。
+
+**缺陷一：命令轴退化（P-58）。** v1 按任务完成度 `progress` 分格：
+
+| 任务 | 帧落进"首格 + 末格"的比例 | 中间 30 格每格帧数中位数 |
+|---|---:|---:|
+| 抽屉 | **83.9%** | 2 |
+| 旋钮 | **73.3%** | 2 |
+| 擦拭 | 37.9%（另有 15.4% 空格） | 7 |
+
+当时 `support/episodes` 满格、`command/valid` 全 True、`empty_bins` 报 0。
+
+**缺陷二：同一 cell 的字段来自不同 episode 子集（P-59）。** region/engage/mode 用
+NaN 排除没碰过的 episode，traction 用 0 算进去；每 cell 支持中位数只有 5/12，于是：
+
+| 任务 | v1 中"该接触但力中位数恰为零"的 occupied cell 占比 | v2 |
+|---|---:|---:|
+| 抽屉 | **57.9%** | 0（契约硬约束） |
+| 擦拭 | **80.7%** | 0 |
+| 旋钮 | **48.7%** | 0 |
+
+**命令轴选型实测**（`tools/s5_align_probe.py`，产物 `out/s5_align/probe.txt`）。
+主判据 `binJS` = 格内逐帧接触分布的不一致度，**不受格子大小混淆**：
+
+| key | 抽屉 binJS | 擦拭 binJS | 旋钮 binJS | 接触格占比（抽/擦/旋） | 空格率 |
+|---|---:|---:|---:|---|---|
+| `progress`（v1） | 0.145 | 0.305 | 0.210 | 99.5 / 84.6 / 100 | 0.3 / **15.4** / 0 |
+| `phase_time` | 0.146 | 0.383 | 0.357 | **18.0** / 100 / **26.4** | 0 |
+| `phase_progress` | 0.134 | 0.397 | 0.325 | 43.5 / 100 / 38.2 | 1.0 / 0 / **17.0** |
+| `phase_effect` | 0.130 | 0.381 | 0.332 | 44.8 / 100 / 36.1 | 2.6 / 0 / **20.5** |
+| **`activity`** ← 选中 | **0.114** | **0.260** | 0.215 | **87.2 / 100 / 88.5** | **0** |
+
+如实记下不利项：`within_family_js` 在抽屉上略偏向 `progress`（0.301 vs 0.307）。
+**没有按它选**，因为它奖励退化对齐（帧越集中、分布越平均越"像"）。见 D-65。
+
+**v2 的改动**：命令轴改为"按 phase 分段 + 段内按累计交互活动量"；per-cell 字段一律
+接触条件化；新增 `region/support`、`region/duty`、`engage/concentration`；诊断从
+"wrench 重建误差"改为**表面投影完整性**（残差 + 被滤掉的力占比，两个都能失败）。
+schema 提到 `interaction-transfer-v2`，v1 读到即报错。
+
+**新增工具**：`tools/s5_align_probe.py`（对齐选型）、`tools/s5_freeze_surfaces.py`
+（把 P-57 的冻结 surface 补写进既有 S4 数据集）、`tools/s5_eval_envelope.py`
+（八项闸门检查）、`tools/s5_all.sh`（唯一入口，逐项收退出码，P-55）。
+本地测试从 5 条扩到 9 条，三套单测全绿。
 
 ## S6 — E-I 交互跟踪执行器 ⚠️
 
 **本轮最关键的一步。** `../plan/04` §5。
 
-| 执行器 | 训练指令来源 | 留出任务 | 跟踪成功率 | 评价器 AUC | 状态 |
+| 执行器 | 训练指令来源 | 留出任务 | 跟踪成功率 | interaction coverage / 失败模式 | 状态 |
 |---|---|---|---|---|---|
 | Allegro | 预训练集 + 抽屉 + 旋钮 | 擦拭（两种实现） | | | ⬜ |
 | **垫头杆** | **仅预训练集** | 擦拭 | | | ⬜ |
 | 平行夹爪 | 预训练集 + 抽屉 | 擦拭 | | | ⬜ |
 | 钩杆 | 仅预训练集 | 抽屉 + 旋钮 | | | ⬜ |
 
-通过条件：训练指令上跟踪成功率 ≥80%，可行性评价器 AUC ≥0.85。
+通过条件：训练覆盖内 interaction 跟踪成功率 ≥80%，并在冻结的未见物理指令上报告
+距离、局部密度、跟踪率与失败模式。若另启用 evaluator，AUC/calibration/selection
+regret 只作为该可选模块自己的验收，不再绑进主链。
 
 - [ ] **E-I reward 中不含任务 success bonus / dirt 清除量 / 任务关节目标**（`plan/04` §5.1 禁止清单）
 - [ ] **dataloader 断言已生效**：留出任务在 A–D 任何阶段都不出现（不靠自觉，靠断言日志）
+- [ ] **E-I exact allowlist 已生效**：拒绝 `mech/generalized`、任务原生 effect、
+      phase/progress、task id/name（D-58）
 
 记录：
 
 ---
 
-## S7 — 留出任务零样本（主闸门）⭐
+## S7 — 留出任务零样本（executor 强泛化闸门）⭐
 
 `../plan/05` 实验二，Gate E。
 
@@ -1034,7 +1098,10 @@ Tier 1 checkpoint）。那是 S6 的产物。**编号 S4.5 排在 S4 之后是�
 
 **Gate E**：至少两个执行器零样本 ≥60%，且其中至少一个是垫头杆/钩杆这类 0 自由度形态。
 
-若训练任务好、留出任务差 → 扩预训练物体集（`plan/03` §2.4），**不得把留出任务加进训练**。扩两轮仍不成立则如实报告未通过。
+若训练任务好、留出任务差 → 先按冻结协议检查 command 最近邻距离、kNN 密度、
+未见 pairwise 组合与 policy 跟踪，**不得把留出任务或按它
+反推的新 probe 加进原 Gate E 训练**。如需扩展数据，必须先封存并报告原 Gate E 失败，
+新增 D-xx，把扩展版作为后续实验，不能倒写成原协议通过（D-60）。
 
 记录：
 
@@ -1088,12 +1155,12 @@ Tier 1 checkpoint）。那是 S6 的产物。**编号 S4.5 排在 S4 之后是�
 
 | 闸门 | 判据 | 实测 | 结论 |
 |---|---|---|---|
-| Gate A | Expert 固定≥95% / 随机≥85% | | |
+| Gate A | A1 脚本可行；A2 Expert 按需证明可学，不称性能上限 | | |
 | Gate B | C4 下可行组合 ≥80% | | |
 | Gate C | region/mode/mechanics 各有一个反事实产生物理一致的特定失败 | | |
 | Gate D | **C1→C2 或 C2→C4** 有跨 seed 一致的可信提升 | | |
 | Gate D' | 扰动下 C4−C0 差距放大 | | |
-| **Gate E** | **≥2 执行器留出任务零样本 ≥60%，含 1 个 0-DoF 形态** | | |
+| **Gate E** | **≥2 执行器留出任务零样本 ≥60%，含 1 个 0-DoF；配 CI、command 距离/密度曲线与可比基线** | | |
 | Gate F | ≥3 种形态实现同一未改写 envelope | | |
 | Gate G | 抽屉阴性结果可接受（不修改任务追求差距） | | |
 
