@@ -11,6 +11,7 @@
 # 用法（服务器上）::
 #
 #     bash tools/s5_all.sh                    # 构造 + 评估
+#     bash tools/s5_all.sh --only parasite    # 只查寄生接触
 #     bash tools/s5_all.sh --only build       # 只重建 artifact
 #     bash tools/s5_all.sh --only eval        # 只重跑评估（artifact 不动）
 set -uo pipefail
@@ -22,7 +23,7 @@ POINTS="${IT_S5_POINTS:-256}"
 ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --only) ONLY="${2:?--only 后面要跟 freeze|build|eval}"; shift 2 ;;
+    --only) ONLY="${2:?--only 后面要跟 freeze|parasite|build|eval}"; shift 2 ;;
     *) echo "未知参数 $1" >&2; exit 2 ;;
   esac
 done
@@ -67,6 +68,7 @@ run() {   # run <报告文件名> <说明> <命令...>
 for t in $TASKS; do
   name="${t%%:*}"; rec="${t#*:}"
   run "freeze_$name" "冻结 surface" "$PY" tools/s5_freeze_surfaces.py "$rec"
+  run "parasite_$name" "寄生接触检查" "$PY" tools/s5_parasite_check.py "$rec" --sample 30
   run "build_$name" "构造 train artifact" \
       "$PY" tools/s5_build_transfer.py --manifest "$rec/manifest.json" \
       --output "$OUT/$name" --split train --bins "$BINS" --surface-points "$POINTS"

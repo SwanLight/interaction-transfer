@@ -1,0 +1,7 @@
+=== /tmp/s4_drawer
+  STALE drawer/g1：64 档有 1708 个点（10.4%）的代表点跨了部件，重新生成
+  WROTE drawer/g1 -> drawer-g1.npz (16384 点, 0.27692 m²)
+  STALE drawer/g2：64 档有 1719 个点（10.5%）的代表点跨了部件，重新生成
+  WROTE drawer/g2 -> drawer-g2.npz (16384 点, 0.27830 m²)
+  STALE drawer/nominal：64 档有 1717 个点（10.5%）的代表点跨了部件，重新生成
+  WROTE drawer/nominal -> drawer-nominal.npz (16384 点, 0.27762 m²)

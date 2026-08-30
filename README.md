@@ -18,7 +18,7 @@ Human demonstration → Functional Interaction → Embodiment Executor → Robot
 | `log/` | 工程日志：进度、踩坑、技术决策 |
 | `src/it/` | 资产生成、控制器、接触工具、任务环境 |
 | `tools/` | 环境工具、自检、录像、训练脚本 |
-| `out/` | **产物**：视频与 HTML 报告，双击 `out/report.html` 就能看 |
+| `out/` | **产物**：视频与 HTML 报告，双击 `out/report.html` 就能看。S5 的全量结果在 `out/s5/README.md` |
 | `idea/` | 原始 idea 与 PPT。**已被 `plan/` 取代**，仅作背景保留 |
 
 ## 从哪开始读

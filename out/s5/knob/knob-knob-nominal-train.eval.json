@@ -1,0 +1,197 @@
+{
+  "artifact": "/tmp/s5/knob/knob-knob-nominal-train.npz",
+  "checks": [
+    {
+      "data": {
+        "per_split": {
+          "in_distribution_test": 0.8923076923076924,
+          "unseen_physics_test": 0.8959537572254336,
+          "unseen_strategy_test": 0.9413333333333334
+        },
+        "width": 0.013682725516917092
+      },
+      "detail": "in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；width 1.37%。描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'",
+      "name": "1a region coverage（未标定 τ=0.95，仅作对照）",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "calibration_n": 87,
+        "per_split": {
+          "in_distribution_test": 0.8923076923076924,
+          "unseen_physics_test": 0.8959537572254336,
+          "unseen_strategy_test": 0.9413333333333334
+        },
+        "tau_star": 0.9299999999999999
+      },
+      "detail": "校准集 n=87 定出 τ*=0.930；留出 in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；门槛 0.9",
+      "name": "1a' region coverage（conformal）",
+      "status": "FAIL"
+    },
+    {
+      "data": {
+        "allowed_area_fraction": 0.013682725516917092,
+        "allowed_area_fraction_uncalibrated": 0.013682725516917092,
+        "total_area_m2": 0.04033482064551208
+      },
+      "detail": "τ*=0.930 下允许区域占物体表面积 1.37%（未标定时 1.37%）；平均 4.4/256 个 cell。**这才是要最小化的数**",
+      "name": "2a region width",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "cell_support_histogram": {
+          "occupied": 247,
+          "support==1": 24,
+          "support>=10": 182,
+          "support>=5": 210
+        },
+        "per_split": {
+          "calibration": {
+            "all": 0.5880120280228278,
+            "episodes": 87,
+            "simultaneous": 0.0,
+            "support>=10": 0.5870583476754032,
+            "support>=5": 0.5883534499662951
+          },
+          "in_distribution_test": {
+            "all": 0.5946750805489137,
+            "episodes": 130,
+            "simultaneous": 0.0,
+            "support>=10": 0.5917592506998368,
+            "support>=5": 0.5950367455400797
+          },
+          "train": {
+            "all": 0.5913995781630023,
+            "episodes": 652,
+            "simultaneous": 0.0,
+            "support>=10": 0.5909693378337526,
+            "support>=5": 0.59166799514066
+          },
+          "unseen_physics_test": {
+            "all": 0.3138745397297908,
+            "episodes": 173,
+            "simultaneous": 0.0,
+            "support>=10": 0.3136902568127312,
+            "support>=5": 0.31395500780143454
+          },
+          "unseen_strategy_test": {
+            "all": 0.504215754845403,
+            "episodes": 375,
+            "simultaneous": 0.0,
+            "support>=10": 0.5046891375600674,
+            "support>=5": 0.5044791260374187
+          }
+        },
+        "relative_width_median": 1.1441074794670925,
+        "relative_width_median_support5": 1.19144334929308
+      },
+      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；calibration 逐点带内 全部 0.588 / 支持≥5 0.588 / 支持≥10 0.587、episode 全中 0.000；in_distribution_test 逐点带内 全部 0.595 / 支持≥5 0.595 / 支持≥10 0.592、episode 全中 0.000；unseen_physics_test 逐点带内 全部 0.314 / 支持≥5 0.314 / 支持≥10 0.314、episode 全中 0.000；unseen_strategy_test 逐点带内 全部 0.504 / 支持≥5 0.504 / 支持≥10 0.505、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教",
+      "name": "1b mechanics band（只报数，不设门槛）",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "relative_width_median": 1.1441074794670925,
+        "relative_width_median_support5": 1.19144334929308
+      },
+      "detail": "traction 带相对宽度中位数 全部 1.144 / 支持≥5 1.191（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）",
+      "name": "2b mechanics width",
+      "status": "PASS"
+    },
+    {
+      "data": {
+        "counts": {
+          "pin_pinch": 148,
+          "pin_push_dual": 92,
+          "pin_push_single": 150,
+          "pin_regrasp": 375
+        },
+        "per_family_coverage": {
+          "pin_pinch": 0.9797297297297297,
+          "pin_push_dual": 0.6847826086956522,
+          "pin_push_single": 0.9533333333333334,
+          "pin_regrasp": 0.9413333333333334
+        },
+        "per_family_mean_mass": {
+          "pin_pinch": 0.9903930210251175,
+          "pin_push_dual": 0.955477768643537,
+          "pin_push_single": 0.9892580499929403,
+          "pin_regrasp": 0.9897343008244722
+        },
+        "spread": 0.2949471210340775
+      },
+      "detail": "τ*=0.930 下 pin_pinch 0.980（均值 0.990, n=148）；pin_push_dual 0.685（均值 0.955, n=92）；pin_push_single 0.953（均值 0.989, n=150）；pin_regrasp 0.941（均值 0.990, n=375）；落差 0.295。conformal 只保证 marginal coverage，子群落差必须另报（D-59）",
+      "name": "3 策略子群 coverage",
+      "status": "FAIL"
+    },
+    {
+      "data": {
+        "held_out_families": [
+          "pin_regrasp"
+        ],
+        "per_family": {
+          "pin_pinch": 0.21992131526736391,
+          "pin_push_dual": 0.4477921199032572,
+          "pin_push_single": 0.2085171203223969,
+          "pin_regrasp": 0.2167014981048331
+        },
+        "spread": 0.2392749995808603
+      },
+      "detail": "pin_pinch 0.220；pin_push_dual 0.448；pin_push_single 0.209；pin_regrasp* 0.217；落差 0.239（* = 未参与构造的留出族；判据要 S6 的下游成功率，现在只报数）",
+      "name": "4 family envelope 距离",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "engage_concentration_median": 0.9997323751449585,
+        "episode_pairwise": 0.5422213620241308,
+        "episode_to_neighbour": 0.08592334514405697,
+        "mode_entropy_median": 0.0,
+        "pooled_to_episode": 0.49672216021893645,
+        "ratio_vs_pairwise": 0.9160874045328197,
+        "train_episodes": 652
+      },
+      "detail": "pooled→episode 0.497 vs episode 两两 0.542（比值 0.92，>1 即质心落在示教之外）；最近邻 0.086（n=652，随样本量缩，只作辅助）；engage 集中度中位数 1.000；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数",
+      "name": "5 多峰性",
+      "status": "DEFER"
+    },
+    {
+      "data": {},
+      "detail": "数据里只有 1 种 implementation（非擦拭任务正常）",
+      "name": "6 跨实现可互换",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "episodes": 800
+      },
+      "detail": "800 条对半分，30 个数组维度全部一致",
+      "name": "7a 结构不变量",
+      "status": "PASS"
+    },
+    {
+      "data": {},
+      "detail": "训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据",
+      "name": "7b 接触体数量不变量",
+      "status": "DEFER"
+    },
+    {
+      "data": {
+        "excluded_by_geometry": {
+          "unseen_geometry_test": 204,
+          "unseen_strategy_test": 72
+        }
+      },
+      "detail": "以下成功 episode 因为几何变体不同（各有各的冻结 surface 与点序）无法在这条命令轴上打分：unseen_geometry_test 204 条；unseen_strategy_test 72 条。跨几何要么各建各的 artifact（那就不再是「未见几何」），要么需要一张表面对应表；本步不做，如实记为未完成",
+      "name": "8 跨几何 coverage",
+      "status": "DEFER"
+    }
+  ],
+  "tally": {
+    "DEFER": 7,
+    "FAIL": 2,
+    "PASS": 3
+  },
+  "transfer_id": "knob-knob-nominal-train"
+}

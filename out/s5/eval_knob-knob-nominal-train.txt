@@ -1,0 +1,22 @@
+S5 envelope 评估 — knob-knob-nominal-train
+artifact  /tmp/s5/knob/knob-knob-nominal-train.npz
+manifest  /tmp/s4_knob/manifest.json  (s4_s3_knob_source)
+episodes  calibration 87，in_distribution_test 130，train 652，unseen_physics_test 173，unseen_strategy_test 375
+命令轴    phase budget [2, 2, 26, 2]，32 格
+==============================================================================
+[DEFER] 1a region coverage（未标定 τ=0.95，仅作对照）: in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；width 1.37%。描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'
+[FAIL] 1a' region coverage（conformal）: 校准集 n=87 定出 τ*=0.930；留出 in_distribution_test 0.892 (n=130)；unseen_physics_test 0.896 (n=173)；unseen_strategy_test 0.941 (n=375)；门槛 0.9
+[PASS] 2a region width: τ*=0.930 下允许区域占物体表面积 1.37%（未标定时 1.37%）；平均 4.4/256 个 cell。**这才是要最小化的数**
+[DEFER] 1b mechanics band（只报数，不设门槛）: 10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；calibration 逐点带内 全部 0.588 / 支持≥5 0.588 / 支持≥10 0.587、episode 全中 0.000；in_distribution_test 逐点带内 全部 0.595 / 支持≥5 0.595 / 支持≥10 0.592、episode 全中 0.000；unseen_physics_test 逐点带内 全部 0.314 / 支持≥5 0.314 / 支持≥10 0.314、episode 全中 0.000；unseen_strategy_test 逐点带内 全部 0.504 / 支持≥5 0.504 / 支持≥10 0.505、episode 全中 0.000；cell 支持分布 {'support==1': 24, 'support>=5': 210, 'support>=10': 182, 'occupied': 247}。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教
+[PASS] 2b mechanics width: traction 带相对宽度中位数 全部 1.144 / 支持≥5 1.191（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）
+[FAIL] 3 策略子群 coverage: τ*=0.930 下 pin_pinch 0.980（均值 0.990, n=148）；pin_push_dual 0.685（均值 0.955, n=92）；pin_push_single 0.953（均值 0.989, n=150）；pin_regrasp 0.941（均值 0.990, n=375）；落差 0.295。conformal 只保证 marginal coverage，子群落差必须另报（D-59）
+[DEFER] 4 family envelope 距离: pin_pinch 0.220；pin_push_dual 0.448；pin_push_single 0.209；pin_regrasp* 0.217；落差 0.239（* = 未参与构造的留出族；判据要 S6 的下游成功率，现在只报数）
+[DEFER] 5 多峰性: pooled→episode 0.497 vs episode 两两 0.542（比值 0.92，>1 即质心落在示教之外）；最近邻 0.086（n=652，随样本量缩，只作辅助）；engage 集中度中位数 1.000；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数
+[DEFER] 6 跨实现可互换: 数据里只有 1 种 implementation（非擦拭任务正常）
+[PASS] 7a 结构不变量: 800 条对半分，30 个数组维度全部一致
+[DEFER] 7b 接触体数量不变量: 训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据
+[DEFER] 8 跨几何 coverage: 以下成功 episode 因为几何变体不同（各有各的冻结 surface 与点序）无法在这条命令轴上打分：unseen_geometry_test 204 条；unseen_strategy_test 72 条。跨几何要么各建各的 artifact（那就不再是「未见几何」），要么需要一张表面对应表；本步不做，如实记为未完成
+==============================================================================
+PASS 3  FAIL 2  DEFER 7
+⚠️ 判据是退出码，不是这份文件的开头（P-55）。DEFER 的项目不得引用成通过。
+There was an error running python

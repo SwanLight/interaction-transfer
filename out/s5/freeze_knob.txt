@@ -1,0 +1,7 @@
+=== /tmp/s4_knob
+  STALE knob/g1：64 档有 1909 个点（23.3%）的代表点跨了部件，重新生成
+  WROTE knob/g1 -> knob-g1.npz (8192 点, 0.04033 m²)
+  STALE knob/g2：64 档有 1860 个点（22.7%）的代表点跨了部件，重新生成
+  WROTE knob/g2 -> knob-g2.npz (8192 点, 0.04033 m²)
+  STALE knob/nominal：64 档有 1859 个点（22.7%）的代表点跨了部件，重新生成
+  WROTE knob/nominal -> knob-nominal.npz (8192 点, 0.04033 m²)
