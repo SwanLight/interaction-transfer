@@ -31,12 +31,45 @@ import numpy as np
 SCHEMA_VERSION = "s3-episode-v1"
 #: S4 的 Oracle Interaction Record（`it.interaction`）。同一套读写与划分逻辑，
 #: 只是允许的字段前缀不同——它已经是物体中心的表示，不再有 `contact/<板>/` 这层。
-IR_SCHEMA_VERSION = "s4-record-v1"
+#:
+#: **v1 -> v2 的三处实质变化，因此必须升版本**（旧记录与新记录不得混用）：
+#: 1. mode 的判据从"接触斑块位移"换成"两刚体位姿差分"（D-49 修订），
+#:    抽屉的 sticking 占比从 35.9% 变成 92.5%——**语义变了，不是数值抖动**；
+#: 2. 物体位姿一律取世界系，坐标系混用改为硬报错（P-54）；
+#: 3. 新增**任务无关的 effect 接口** `effect/rigid` 与 `effect/surface_state`
+#:    （D-53），E-I 从此不需要按任务分支。
+IR_SCHEMA_VERSION = "s4-record-v2"
+
+#: 已经作废、不得再读的旧版本。碰到就报错，而不是"尽量兼容"——
+#: v1 与 v2 的 mode 字段语义不同，混用会让下游拿到一半新一半旧的标签，
+#: 而那件事从数字上完全看不出来。
+RETIRED_SCHEMAS = ("s4-record-v1",)
 MANIFEST_VERSION = "s3-manifest-v1"
 META_KEY = "__meta__"
 
 #: 前缀白名单故意写死。宁可 loader 报错，也不要把审计字段当特征喂进去。
 SOURCE_PREFIX = "source/"
+
+#: ⚠️ **`source/` 这个前缀底下混着两类完全不同的东西**，历史命名没分开：
+#:
+#: | 类别 | 例子 | 能不能被 oracle 读 |
+#: |---|---|---|
+#: | **采集侧动作与身份** | `source/plate0/cmd_delta`、`target_pose`、`root_velocity` | **绝对不行** |
+#: | **接触面的测量位姿** | `source/plate0/root_pose`、`source/board_pos_w` | **可以，而且必须** |
+#:
+#: 第二类是**真实装置也测得到的量**（`plan/07` §3：面相对物体的位姿），
+#: S4 用它算接触点的相对滑移——那是交互本身的物理性质，不是"谁在操作"。
+#: 把两类一起禁掉，就会像初版 D-49 那样被迫用更差的判据。
+#:
+#: 所以这里显式列出**允许 oracle 读的测量字段后缀**。名字暂时留在 `source/`
+#: 下是为了不重采四份数据集；概念上它们属于 `measurement/`，
+#: 下一次重采时应当改名（见 D-52）。
+MEASUREMENT_SUFFIXES = ("/root_pose", "_pose", "_pos_w", "_quat_w")
+
+
+def is_measurement(key: str) -> bool:
+    """这个 `source/*` 字段是"接触面/物体的测量位姿"（可读），还是采集侧动作（不可读）。"""
+    return key.startswith(SOURCE_PREFIX) and key.endswith(MEASUREMENT_SUFFIXES)
 MODEL_INPUT_PREFIXES = ("object/", "contact/", "phase", "progress", "valid_")
 
 #: 每个 schema：(允许进模型输入的前缀, 只作追查/诊断而被丢弃的前缀)。
@@ -45,9 +78,11 @@ MODEL_INPUT_PREFIXES = ("object/", "contact/", "phase", "progress", "valid_")
 SCHEMA_PREFIXES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     SCHEMA_VERSION: (MODEL_INPUT_PREFIXES, (SOURCE_PREFIX,)),
     IR_SCHEMA_VERSION: (
-        ("effect/", "region/", "engage/", "mode/", "mech/",
-         "phase", "progress", "valid_"),
-        (SOURCE_PREFIX, "aux/"),
+        # ⚠️ `phase` 与 `progress` **不在这里**：它们是采集脚本的阶段机标签，
+        # 给 E-I 当观测就等于递给它一个任务专用状态机（`plan/04` §4 的修订）。
+        # S5 构造 envelope 时按 phase 对齐是允许的——那是**标签**不是**观测**。
+        ("effect/", "region/", "engage/", "mode/", "mech/", "valid_"),
+        (SOURCE_PREFIX, "aux/", "phase", "progress"),
     ),
 }
 
@@ -66,10 +101,16 @@ class EpisodeRecord:
     def validate(self) -> None:
         if not isinstance(self.meta, dict):
             raise RecordError("meta 必须是 dict")
-        if self.meta.get("schema_version") not in SCHEMA_PREFIXES:
+        version = self.meta.get("schema_version")
+        if version in RETIRED_SCHEMAS:
+            raise RecordError(
+                f"{version!r} 已作废，不得再读：它与 {IR_SCHEMA_VERSION!r} 的 "
+                "mode 字段**语义不同**（判据换过），混用会让下游拿到一半新一半旧的"
+                "标签，而那从数字上看不出来。重新跑 tools/s4_extract.py 即可")
+        if version not in SCHEMA_PREFIXES:
             raise RecordError(
                 f"schema_version 必须是 {sorted(SCHEMA_PREFIXES)} 之一，"
-                f"实际是 {self.meta.get('schema_version')!r}"
+                f"实际是 {version!r}"
             )
         for key in ("episode_id", "task", "strategy_family"):
             if not self.meta.get(key):

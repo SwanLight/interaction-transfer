@@ -30,8 +30,19 @@ S7（留出任务零样本）共同的输入，**这一层错了下游全错，�
    **这同时是真实装置能测到的量**：`plan/07` §3 的传感方案给的就是"面相对
    物体的位姿"，差分即得相对速度——oracle 与硬件在这一项上算的是同一个东西。
 
-**这一层永不读 `source/*`。** 输入取 `EpisodeRecord.model_arrays()`，
-那个函数对未归类的前缀是 fail-closed 的。
+**这一层读什么、不读什么，要分清两类东西**（`records.is_measurement`）：
+
+| 类别 | 例子 | 这一层 |
+|---|---|---|
+| 采集侧**动作与身份** | `cmd_delta` / `target_pose` / `root_velocity` / 板编号 | **绝不读** |
+| 接触面与物体的**测量位姿** | `*/root_pose`、`*_pos_w`、`*_quat_w` | **读，而且必须读** |
+
+第二类是**真实装置也测得到的量**（`plan/07` §3 给的就是"面相对物体的位姿"），
+用它算接触点的相对滑移是在算**交互本身的物理性质**，不是在抄"谁在怎么操作"。
+初版为了守"什么 source 都不读"而改用接触斑块位移，结果把抽屉 92.5% 的
+sticking 判成一半在滑（D-49 修订）——**规矩要防的是动作泄漏，不是禁用传感**。
+
+名字暂时还在 `source/` 底下是历史原因，概念上属于 `measurement/`（D-52）。
 """
 
 from __future__ import annotations
@@ -43,11 +54,11 @@ from typing import Any, Callable
 import numpy as np
 
 from it import geom_cfg as G
-from it.records import SCHEMA_VERSION, EpisodeRecord
-from it.surfaces import Surface, assign_to_surface, surface_for
+from it.records import IR_SCHEMA_VERSION, SCHEMA_VERSION, EpisodeRecord
+from it.surfaces import LEVELS, Surface, assign_to_surface, surface_for
 
-#: S4 记录的 schema 版本。
-RECORD_SCHEMA = "s4-record-v1"
+#: S4 记录的 schema 版本，跟着 `it.records` 走（v1 已作废，见那里的说明）。
+RECORD_SCHEMA = IR_SCHEMA_VERSION
 
 #: 未来窗口：1 s、10 个采样点（`plan/02` §3，50 Hz 记录 -> 每 5 帧一个）。
 FUTURE_HORIZON_S = 1.0
@@ -436,6 +447,8 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
     # --- 7. effect 与未来窗口 ---
     eff = spec.effect_fn(arrays, meta)
     future, future_valid, eff_names = _future_window(eff, spec, meta)
+    # 任务无关接口（D-53）：E-I 吃的是这两路，不是上面那两路任务原生量
+    rigid, field = _effect_interface(eff, spec, meta, surface, arrays)
 
     # --- 8. 脏帧 ---
     frame_force = fn.sum(axis=1)
@@ -472,6 +485,10 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
         "mech/force_obj": sort_by_force(force).astype(np.float32),
         "mech/wrench_obj": wrench.astype(np.float32),
         "mech/generalized": np.asarray(generalized, dtype=np.float32),
+        # --- 任务无关接口：E-I 的 effect 通道就是这两路（D-53）---
+        "effect/rigid": rigid.astype(np.float32),
+        "effect/surface_state": field.astype(np.float32),
+        # --- 任务原生量：给 S5 构造 oracle envelope 与诊断用，维度按任务变 ---
         "effect/current": eff.astype(np.float32),
         "effect/future": future.astype(np.float32),
         "effect/future_valid": future_valid,
@@ -505,6 +522,10 @@ def extract(record: EpisodeRecord, surface: Surface | None = None,
             "effect_names": list(eff_names),
             "generalized_names": list(spec.generalized_names),
             "mode_names": ["no_contact", "sticking", "sliding", "separating"],
+            # E-I 只许吃这两路 effect；`effect/current` 与 `effect/future` 是
+            # **任务原生量**（维度按任务变），只给 S5 与诊断用（D-53）
+            "effect_interface": ["effect/rigid", "effect/surface_state"],
+            "effect_field_level": EFFECT_FIELD_LEVEL,
             "n_slots": int(n_slots),
             "n_bodies": len(bodies),
         },
@@ -721,6 +742,124 @@ def _patch_slip(pos: np.ndarray, fn: np.ndarray, active: np.ndarray,
     if trusted_slot.shape[0] != n_slots:            # 槽位数不能整除时不猜
         trusted_slot = np.zeros(n_slots, dtype=bool)
     return patch, np.where(has_data, trusted_body, True), trusted_slot, has_data
+
+
+#: 任务无关 effect 接口的横向分辨率：surface_state 用最粗那一档（64 点）。
+#: 它只需要表达"哪一片表面的状态在变"，不需要 region 那种精度。
+EFFECT_FIELD_LEVEL = LEVELS[0]
+
+
+def _effect_interface(eff: np.ndarray, spec: TaskSpec, meta: dict, surface,
+                      arrays: dict) -> tuple[np.ndarray, np.ndarray]:
+    """把各任务**语义完全不同**的 effect 统一成一份定长、无分支的接口。
+
+    问题出在这里：抽屉的 effect 是一个关节位移、旋钮是一个关节角、自由体是 6D
+    位姿增量、擦拭是平面上的 dirt 场——维度和语义都不一样。E-I 若直接吃这些，
+    网络里就得写 ``if task == "drawer" ...``，**"任务无关"当场作废**。
+
+    统一办法：任何 effect 都可以写成"**被操作物体的表面接下来会怎么变**"，
+    而表面的变化只有两种：
+
+    - ``effect/rigid`` (T, H, 6)：物体整体的**刚体位移**，表达在物体**当前**系里
+      （平移 3 + 旋转矢量 3）。关节量按关节轴换算过来，自由体直接就是位姿增量，
+      固定物体是零。于是抽屉的"拉开 20 mm"和旋钮的"转 0.3 rad"变成了同一种东西。
+    - ``effect/surface_state`` (T, H, L)：逐表面采样点的**表面状态变化**。
+      目前只有擦拭用它（dirt 被擦掉多少），其余任务是零。
+
+    两者都是定长的，且**不含任何任务标识**。E-I 的指令通道吃这两路 + region /
+    engage / mode / mechanics，全程没有分支。
+
+    ⚠️ 原来那两路 ``effect/current`` 与 ``effect/future`` 保留，但它们是
+    **任务原生量**，只给 S5 构造 oracle envelope 和做诊断用，
+    **不是 E-I 的接口**——这一条写在 meta 的 ``fields.effect_interface`` 里。
+    """
+    n_frames = eff.shape[0]
+    hz = float(meta.get("control_hz", 50.0))
+    stride = max(1, int(round(FUTURE_HORIZON_S * hz / FUTURE_SAMPLES)))
+    offsets = np.arange(1, FUTURE_SAMPLES + 1) * stride
+    rigid = np.zeros((n_frames, FUTURE_SAMPLES, 6))
+
+    axis, anchor, kind = _effect_axis(spec)
+    for j, off in enumerate(offsets):
+        last = n_frames - off
+        if last <= 0:
+            continue
+        t = np.arange(last)
+        if kind == "free":
+            pos, quat = eff[:, :3], eff[:, 3:7]
+            rot = _quat_to_rot(quat)
+            dp = np.einsum("tij,tj->ti", rot[t].transpose(0, 2, 1), pos[t + off] - pos[t])
+            dr = _rotvec(np.einsum("tij,tjk->tik", rot[t].transpose(0, 2, 1), rot[t + off]))
+            rigid[t, j] = np.concatenate([dp, dr], axis=1)
+        elif kind == "prismatic":
+            dq = (eff[t + off, 0] - eff[t, 0])[:, None]
+            rigid[t, j, :3] = dq * axis[None, :]
+        elif kind == "revolute":
+            dth = (eff[t + off, 0] - eff[t, 0])[:, None]
+            rigid[t, j, 3:] = dth * axis[None, :]
+            # 转轴不过物体原点时（立板门的铰链在边上），原点本身也会被搬走
+            if np.linalg.norm(anchor) > 0:
+                ang = dth[:, 0]
+                c, si = np.cos(ang), np.sin(ang)
+                r = -anchor
+                perp = r - (r @ axis) * axis
+                cross = np.cross(axis, perp)
+                rigid[t, j, :3] = ((c - 1.0)[:, None] * perp[None, :]
+                                   + si[:, None] * cross[None, :])
+        # kind == "static"：物体不动，rigid 全零
+
+    field = np.zeros((n_frames, FUTURE_SAMPLES, EFFECT_FIELD_LEVEL), dtype=np.float32)
+    if spec.obj == "board" and "object/dirt_grid" in arrays:
+        field = _dirt_field(arrays, surface, offsets, meta)
+    return rigid, field
+
+
+def _effect_axis(spec: TaskSpec):
+    """物体能动的方向：(轴, 转轴锚点, 类型)。类型 ∈ free/prismatic/revolute/static。"""
+    if spec.effect_is_pose:
+        return _Z, np.zeros(3), "free"
+    table = {
+        "drawer": (_X, np.zeros(3), "prismatic"),
+        "slider": (_X, np.zeros(3), "prismatic"),
+        "plunger": (_X, np.zeros(3), "prismatic"),
+        "knob": (_Z, np.zeros(3), "revolute"),
+        "dial": (_Z, np.zeros(3), "revolute"),
+        "flap": (_Z, np.array([0.0, -G.FlapCfg().panel[1] / 2 - G.FlapCfg().post_radius,
+                               0.0]), "revolute"),
+    }
+    return table.get(spec.obj, (_Z, np.zeros(3), "static"))
+
+
+def _dirt_field(arrays: dict, surface, offsets: np.ndarray,
+                meta: dict) -> np.ndarray:
+    """擦拭：把 dirt 网格的未来变化摊到表面采样点上（`plan/02` §3.1，D-42）。
+
+    dirt 只减不增，所以"变化"就是这一格在窗口内**被擦干净**。把每个格心映射到
+    最近的表面采样点，于是它与 region 用的是同一套点——两个字段可以直接比对，
+    这也是 `plan/02` §7 第 9 条那个可推导性探针能做的前提。
+    """
+    dirt = np.asarray(arrays["object/dirt_grid"], dtype=np.float32)
+    n_frames, gx, gy = dirt.shape
+    cell = float(meta.get("cell_m", 0.01))
+    region = meta.get("region_m", [gx * cell, gy * cell])
+    xs = (np.arange(gx) + 0.5) * cell - region[0] / 2
+    ys = (np.arange(gy) + 0.5) * cell - region[1] / 2
+    top_z = float(surface.points[:, 2].max())
+    centers = np.stack(np.broadcast_arrays(xs[:, None], ys[None, :],
+                                           np.full((gx, gy), top_z)), axis=-1)
+    idx, ok, _ = assign_to_surface(centers.reshape(-1, 3), surface, max_dist=0.05)
+    par = surface.parent[EFFECT_FIELD_LEVEL][idx]
+    out = np.zeros((n_frames, FUTURE_SAMPLES, EFFECT_FIELD_LEVEL), dtype=np.float32)
+    flat = dirt.reshape(n_frames, -1)
+    for j, off in enumerate(offsets):
+        last = n_frames - off
+        if last <= 0:
+            continue
+        cleaned = (flat[:last] & ~flat[off:off + last]) if flat.dtype == bool else \
+            np.clip(flat[:last] - flat[off:off + last], 0, None)
+        w = cleaned.astype(np.float32) * ok[None, :]
+        np.add.at(out[:last, j], (slice(None), par), w.T.T)
+    return out
 
 
 def _future_window(eff: np.ndarray, spec: TaskSpec,

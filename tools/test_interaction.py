@@ -312,6 +312,35 @@ class TestExtract(unittest.TestCase):
         with self.assertRaises((ValueError, KeyError, TypeError)):
             extract(rec)
 
+    def test_effect_interface_is_task_agnostic(self):
+        """任务无关 effect 接口：定长、不含任务标识、语义统一（D-53）。
+
+        方块沿 +Y 走 1 mm/帧，5 帧一个采样点，所以第 j 个未来点的刚体位移
+        应当是 5(j+1) mm——**与抽屉的"关节拉开多少"、旋钮的"转过多少度"
+        走的是同一条通道**，E-I 因此不需要按任务分支。
+        """
+        out = extract(make_episode(slide=False))
+        rigid = np.asarray(out.arrays["effect/rigid"])
+        field = np.asarray(out.arrays["effect/surface_state"])
+        self.assertEqual(rigid.shape, (T, 10, 6))
+        self.assertEqual(field.shape[:2], (T, 10))
+        np.testing.assert_allclose(rigid[0, :, 1], 5e-3 * np.arange(1, 11), atol=1e-6)
+        np.testing.assert_allclose(rigid[0, :, 3:], 0.0, atol=1e-6)   # 没有转动
+        np.testing.assert_allclose(field, 0.0)                        # 非擦拭任务无表面态
+        self.assertEqual(out.meta["fields"]["effect_interface"],
+                         ["effect/rigid", "effect/surface_state"])
+
+    def test_phase_is_not_a_model_input(self):
+        """`phase` / `progress` 是采集脚本的阶段机标签，**不许当观测**。
+
+        给 E-I 递进去就等于递了一个任务专用状态机（`plan/04` §4 修订）。
+        它们仍留在记录里——S5 按 phase 对齐是允许的，那是标签不是观测。
+        """
+        out = extract(make_episode())
+        self.assertIn("phase", out.arrays)
+        self.assertNotIn("phase", out.model_arrays())
+        self.assertNotIn("progress", out.model_arrays())
+
     def test_region_lands_on_the_right_part(self):
         """接触点必须归到 +X 面上，不是别的面。"""
         out = extract(make_episode(slide=False))
