@@ -23,6 +23,7 @@ from it.transfer import (  # noqa: E402
     TransferError,
     bin_index,
     build_transfer,
+    episode_summary,
     load_transfer,
     phase_budget,
     save_transfer,
@@ -124,10 +125,63 @@ class TestInteractionTransfer(unittest.TestCase):
             self.assertTrue(np.all(index[valid] >= 0))
             self.assertEqual(int(index[valid].max()) < 8, True)
 
+    def test_calibration_is_baked_in_and_fails_closed(self):
+        """标定必须落进 artifact 本身，且校准集太小时宁可报错也不给假保证。
+
+        S6 的 E-I 需要的是**有覆盖保证的允许集合**，不是描述性分位数。所以 τ* 与
+        mechanics 的联合标量在构造时就用冻结校准集定好、写进 payload（D-67 / D-71）。
+        """
+        train, calibration = records(6), records(24)
+        rng = np.random.default_rng(0)
+        for index, record in enumerate(calibration):
+            record.meta["episode_id"] = f"calib-{index:02d}"
+            # 造一点真实的离散度：全同的校准集会让标定标量收成 0，那时这个测试
+            # 什么也验不到。
+            jitter = 1.0 + 0.25 * rng.standard_normal()
+            record.arrays["mech/force_obj"] = record.arrays["mech/force_obj"] * jitter
+            record.arrays["mech/wrench_obj"] = record.arrays["mech/wrench_obj"] * jitter
+
+        plain = build_transfer(train, n_bins=8, n_surface=64)
+        self.assertFalse(plain.meta["calibration"]["calibrated"])
+
+        tuned = build_transfer(train, n_bins=8, n_surface=64, calibration=calibration)
+        meta = tuned.meta["calibration"]
+        self.assertTrue(meta["calibrated"])
+        self.assertEqual(meta["set_form"], "object_frame_axis_aligned_box")
+        self.assertEqual(meta["num_episodes"], 24)
+        self.assertGreater(meta["mech_traction_k"], 0.0)
+        # 允许集合非空，且不能退化成整个表面（那样 coverage 100% 是空的）。
+        allowed = tuned.arrays["region/allowed"]
+        self.assertTrue(allowed.any())
+        self.assertLess(float(allowed.mean()), 1.0)
+        # ⚠️ 标定**不保证**把盒子放大：示教比 10/90 带更集中时 k < 1 是合理结果。
+        # 真正的不变量是自洽——标定出来的集合在校准集自己身上要达到目标覆盖率。
+        support = tuned.arrays["region/support"] > 0
+        lo = tuned.arrays["mech/traction_obj/lo"].astype(np.float64)
+        hi = tuned.arrays["mech/traction_obj/hi"].astype(np.float64)
+        self.assertTrue(np.all(hi >= lo))
+        covered = 0
+        for record in calibration:
+            summary, _ = episode_summary(record, surface_for("block", "nominal"),
+                                         budget=tuned.meta["aggregation"]["phase_budget"],
+                                         n_bins=8, n_surface=64)
+            values, mass = summary["traction"], np.nan_to_num(summary["region"], nan=0.0)
+            live = support & np.isfinite(values).all(axis=2) & (mass > 0)
+            if not live.any():
+                continue
+            inside = ((values >= lo - 1e-9) & (values <= hi + 1e-9)).all(axis=2)
+            share = float(mass[live & inside].sum() / mass[live].sum())
+            covered += int(share >= tuned.meta["calibration"]["point_mass_target"])
+        self.assertGreaterEqual(covered / len(calibration),
+                                tuned.meta["calibration"]["target_coverage"] - 1e-9)
+
+        with self.assertRaises(TransferError):
+            build_transfer(train, n_bins=8, n_surface=64, calibration=records(3))
+
     def test_v1_artifacts_are_rejected(self):
         transfer = build_transfer(records(2), n_bins=8, n_surface=64)
         self.assertEqual(transfer.meta["schema_version"], TRANSFER_SCHEMA_VERSION)
-        transfer.meta["schema_version"] = "interaction-transfer-v1"
+        transfer.meta["schema_version"] = "interaction-transfer-v2"
         with self.assertRaises(TransferError):
             transfer.validate()
 

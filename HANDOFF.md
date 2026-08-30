@@ -116,6 +116,10 @@ out/
 | region/engage/mode 用 NaN、traction 用 0 表示"没碰过" | 每 cell 支持中位数只有 5/12，于是 **抽屉 57.9% / 擦拭 80.7% / 旋钮 48.7%** 的 occupied cell 同时被要求"接触"和"零力" | per-cell 字段一律接触条件化，新增 `region/support` / `region/duty` / `engage/concentration`（D-66） |
 | 用"6D wrench 重建误差 6e-6 N"当验证 | **那是代数恒等式**，换成任何错误的 cell 划分也还是 1e-6 | 改报表面投影完整性：残差 + 被滤掉的力占比，两个都能失败（P-60） |
 
+**契约是 `interaction-transfer-v3`**：v2 的表示不变，**新增的是把标定烤进 artifact
+本身**——`region/allowed`（校准集上标定的允许区域）与 `mech/*/lo,hi`（标定过的联合
+盒）。E-I 拿到的就是有覆盖保证的集合，不再是描述性分位数（D-67 / D-71）。
+
 **跑 S5 就一条命令**（服务器上）：
 
 ```bash
@@ -424,6 +428,8 @@ tools/
   s5_freeze_surfaces.py   把 P-57 的冻结 surface 补写进既有 S4 数据集（**只能在产生数据的机器上跑**）
   s5_build_transfer.py    从 S4 manifest 构造 train split 的 interaction transfer
   s5_parasite_check.py    **找"搁着没动却被记成交互"的寄生接触**（P-64：没在用的工具压在板上）
+  s5_mech_setform.py      **mechanics 允许集合的形状比选**（D-71 否决 D-58 方向锥的依据）
+  s5_exclude_episodes.py  按范围决定把一批 episode 移出数据集，理由写进 manifest
   s5_eval_envelope.py     **S5 闸门**：coverage / width / 策略子群 / 多峰性 / 跨实现 / 接口不变量
   s5_all.sh               **S5 全套的唯一入口**：逐项收退出码，任一非零则整体失败（P-55）
   s5_fetch.sh             把服务器上 S5 的**文本**产物取回 out/s5/（npz 不进版本控制）

@@ -230,6 +230,7 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
     """
     arrays = transfer.arrays
     region = _pooled_region(transfer)
+    baked = transfer.meta.get("calibration", {})
     orders, cumulative = _nested_allowed(region)
     area = np.asarray(arrays["surface/area"], dtype=np.float64)
     total_area = float(area.sum())
@@ -268,12 +269,18 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
         "描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'",
         {"per_split": plain, "width": width_at(REGION_MASS_TARGET)}))
 
-    if len(calibration) < 20:
+    if baked.get("calibrated"):
+        # artifact 自带标定（D-67 / D-71）。评估**必须**用它，不能自己重标一个——
+        # 否则报的 coverage 不是 S6 实际会拿到的那个集合的 coverage。
+        tau_star = float(baked["region_tau"])
+    elif len(calibration) < 20:
         checks.append(Check("1a' region coverage（conformal）", "DEFER",
-                            f"校准集只有 {len(calibration)} 条，标定不可靠"))
+                            f"artifact 未标定，且校准集只有 {len(calibration)} 条"))
         checks.append(Check("2a region width", "DEFER", "τ* 未标定，width 无从谈起"))
+        tau_star = float("nan")
     else:
         tau_star = _conformal_tau(calibration)
+    if np.isfinite(tau_star):
         covered = {s: coverage_at(s, tau_star) for s in held_out}
         finite = [v for v in covered.values() if np.isfinite(v)]
         status = "PASS" if finite and min(finite) >= COVERAGE_GATE else "FAIL"
@@ -283,9 +290,8 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
             status = "FAIL"
         checks.append(Check(
             "1a' region coverage（conformal）", status,
-            (f"τ* 顶到 {tau_star}：允许集合就是整个表面，envelope 没有约束任何东西，"
-             "coverage 100% 是空的。" if (not np.isfinite(tau_star) or tau_star >= 1.0) else "")
-            + f"校准集 n={len(calibration)} 定出 τ*={tau_star:.3f}；留出 "
+            ("artifact 自带标定；" if baked.get("calibrated") else "评估侧现场标定；")
+            + f"τ*={tau_star:.3f}（校准 n={baked.get('num_episodes', len(calibration))}）；留出 "
             + "；".join(f"{k} {v:.3f} (n={len(required[k])})" for k, v in sorted(covered.items()))
             + f"；门槛 {COVERAGE_GATE}",
             {"tau_star": tau_star, "per_split": covered,
@@ -309,7 +315,8 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
                     f" / 支持≥10 {v['support>=10']:.3f}、episode 全中 {v['simultaneous']:.3f}"
                     for k, v in sorted(band["per_split"].items()) if k != "train")
         + f"；cell 支持分布 {band['cell_support_histogram']}"
-        + "。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教",
+        + "。⚠️ 逐点数要求三分量**同时**命中，独立时就该是单轴的三次方（P-65）；"
+          "有覆盖保证的是 episode 级那一列",
         band))
     checks.append(Check(
         "2b mechanics width", "PASS",
@@ -329,8 +336,8 @@ def _mechanics_band_report(transfer: InteractionTransfer,
     带外。不分层的话整体带内率会被这些 cell 拖低，看不出"支持足够的地方带够不够用"。
     """
     arrays = transfer.arrays
-    low = np.asarray(arrays["mech/traction_obj/q10"], dtype=np.float64)
-    high = np.asarray(arrays["mech/traction_obj/q90"], dtype=np.float64)
+    low = np.asarray(arrays["mech/traction_obj/lo"], dtype=np.float64)
+    high = np.asarray(arrays["mech/traction_obj/hi"], dtype=np.float64)
     median = np.asarray(arrays["mech/traction_obj/median"], dtype=np.float64)
     support = np.asarray(arrays["region/support"], dtype=np.int64)
     strata = {"all": support > 0, "support>=5": support >= 5, "support>=10": support >= 10}

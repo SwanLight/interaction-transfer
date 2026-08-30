@@ -61,7 +61,7 @@ import numpy as np
 from it.records import EpisodeRecord, META_KEY
 from it.surfaces import Surface, surface_for
 
-TRANSFER_SCHEMA_VERSION = "interaction-transfer-v2"
+TRANSFER_SCHEMA_VERSION = "interaction-transfer-v3"
 MODE_COUNT = 4
 N_PHASES = 4
 #: 每个**有帧**的 phase 至少分到的命令格数。松开段的活动量恰好是 0，若按活动量
@@ -88,6 +88,7 @@ EXECUTOR_ARRAYS = frozenset({
     "region/mass/mean",
     "region/mass/q10",
     "region/mass/q90",
+    "region/allowed",
     "region/support",
     "region/duty",
     "engage/dir/mean",
@@ -95,12 +96,25 @@ EXECUTOR_ARRAYS = frozenset({
     "engage/valid",
     "mode/prob",
     "mech/traction_obj/median",
-    "mech/traction_obj/q10",
-    "mech/traction_obj/q90",
+    "mech/traction_obj/lo",
+    "mech/traction_obj/hi",
     "mech/moment_density_obj/median",
-    "mech/moment_density_obj/q10",
-    "mech/moment_density_obj/q90",
+    "mech/moment_density_obj/lo",
+    "mech/moment_density_obj/hi",
 })
+
+#: 允许集合的"episode 被覆盖"判据：这么大比例的力加权接触点必须落进集合。
+#: 与 `plan/03` §8.1 的 region 子指标同一口径，两个数才可比。
+POINT_MASS_TARGET = 0.95
+#: 标定目标：这么大比例的校准 episode 要被覆盖（`plan/03` §8.1 的 coverage ≥ 90%）。
+TARGET_COVERAGE = 0.90
+#: mechanics 尺度地板取本任务 traction 量级的这个比例。**它是标定唯一的自由参数**，
+#: 必须随结果一起报（D-71：用绝对地板会让结论完全变样）。
+MECH_FLOOR_RELATIVE = 0.05
+#: region 允许集合的 τ 搜索网格。A(τ) 随 τ 嵌套，所以可直接对 τ 做 split conformal。
+TAU_GRID = np.concatenate([np.linspace(0.50, 0.99, 50), [0.995, 0.999, 1.0]])
+#: mechanics 盒子的 k 搜索网格。集合随 k 单调膨胀，同理。
+K_GRID = np.concatenate([np.linspace(0.25, 8.0, 156), [10.0, 14.0, 20.0, 30.0]])
 
 #: 每个 cell 上"只在接触过的 episode 之间统计"的字段。它们必须共用同一个
 #: ``contact_frames > 0`` 掩码，否则同一个 cell 上不同字段来自不同的 episode 子集
@@ -271,15 +285,17 @@ class InteractionTransfer:
             raise TransferError("surface arrays 含非法值")
 
         for name in ("region/mass/mean", "region/mass/q10", "region/mass/q90",
-                     "region/support", "region/duty", "engage/concentration",
-                     "engage/valid"):
+                     "region/allowed", "region/support", "region/duty",
+                     "engage/concentration", "engage/valid"):
             if arrays[name].shape != (bins, n_surface):
                 raise TransferError(f"{name} 必须是 (B,S)")
+        if arrays["region/allowed"].dtype != np.bool_:
+            raise TransferError("region/allowed 必须是 bool")
         for name in ("engage/dir/mean", "mech/traction_obj/median",
-                     "mech/traction_obj/q10", "mech/traction_obj/q90",
+                     "mech/traction_obj/lo", "mech/traction_obj/hi",
                      "mech/moment_density_obj/median",
-                     "mech/moment_density_obj/q10",
-                     "mech/moment_density_obj/q90"):
+                     "mech/moment_density_obj/lo",
+                     "mech/moment_density_obj/hi"):
             if arrays[name].shape != (bins, n_surface, 3):
                 raise TransferError(f"{name} 必须是 (B,S,3)")
         if arrays["mode/prob"].shape != (bins, n_surface, MODE_COUNT):
@@ -299,6 +315,14 @@ class InteractionTransfer:
                      "mech/moment_density_obj/median"):
             if np.any(np.linalg.norm(arrays[name], axis=2)[support == 0] != 0):
                 raise TransferError(f"{name} 在 support==0 的 cell 上必须是 0")
+        for name in ("mech/traction_obj", "mech/moment_density_obj"):
+            lo, hi = arrays[f"{name}/lo"], arrays[f"{name}/hi"]
+            if np.any(hi < lo):
+                raise TransferError(f"{name} 的 hi 必须 ≥ lo")
+            if np.any((lo > arrays[f"{name}/median"]) | (hi < arrays[f"{name}/median"])):
+                raise TransferError(f"{name} 的中位数必须落在 [lo,hi] 内")
+        if np.any(arrays["region/allowed"] & (arrays["region/mass/mean"] <= 0)):
+            raise TransferError("region/allowed 不能包含 mass 为零的 cell")
         if np.any(arrays["mode/prob"][support == 0] != 0):
             raise TransferError("mode/prob 在 support==0 的 cell 上必须是 0")
         concentration = arrays["engage/concentration"]
@@ -382,6 +406,17 @@ def _nan_stat(values: np.ndarray, stat: str) -> np.ndarray:
         else:  # pragma: no cover - internal programming error
             raise ValueError(stat)
     return np.nan_to_num(result, nan=0.0).astype(np.float32)
+
+
+def _reference_scale(centre: np.ndarray, occupied: np.ndarray) -> float:
+    """本任务 traction / moment 的量级，用来定尺度地板。
+
+    ⚠️ 地板不能拍一个绝对值：训练集上离散度接近零的 cell 会被地板绑架，标定出来的
+    标量完全由它们决定。D-71 实测用 1 N/m² 的绝对地板与用相对地板，四族的排序都变了。
+    """
+    magnitude = np.linalg.norm(centre, axis=-1)
+    live = occupied & (magnitude > 0)
+    return float(np.median(magnitude[live])) if live.any() else 1.0
 
 
 def _bincount2d(index: np.ndarray, weights: np.ndarray, size: int,
@@ -561,6 +596,99 @@ def _projection_diagnostics(record: EpisodeRecord, valid: np.ndarray, live: np.n
     }
 
 
+def nested_region_sets(region: np.ndarray) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """每个命令格上按 region mass 降序的 cell 次序及累计占比。
+
+    ``A(τ)`` = 每格取累计占比刚好达到 τ 的前缀，是**面积最小**的超水平集，
+    并且随 τ 嵌套——正是这一点让 split conformal 可以直接对 τ 做。
+    """
+    orders, cumulative = [], []
+    for row in region:
+        total = row.sum()
+        if total <= 0:
+            orders.append(np.zeros(0, dtype=np.int64))
+            cumulative.append(np.zeros(0))
+            continue
+        order = np.argsort(-row, kind="stable")
+        orders.append(order)
+        cumulative.append(np.cumsum(row[order]) / total)
+    return orders, cumulative
+
+
+def region_allowed_at(orders, cumulative, tau: float, n_surface: int) -> np.ndarray:
+    allowed = np.zeros((len(orders), n_surface), dtype=bool)
+    for b, cum in enumerate(cumulative):
+        if not len(cum):
+            continue
+        keep = int(np.searchsorted(cum, tau) + 1)
+        allowed[b, orders[b][:keep]] = True
+    return allowed
+
+
+def _weighted_threshold(scores: np.ndarray, weights: np.ndarray, target: float) -> float:
+    """让 ``target`` 比例的力加权接触点落进集合所需要的最小阈值。"""
+    order = np.argsort(scores)
+    cumulative = np.cumsum(weights[order]) / weights.sum()
+    index = int(np.searchsorted(cumulative, target))
+    return float(scores[order][min(index, len(order) - 1)])
+
+
+def _conformal_quantile(required: np.ndarray, target: float) -> float:
+    """split conformal 的 ``⌈(n+1)·target⌉/n`` 分位数。
+
+    给的是 exchangeability 下的 **marginal** coverage，不是任意子群的条件保证
+    （D-59）。子群 coverage 必须另报。
+    """
+    finite = np.sort(required[np.isfinite(required)])
+    n = len(required)
+    if n == 0:
+        return float("nan")
+    rank = int(np.ceil((n + 1) * target))
+    return float(finite[rank - 1]) if rank <= len(finite) else float("inf")
+
+
+def _calibrate_region(region: np.ndarray, summaries: list[dict[str, np.ndarray]],
+                      target: float) -> float:
+    orders, cumulative = nested_region_sets(region)
+    lengths = np.array([[int(np.searchsorted(cum, tau) + 1) if len(cum) else 0
+                         for cum in cumulative] for tau in TAU_GRID], dtype=np.int64)
+    required = []
+    for summary in summaries:
+        episode = np.nan_to_num(summary["region"], nan=0.0)
+        total = episode.sum()
+        if total <= 0:
+            continue
+        inside = np.zeros(len(TAU_GRID))
+        for b, order in enumerate(orders):
+            if not len(order):
+                continue
+            cumulative_mass = np.concatenate([[0.0], np.cumsum(episode[b][order])])
+            inside += cumulative_mass[np.minimum(lengths[:, b], len(order))]
+        hit = np.flatnonzero(inside / total >= POINT_MASS_TARGET)
+        required.append(float(TAU_GRID[hit[0]]) if len(hit) else float("inf"))
+    return _conformal_quantile(np.asarray(required), target)
+
+
+def _calibrate_box(centre: np.ndarray, scale: np.ndarray, key: str,
+                   summaries: list[dict[str, np.ndarray]], support: np.ndarray,
+                   target: float) -> float:
+    """物体系三维轴对齐盒的联合标定标量（D-71）。
+
+    形状选择是实测出来的：四族候选在同一 coverage 目标下比体积，方向锥形式体积大
+    2.4~56 倍且无收益。见 ``tools/s5_mech_setform.py`` 与 ``out/s5/mech_setform.txt``。
+    """
+    required = []
+    for summary in summaries:
+        values = summary[key]
+        mass = np.nan_to_num(summary["region"], nan=0.0)
+        live = support & np.isfinite(values).all(axis=2) & (mass > 0)
+        if not live.any():
+            continue
+        score = np.max(np.abs(np.nan_to_num(values) - centre) / scale, axis=-1)
+        required.append(_weighted_threshold(score[live], mass[live], POINT_MASS_TARGET))
+    return _conformal_quantile(np.asarray(required), target)
+
+
 def episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[int, ...],
                     n_bins: int, n_surface: int
                     ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
@@ -577,7 +705,9 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
                    n_surface: int = 256, transfer_id: str | None = None,
                    surface: Surface | None = None,
                    phase_floor: int = PHASE_FLOOR,
-                   budget: tuple[int, ...] | None = None) -> InteractionTransfer:
+                   budget: tuple[int, ...] | None = None,
+                   calibration: Iterable[EpisodeRecord] | None = None
+                   ) -> InteractionTransfer:
     """从同一任务/物体/几何的多条成功 S4 records 构造统计 interaction command。
 
     每条 episode 在每个命令格内先汇总，跨 episode 再取均值/分位数。因此一个
@@ -681,6 +811,17 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
 
     traction = stack("traction")
     moment_density = stack("moment_density")
+
+    traction_median = zero_unsupported(_nan_stat(traction, "median"))
+    traction_scale = np.maximum(
+        zero_unsupported(_nan_stat(traction, "q90") - _nan_stat(traction, "q10")) / 2.0,
+        MECH_FLOOR_RELATIVE * _reference_scale(traction_median, occupied))
+    moment_median = zero_unsupported(_nan_stat(moment_density, "median"))
+    moment_scale = np.maximum(
+        zero_unsupported(_nan_stat(moment_density, "q90")
+                         - _nan_stat(moment_density, "q10")) / 2.0,
+        MECH_FLOOR_RELATIVE * _reference_scale(moment_median, occupied))
+
     cell_area = np.bincount(surface.parent[n_surface],
                             weights=np.asarray(surface.area, dtype=np.float64),
                             minlength=n_surface).astype(np.float32)
@@ -703,19 +844,82 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
         "region/mass/mean": region_mean.astype(np.float32),
         "region/mass/q10": _nan_stat(region, "q10"),
         "region/mass/q90": _nan_stat(region, "q90"),
+        "region/allowed": np.zeros(region_mean.shape, dtype=bool),   # 标定后填
         "region/support": support,
         "region/duty": np.where(occupied, _nan_stat(duty, "mean"), 0.0).astype(np.float32),
         "engage/dir/mean": zero_unsupported(engage_mean).astype(np.float32),
         "engage/concentration": np.where(occupied, concentration, 0.0).astype(np.float32),
         "engage/valid": np.where(occupied, concentration, 0.0) > 1e-8,
         "mode/prob": zero_unsupported(mode_prob).astype(np.float32),
-        "mech/traction_obj/median": zero_unsupported(_nan_stat(traction, "median")),
-        "mech/traction_obj/q10": zero_unsupported(_nan_stat(traction, "q10")),
-        "mech/traction_obj/q90": zero_unsupported(_nan_stat(traction, "q90")),
-        "mech/moment_density_obj/median": zero_unsupported(_nan_stat(moment_density, "median")),
-        "mech/moment_density_obj/q10": zero_unsupported(_nan_stat(moment_density, "q10")),
-        "mech/moment_density_obj/q90": zero_unsupported(_nan_stat(moment_density, "q90")),
+        "mech/traction_obj/median": traction_median.astype(np.float32),
+        "mech/traction_obj/lo": (traction_median - traction_scale).astype(np.float32),
+        "mech/traction_obj/hi": (traction_median + traction_scale).astype(np.float32),
+        "mech/moment_density_obj/median": moment_median.astype(np.float32),
+        "mech/moment_density_obj/lo": (moment_median - moment_scale).astype(np.float32),
+        "mech/moment_density_obj/hi": (moment_median + moment_scale).astype(np.float32),
     }
+
+    calibration_meta: dict[str, Any] = {
+        "calibrated": False,
+        "point_mass_target": POINT_MASS_TARGET,
+        "target_coverage": TARGET_COVERAGE,
+        "mech_floor_relative": MECH_FLOOR_RELATIVE,
+        "note": ("未标定：region/allowed 退化成 τ=0.95 的描述性超水平集，"
+                 "mech 的 lo/hi 只是 10/90 分位数。二者都没有覆盖保证，"
+                 "不得直接当作 E-I 的跟踪目标（D-67 / D-71）"),
+    }
+    orders, cumulative = nested_region_sets(region_mean.astype(np.float64))
+    tau = POINT_MASS_TARGET
+    if calibration is not None:
+        calibration_summaries = []
+        for record in calibration:
+            validate_record(record)
+            for key, expected_value in expected.items():
+                if str(record.meta.get(key, "nominal")) != expected_value:
+                    raise TransferError(f"校准 record 的 {key} 与训练集不一致")
+            if str(record.meta.get("surface", {}).get("sha256")) != expected_surface_hash:
+                raise TransferError("校准 record 的 frozen surface hash 与训练集不一致")
+            calibration_summaries.append(_episode_summary(
+                record, surface, budget=budget, n_bins=n_bins, n_surface=n_surface)[0])
+        if len(calibration_summaries) < 20:
+            raise TransferError(
+                f"校准集只有 {len(calibration_summaries)} 条，split conformal 不可靠；"
+                "宁可输出未标定 artifact 并显式标记，也不要给一个假的保证")
+        tau = _calibrate_region(region_mean.astype(np.float64), calibration_summaries,
+                                TARGET_COVERAGE)
+        k_traction = _calibrate_box(traction_median.astype(np.float64),
+                                    traction_scale.astype(np.float64), "traction",
+                                    calibration_summaries, occupied, TARGET_COVERAGE)
+        k_moment = _calibrate_box(moment_median.astype(np.float64),
+                                  moment_scale.astype(np.float64), "moment_density",
+                                  calibration_summaries, occupied, TARGET_COVERAGE)
+        for name, centre, scale, k in (
+                ("mech/traction_obj", traction_median, traction_scale, k_traction),
+                ("mech/moment_density_obj", moment_median, moment_scale, k_moment)):
+            if not np.isfinite(k):
+                raise TransferError(
+                    f"{name} 的标定标量发散：校准集里达不到 {POINT_MASS_TARGET:.0%} "
+                    "接触点覆盖的 episode 比例已超过 α，任何缩放都不够")
+            arrays[f"{name}/lo"] = (centre - k * scale).astype(np.float32)
+            arrays[f"{name}/hi"] = (centre + k * scale).astype(np.float32)
+        calibration_meta = {
+            "calibrated": True,
+            "num_episodes": len(calibration_summaries),
+            "point_mass_target": POINT_MASS_TARGET,
+            "target_coverage": TARGET_COVERAGE,
+            "mech_floor_relative": MECH_FLOOR_RELATIVE,
+            "region_tau": float(tau),
+            "mech_traction_k": float(k_traction),
+            "mech_moment_k": float(k_moment),
+            "set_form": "object_frame_axis_aligned_box",
+            "claim": ("exchangeability 下的 marginal coverage；对策略/物理/几何子群"
+                      "没有条件保证，子群 coverage 必须另报（D-59）"),
+        }
+    if not np.isfinite(tau) or tau >= 1.0:
+        raise TransferError(
+            f"region 的 τ*={tau} 顶到上界：允许集合就是整个表面，envelope 没有约束"
+            "任何东西，coverage 100% 是空的")
+    arrays["region/allowed"] = region_allowed_at(orders, cumulative, tau, n_surface)
 
     task = str(first["task"])
     worst = lambda key: max(item[key] for item in episode_diagnostics)  # noqa: E731
@@ -750,6 +954,7 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
             "parts": list(surface.parts),
             "total_area_m2": float(cell_area.sum()),
         },
+        "calibration": calibration_meta,
         "diagnostics": {
             "projection_residual_force_N": worst("projection_residual_force_N"),
             "projection_residual_torque_Nm": worst("projection_residual_torque_Nm"),

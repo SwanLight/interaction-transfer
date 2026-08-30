@@ -35,6 +35,8 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--split", default="train",
                         help="manifest split；用 'all' 读取全部成功记录")
+    parser.add_argument("--calibration-split", default="calibration",
+                        help="用来标定允许集合的**冻结**划分；设成 'none' 则输出未标定 artifact")
     parser.add_argument("--task", help="可选，只构造指定 task")
     parser.add_argument("--bins", type=int, default=32)
     parser.add_argument("--surface-points", type=int, default=256)
@@ -51,6 +53,7 @@ def main() -> None:
     if manifest.get("schema_version") != "s4-record-v2":
         raise SystemExit("manifest 必须是 s4-record-v2")
     groups: dict[tuple[str, str, str, str], list[dict]] = {}
+    calibration_groups: dict[tuple[str, str, str, str], list[dict]] = {}
     for entry in manifest["episodes"]:
         meta = entry.get("meta", {})
         if args.existing_only and not (manifest_path.parent / entry["path"]).exists():
@@ -60,15 +63,19 @@ def main() -> None:
         # 被移出范围的划分一律跳过，"all" 也不例外（见 tools/s5_exclude_episodes.py）。
         if str(entry.get("split", "")).startswith("excluded_"):
             continue
-        if args.split != "all" and entry.get("split") != args.split:
-            continue
         task = str(entry.get("task"))
         if args.task and task != args.task:
             continue
         obj = str(meta.get("object"))
         geom = str(entry.get("geometry_variant", meta.get("geometry_variant", "nominal")))
         surface_hash = str(meta.get("surface", {}).get("sha256"))
-        groups.setdefault((task, obj, geom, surface_hash), []).append(entry)
+        key = (task, obj, geom, surface_hash)
+        split = str(entry.get("split"))
+        if args.calibration_split != "none" and split == args.calibration_split:
+            calibration_groups.setdefault(key, []).append(entry)
+        if args.split != "all" and split != args.split:
+            continue
+        groups.setdefault(key, []).append(entry)
     if not groups:
         raise SystemExit("筛选后没有成功 episode")
 
@@ -97,9 +104,23 @@ def main() -> None:
             candidate = manifest_path.parent / str(info.get("path", ""))
             if info.get("path") and candidate.exists():
                 group_surface = load_surface(candidate)
+        calibration_entries = sorted(
+            calibration_groups.get((task, obj, geom, surface_hash), []),
+            key=lambda item: str(item["episode_id"]))
+
+        def calibration_records():
+            for entry in calibration_entries:
+                yield load_episode((manifest_path.parent / entry["path"]).resolve())
+
+        if not calibration_entries:
+            print(f"⚠️ {transfer_id}: 没有 {args.calibration_split!r} 划分的 episode，"
+                  "输出**未标定** artifact；它没有覆盖保证，不得直接喂给 E-I",
+                  file=sys.stderr)
         transfer = build_transfer(records(), n_bins=args.bins,
                                   n_surface=args.surface_points,
-                                  transfer_id=transfer_id, surface=group_surface)
+                                  transfer_id=transfer_id, surface=group_surface,
+                                  calibration=calibration_records() if calibration_entries
+                                  else None)
         artifact = args.output / f"{transfer_id}.npz"
         save_transfer(transfer, artifact)
         report = {
@@ -108,6 +129,8 @@ def main() -> None:
             "manifest": str(manifest_path),
             "manifest_dataset": manifest.get("dataset_name"),
             "source_split": args.split,
+            "calibration_split": args.calibration_split,
+            "calibration_episodes": len(calibration_entries),
             "source_surface_sha256": surface_hash,
             "meta": transfer.meta,
             "support": {
@@ -119,7 +142,9 @@ def main() -> None:
                 "cell_support_median": transfer.meta["diagnostics"]["cell_support_median"],
                 "cell_support_under_half_fraction":
                     transfer.meta["diagnostics"]["cell_support_under_half_fraction"],
+                "allowed_cells_mean": float(transfer.arrays["region/allowed"].sum(axis=1).mean()),
             },
+            "calibration": transfer.meta["calibration"],
         }
         report_path = artifact.with_suffix(".report.json")
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2,
