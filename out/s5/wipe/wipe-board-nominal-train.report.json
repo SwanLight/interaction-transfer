@@ -1,15 +1,16 @@
 {
   "artifact": "wipe-board-nominal-train.npz",
-  "artifact_sha256": "36febfa4cb47d6b27c08a2cd887799d0760b088997a29d9d0743b65b427b9f21",
+  "artifact_sha256": "556ed7a83611007e76de10522196aa854b8af8dcedba8f3c337460ebc8d73da8",
   "calibration": {
     "calibrated": true,
     "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
     "mech_floor_relative": 0.05,
     "mech_moment_k": 1.9745642423554748,
-    "mech_traction_k": 1.9946270923501748,
+    "mech_traction_k": 2.0703803989970875,
     "mode_slip_speed_k": 1.9991201769540154,
     "num_episodes": 127,
     "point_mass_target": 0.95,
+    "region_smooth_cells": 0.0,
     "region_tau": 0.94,
     "set_form": "object_frame_axis_aligned_box",
     "target_coverage": 0.9
@@ -43,10 +44,11 @@
       "claim": "exchangeability 下的 marginal coverage；对策略/物理/几何子群没有条件保证，子群 coverage 必须另报（D-59）",
       "mech_floor_relative": 0.05,
       "mech_moment_k": 1.9745642423554748,
-      "mech_traction_k": 1.9946270923501748,
+      "mech_traction_k": 2.0703803989970875,
       "mode_slip_speed_k": 1.9991201769540154,
       "num_episodes": 127,
       "point_mass_target": 0.95,
+      "region_smooth_cells": 0.0,
       "region_tau": 0.94,
       "set_form": "object_frame_axis_aligned_box",
       "target_coverage": 0.9
@@ -1990,6 +1992,7 @@
     "task": "wipe",
     "transfer_id": "wipe-board-nominal-train"
   },
+  "region_smooth_cells": 0.0,
   "source_split": "train",
   "source_surface_sha256": "abe5a6edbe41a92ec25af3455d590710eb8f756889b2c58960b576a5fefcce2b",
   "support": {

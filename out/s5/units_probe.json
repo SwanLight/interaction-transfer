@@ -46,6 +46,15 @@
     "payload_has_effect_scale": true,
     "task": "drawer",
     "traction": {
+      "contact_kernel": {
+        "drift": 1.7346310877806248,
+        "drift_without_coarsest": 1.1303682403100026,
+        "median_N_per_m2": {
+          "64": 39990.55120942849,
+          "256": 26059.747987951196,
+          "1024": 23054.211060286274
+        }
+      },
       "kernel_area": {
         "drift": 2.0323829729990064,
         "drift_without_coarsest": 1.912621762414319,
@@ -131,6 +140,15 @@
     "payload_has_effect_scale": true,
     "task": "wipe",
     "traction": {
+      "contact_kernel": {
+        "drift": 1.0093742828547527,
+        "drift_without_coarsest": 1.0093742828547527,
+        "median_N_per_m2": {
+          "64": 18460.05055016154,
+          "256": 18371.8135073539,
+          "1024": 18544.036083726605
+        }
+      },
       "kernel_area": {
         "drift": 11.017869142152506,
         "drift_without_coarsest": 3.5787177043537532,
@@ -216,6 +234,15 @@
     "payload_has_effect_scale": true,
     "task": "knob",
     "traction": {
+      "contact_kernel": {
+        "drift": 1.0076076622059043,
+        "drift_without_coarsest": 1.0035609673969,
+        "median_N_per_m2": {
+          "64": 66683.69972978355,
+          "256": 66952.5907989945,
+          "1024": 67191.0067919677
+        }
+      },
       "kernel_area": {
         "drift": 4.742156576675612,
         "drift_without_coarsest": 1.728255766375749,

@@ -272,10 +272,9 @@ def render(results: list[dict], drift_tol: float) -> tuple[str, int]:
               "  问句：把命令表面从 64 格换到 1024 格，同一批示教的 traction 中位数该不该变？",
               "  怎么读：分辨率是我们选的，物体受到的压强不是——所以**不该变**。",
               f"  判据：**现行做法**（{TRACTION_POOLING}）漂移比 max/min ≤ {drift_tol:g}×。",
-              "        另外三族是**对照臂**：它们漂移是这个实验的结论、不是本次运行的",
-              "        失败，所以标「对照」而不计退出码——一条永远红的闸门等于没有闸门。",
-              "        反过来，对照臂**不**漂移才要红：那说明这批数据触不到 P-68，",
-              "        整张表失去区分能力。",
+              "        其余四族是**对照臂**，不计退出码——一条永远红的闸门等于没有闸门。",
+              "        只有 `nearest_area`（出问题的那一版）例外：它**不**漂移才要红，",
+              "        那说明这批数据触不到 P-68、整张表失去区分能力。",
               ""]
     for item in results:
         levels = sorted(next(iter(item["traction"].values()))["median_N_per_m2"])
@@ -288,10 +287,17 @@ def render(results: list[dict], drift_tol: float) -> tuple[str, int]:
                 ok = drift <= drift_tol
                 mark = "PASS" if ok else "FAIL"
                 failures[0] += 0 if ok else 1
-            else:
+            elif pooling == "nearest_area":
+                # 只有这一族是"出问题的那一版"，它的漂移就是 P-68 的证据。
+                # 它**不**漂移才要红：说明这批数据触不到 P-68，整张表没有区分力。
                 degenerate = drift <= drift_tol
                 mark = "对照（无区分力→FAIL）" if degenerate else "对照"
                 failures[0] += 1 if degenerate else 0
+            else:
+                # 其余候选只是备选方案，漂不漂移都不是本次运行的成败——
+                # 早先把这条规则套在全部对照臂上，于是 `kernel_forcew` 因为
+                # **表现好**（1.10×）被判成"无区分力"。判据要对准它要查的那件事。
+                mark = "对照" 
             fine_drift = value["drift_without_coarsest"]
             fmt = lambda d: (f"{d:8.2f}×" if d < 1e4 else f"{'>10000':>8s}×")  # noqa: E731
             lines.append("      " + f"{pooling:<16s}"
@@ -299,9 +305,11 @@ def render(results: list[dict], drift_tol: float) -> tuple[str, int]:
                          + fmt(drift) + f"{fmt(fine_drift):>12s}" + f"   {mark}")
         lines.append("")
     lines += ["  注：`nearest_area` 是出问题的那一版，列在这里是为了让这张表**能失败**。",
-              "      四族里只有 `kernel_forcew` 通得过——这就是选它的全部理由（D-72）。",
-              "      `kernel_area` 值得单看：它已经在用核了，照样漂 3~11×。",
-              "      **核散射是必要条件不是充分条件，池化那一步也得治。**",
+              "      `kernel_area` 值得单看：它已经在用核了，照样漂 3~11×——",
+              "      **核散射是必要条件不是充分条件，池化那一步也得治**（D-72）。",
+              "      `contact_kernel` 是现行做法：它与 E-I 在线的实现是**同一个式子**，",
+              "      而不是「应该差不多」（D-79 / P-72）。擦拭与旋钮上它 1.01×，",
+              "      比散射版更稳；抽屉最粗档仍有残差，成因见 D-72 末尾（未查清）。",
               ""]
 
     lines += ["  moment_density 的分辨率标度（**预期就会变**，单列以免被误读成第二个 P-68）",

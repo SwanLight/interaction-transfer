@@ -172,6 +172,45 @@ class Surface:
         object.__setattr__(self, "_kernel_cache", ((sigma, k), index, weight))
         return index, weight
 
+    def cell_kernel(self, n_surface: int, width: float = 1.0
+                    ) -> tuple[np.ndarray, np.ndarray]:
+        """命令格之间的平滑核。返回 (邻居下标 (C,k), 权重 (C,k))，每行和为 1。
+
+        用途与 `scatter_kernel` **完全不同，别混**：
+
+        - `scatter_kernel` 把**一次接触的力**摊成面密度，带宽是拟传感 taxel pitch，
+          是一个**物理尺度**（P-68 的全部内容就是它不能跟分辨率走）；
+        - `cell_kernel` 平滑的是**"接触会落在哪"这个概率密度的估计**。原始估计是
+          256 格上的直方图，而一份 envelope 只由 ~150 条示教估出来、每格每帧只有几个
+          接触点——没被碰到的格概率**恰好是 0**，于是它在任何 τ 下都进不了允许集合，
+          split conformal 的 τ* 直接发散到 inf。这是直方图估计量的经典病，不是数据的
+          问题。带宽取**一个格**（``width`` 倍的本地格间距）是最小的修法：让被碰到的
+          格把邻格也带进支持集，其余不变。
+
+        同部件约束与 `scatter_kernel` 同理（D-68）：薄物体上跨部件平滑会把正面的
+        接触概率抹到背面去。
+        """
+        if n_surface not in self.parent:
+            raise ValueError(f"没有 {n_surface} 点层级")
+        cache = getattr(self, "_cell_kernel_cache", None)
+        if cache is not None and cache[0] == (n_surface, width):
+            return cache[1], cache[2]
+        points = np.asarray(self.points[:n_surface], dtype=np.float64)
+        part = np.asarray(self.part[:n_surface])
+        area = np.bincount(np.asarray(self.parent[n_surface]),
+                           weights=np.asarray(self.area, dtype=np.float64),
+                           minlength=n_surface)
+        # 带宽 = width × 本档的中位格间距。它随分辨率变**是有意的**：平滑的是
+        # 直方图的格，不是物理量。这一点必须与 traction 分开记（D-72 / P-68）。
+        sigma = width * float(np.sqrt(np.median(area)))
+        d2 = ((points[:, None, :] - points[None, :, :]) ** 2).sum(-1)
+        same = part[:, None] == part[None, :]
+        weight = np.where(same, np.exp(-d2 / (2.0 * sigma ** 2)), 0.0) * area[None, :]
+        weight = weight / weight.sum(axis=1, keepdims=True).clip(1e-300)
+        index = np.tile(np.arange(n_surface), (n_surface, 1))
+        object.__setattr__(self, "_cell_kernel_cache", ((n_surface, width), index, weight))
+        return index, weight
+
     @property
     def total_area(self) -> float:
         return float(self.area.sum())

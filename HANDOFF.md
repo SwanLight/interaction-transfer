@@ -5,7 +5,7 @@
 本文件回答：这个项目在做什么、现在做到哪、下一步做什么、怎么在服务器上跑东西、
 以及哪些坑会浪费你半天。
 
-最后更新：2026-08-30（S5 契约 v4：三个字段的单位与刻度按实测修好，全量重建 + 十一项闸门已跑）
+最后更新：2026-08-31（S6 开工：指令来源、指令通道、跟踪 reward、网络与环境已就位并验过；PPO 训练循环未接）
 
 ---
 
@@ -103,7 +103,8 @@ out/
 | **S4.6 传感** | ✅ **离线可观测性完成** | 实验七：在仿真观测模型下重建 region/mode/mechanics；"≤ 功能尺寸的 ~10%"是候选指标，不是下游控制或真机充分性结论 |
 | S4.5 分辨率 | ⛔ **要等 S6** | 判据是"下游成功率"，要一个能跑的 C4 执行器。**编号是历史顺序不是执行顺序**：S6 → S4.6 下游段 + S4.5 → S7，见 `plan/README` §7.1 |
 | **S5** | 🟨 **v4 契约 + 全量评估已跑** | `interaction-transfer-v4`（D-65/D-66/D-67/D-71 + **D-72/D-73/D-74**）；三任务全量 artifact + 十一项闸门，结果见 `out/s5/README.md` |
-| **S6 及之后** | ⬜ 未开始 | S5 的诊断已经给出两条**必须先答的问题**，见下 |
+| **S6** | 🟨 **地基完成，训练未跑** | 指令来源（43 份探针 + 3 份任务 artifact）、指令通道、跟踪 reward、网络与 Isaac 环境都已写好并通过 18 项单测 + 离线体检；**PPO 训练循环还没接 rsl_rl**，见下 |
+| **S7 及之后** | ⬜ 未开始 | 要 S6 的 checkpoint |
 
 ### S5 的当前状态（接手时先看这里）
 
@@ -194,6 +195,58 @@ S5 本身是纯 numpy、不需要 Isaac，但解释器得用那一个。
 模型"这条路暂时不用走——这一条同样会影响 `r_region` 怎么写。
 
 这三条都不阻塞 S6 开工，但会决定 `r_region` 与 `r_mech` 怎么写。
+
+### S6 的当前状态（接手时先看这里）
+
+**做完并验过的**（`tools/test_ei.py` 18 项 + 两份离线体检，全绿）：
+
+| | 是什么 | 在哪 |
+|---|---|---|
+| **指令来源** | 43 份 (物体, 原语) 探针指令 + 3 份任务指令。探针按原语拆、任务合并策略家族（D-76） | `/tmp/s6/probe/*.npz`、`/tmp/s5/*/*-train.npz` |
+| **指令通道** | 加载 + 白名单硬校验 + 空间/时间特征 + **按执行器自己的进度推窗口**（D-77） | `src/it/ei_command.py` |
+| **跟踪 reward** | 五项，全部是**hinge**——落在标定集合内恰好为零 | `src/it/ei_reward.py` |
+| **网络** | PointNet + GRU + MLP，asymmetric AC，字段掩码 | `src/it/ei_policy.py` |
+| **环境** | 混合力/位控动作、物体系接触、位姿差分滑移 | `src/it/envs/interaction.py` |
+| **训练入口** | 三段课程 + 留出禁令写进 dataloader | `tools/s6_train.py` |
+
+**没做完的：PPO 训练循环还没接 rsl_rl。** `tools/s6_train.py --dry-run` 能装配环境、
+跑几步、打印各项 reward 量级；`--stage a` 之后的正式训练会显式报错说明缺什么。
+**下一个人从这里开始。**
+
+⚠️ **动手前必须知道的三件**：
+
+1. **reward 的跟踪项是 hinge，不是到中位数的距离。** `region/allowed`、
+   `mech/*/{lo,hi}`、`mode/slip_speed/{lo,hi}` 都是**标定过的允许集合**
+   （D-67/D-71/D-73），落在里面的一切实现都同样满足规格，所以集合内 reward
+   **恰好为零**。若改成"离中位数越近越好"，C4 就被悄悄实现成了 C5（精确复现
+   source 的力），而 `plan/02` §6 的 C4 vs C5 对照正是要问"复制 source 是不是多余"——
+   实现成 C5，那个实验直接失去意义；
+2. **动作空间是混合力/位控，不是纯位姿增量**（6 维位姿增量 + 3 维力矢量）。
+   指令要跟踪的是面密度，而接触力是穿透量的刚性函数：`float_ctrl` 里记着实测，
+   推子距表面 0.5 mm 时法向力只有 0.06 N 而目标是 25 N。纯位置动作等于要求 PPO
+   学会亚毫米定位。接触密集 RL 的文献一致把柔顺/力设定值放进动作空间
+   （[Beltran-Hernandez 等, arXiv 2003.00628](https://ar5iv.labs.arxiv.org/html/2003.00628)），
+   近期 sim-to-real 消融也显示去掉法向力调节会让成功率大幅下降；
+3. **P-72：同一个量的两份实现，各自都对，合起来错。** traction 的离线（numpy，
+   造指令）与在线（torch，跟踪指令）曾经差 1.48~1.75 倍，而两边各自的单测都通过。
+   后果是**完美复现 source 的轨迹落在指令盒外，reward 反过来惩罚正确行为**。
+   已按 D-79 换成同一个式子，并加了 `rtol=1e-9` 的对拍测试。
+   **这个架构里每一个进 payload 的字段将来都会有两份实现**，新增字段时照此办理。
+
+**跑 S6 的地基检查就两条命令**（服务器上）：
+
+```bash
+IT_PY=/isaac-sim/python.sh bash tools/s6_commands.sh      # 造指令（freeze→split→build）
+PYTHONPATH=src /isaac-sim/python.sh tools/s6_reward_probe.py \
+    --task drawer=/tmp/s4_drawer=/tmp/s5/drawer/drawer-drawer-nominal-train.npz \
+    --task wipe=/tmp/s4_wipe=/tmp/s5/wipe/wipe-board-nominal-train.npz \
+    --task knob=/tmp/s4_knob=/tmp/s5/knob/knob-knob-nominal-train.npz \
+    --out /tmp/s6/reward_probe.txt
+```
+
+第二条的**第二节是最要紧的一节**：它问"reward 分得开执行自己的指令和执行别人的指令吗"。
+跟踪 reward 若对指令不敏感，训练曲线照样会涨，而学到的是"做点什么"而不是
+"实现这份规格"。**这一条不过，后面一切都没有意义。**
 
 ### S4 的当前状态（接手时先看这里）
 
@@ -415,10 +468,14 @@ src/it/
   surfaces.py       **物体表面采样**：点+法向+部件标签，嵌套多分辨率，hash 冻结（D-50）
   interaction.py    **Oracle Interaction Record 提取器**（纯 numpy）
   transfer.py       **S5 多示教聚合**：相分段活动量对齐 + 接触条件化 per-cell 统计
+  ei_command.py     **E-I 指令通道**：白名单、空间/时间特征、按自己的进度推窗口
+  ei_reward.py      **E-I 任务无关跟踪 reward**：五项，跟踪项是 hinge（集合内恰好为零）
+  ei_policy.py      **E-I 网络**：PointNet + GRU + MLP，asymmetric AC，字段掩码
   records.py        episode 数据契约（npz + manifest，前缀隔离，fail-closed）
   envs/
     base.py         增量动作接口 + 定长接触摘要
     drawer.py       抽屉任务环境
+    interaction.py  **E-I 环境**：混合力/位控、物体系接触、位姿差分滑移
 
 tools/
   sync.sh                 同步代码
@@ -454,6 +511,11 @@ tools/
   s5_parasite_check.py    **找"搁着没动却被记成交互"的寄生接触**（P-64：没在用的工具压在板上）
   s5_mech_setform.py      **mechanics 允许集合的形状比选**（D-71 否决 D-58 方向锥的依据）
   s5_units_probe.py       **单位与刻度体检**：每个自定义量依赖了哪些不属于物理的东西（D-75）
+  s6_probe_split.py       探针 calibration 按 (物体, 原语) 分层重划（D-76）
+  s6_commands.sh          **S6 指令来源的唯一入口**：freeze → split → build
+  s6_reward_probe.py      **跟踪 reward 的离线体检**：在线/离线是否同一个量、reward 分不分得开指令
+  s6_train.py             E-I 训练入口（三段课程 + 留出禁令写进 dataloader）
+  test_ei.py              **服务器**单元测试（指令通道 / reward / 网络）——要 torch，不要 Isaac
   s5_exclude_episodes.py  按范围决定把一批 episode 移出数据集，理由写进 manifest
   s5_eval_envelope.py     **S5 闸门**：coverage / width / 策略子群 / 多峰性 / 跨实现 / 接口不变量
   s5_all.sh               **S5 全套的唯一入口**：逐项收退出码，任一非零则整体失败（P-55）
@@ -463,14 +525,27 @@ tools/
   test_records.py         本机单元测试（数据契约）
 ```
 
-⚠️ **本机三套单元测试不依赖 Isaac，改完立刻验**：
+⚠️ **单元测试分两处跑，分界线是 torch，不是 Isaac。**
+
+**本机四套**（纯 numpy，改完立刻验）：
 
 ```bash
-PYTHONPATH=src python3 tools/test_surfaces.py
+PYTHONPATH=src python3 tools/test_surfaces.py     # ~110 s
 PYTHONPATH=src python3 tools/test_interaction.py
 PYTHONPATH=src python3 tools/test_records.py
 PYTHONPATH=src python3 tools/test_transfer.py
 ```
+
+**服务器一套**（要 torch，但**不要** Isaac）：
+
+```bash
+ssh root@10.0.6.98 'cd /workspace/interaction_transfer && \
+    PYTHONPATH=src /isaac-sim/python.sh tools/test_ei.py'
+```
+
+**不要在本机装 torch。** 服务器锁的是 torch 2.7.0+cu128（D-21 冻结环境），
+本机 pip 装的会是另一个版本——拿它验过的代码，在服务器上跑的是另一份实现，
+正是 P-38 那类"验的和跑的不是同一个东西"。
 
 ---
 

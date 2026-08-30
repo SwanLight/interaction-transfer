@@ -48,45 +48,45 @@
         },
         "per_split": {
           "calibration": {
-            "all": 0.9785925352584462,
+            "all": 0.9821613869959507,
             "episodes": 127,
-            "simultaneous": 0.25984251968503935,
-            "support>=10": 0.9785921581504123,
-            "support>=5": 0.9785925352584462
+            "simultaneous": 0.2755905511811024,
+            "support>=10": 0.9821610098879168,
+            "support>=5": 0.9821613869959507
           },
           "in_distribution_test": {
-            "all": 0.978544887623155,
+            "all": 0.9814508429203795,
             "episodes": 190,
-            "simultaneous": 0.28421052631578947,
-            "support>=10": 0.9785990498425744,
-            "support>=5": 0.9786017107931186
+            "simultaneous": 0.32105263157894737,
+            "support>=10": 0.9814733183938947,
+            "support>=5": 0.9814758218837586
           },
           "train": {
-            "all": 0.9811020500146401,
+            "all": 0.9837887071425075,
             "episodes": 950,
-            "simultaneous": 0.29894736842105263,
-            "support>=10": 0.9810955673664619,
-            "support>=5": 0.9811002746655434
+            "simultaneous": 0.35578947368421054,
+            "support>=10": 0.9837824241419092,
+            "support>=5": 0.9837870502490041
           },
           "unseen_physics_test": {
-            "all": 0.9512792626800917,
+            "all": 0.9528534096181018,
             "episodes": 219,
-            "simultaneous": 0.045662100456621,
-            "support>=10": 0.9520949477030064,
-            "support>=5": 0.951710703491463
+            "simultaneous": 0.0730593607305936,
+            "support>=10": 0.9532675045511341,
+            "support>=5": 0.9529963385545149
           },
           "unseen_strategy_test": {
-            "all": 0.9830669440744451,
+            "all": 0.9854665397385307,
             "episodes": 380,
-            "simultaneous": 0.2736842105263158,
-            "support>=10": 0.9831312441377456,
-            "support>=5": 0.9831142494130308
+            "simultaneous": 0.2657894736842105,
+            "support>=10": 0.9855147106318817,
+            "support>=5": 0.9854980767739883
           }
         },
-        "relative_width_median": 1.48923132834303,
-        "relative_width_median_support5": 1.49471901093957
+        "relative_width_median": 1.4865993808404019,
+        "relative_width_median_support5": 1.49438019623733
       },
-      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.979 / 支持≥5 0.979 / 支持≥10 0.979、episode 全中 0.260；in_distribution_test 逐点带内 全部 0.979 / 支持≥5 0.979 / 支持≥10 0.979、episode 全中 0.284；unseen_physics_test 逐点带内 全部 0.951 / 支持≥5 0.952 / 支持≥10 0.952、episode 全中 0.046；unseen_strategy_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.274；cell 支持分布 {'support==1': 3, 'support>=5': 406, 'support>=10': 402, 'occupied': 411}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
+      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.982 / 支持≥5 0.982 / 支持≥10 0.982、episode 全中 0.276；in_distribution_test 逐点带内 全部 0.981 / 支持≥5 0.981 / 支持≥10 0.981、episode 全中 0.321；unseen_physics_test 逐点带内 全部 0.953 / 支持≥5 0.953 / 支持≥10 0.953、episode 全中 0.073；unseen_strategy_test 逐点带内 全部 0.985 / 支持≥5 0.985 / 支持≥10 0.986、episode 全中 0.266；cell 支持分布 {'support==1': 3, 'support>=5': 406, 'support>=10': 402, 'occupied': 411}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
       "name": "1b mechanics 集合带内率",
       "status": "PASS"
     },
@@ -144,10 +144,10 @@
     },
     {
       "data": {
-        "relative_width_median": 1.48923132834303,
-        "relative_width_median_support5": 1.49471901093957
+        "relative_width_median": 1.4865993808404019,
+        "relative_width_median_support5": 1.49438019623733
       },
-      "detail": "traction 集合相对宽度中位数 全部 1.489 / 支持≥5 1.495（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
+      "detail": "traction 集合相对宽度中位数 全部 1.487 / 支持≥5 1.494（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
       "name": "2b mechanics width",
       "status": "PASS"
     },

@@ -48,45 +48,45 @@
         },
         "per_split": {
           "calibration": {
-            "all": 0.9730410661890145,
+            "all": 0.9883448520196895,
             "episodes": 43,
             "simultaneous": 0.6511627906976745,
-            "support>=10": 0.9730410661890145,
-            "support>=5": 0.9730410661890145
+            "support>=10": 0.9883448520196895,
+            "support>=5": 0.9883448520196895
           },
           "in_distribution_test": {
-            "all": 0.9693738338564826,
+            "all": 0.986485988540021,
             "episodes": 64,
-            "simultaneous": 0.671875,
-            "support>=10": 0.9693738338564826,
-            "support>=5": 0.9693738338564826
+            "simultaneous": 0.703125,
+            "support>=10": 0.986485988540021,
+            "support>=5": 0.986485988540021
           },
           "train": {
-            "all": 0.9735138204014628,
+            "all": 0.9802673804515433,
             "episodes": 323,
-            "simultaneous": 0.6934984520123839,
-            "support>=10": 0.9735138204014628,
-            "support>=5": 0.9735138204014628
+            "simultaneous": 0.7275541795665634,
+            "support>=10": 0.9802673804515433,
+            "support>=5": 0.9802673804515433
           },
           "unseen_physics_test": {
-            "all": 0.9657863727239625,
+            "all": 0.9620175878561079,
             "episodes": 66,
-            "simultaneous": 0.5909090909090909,
-            "support>=10": 0.9657863727239625,
-            "support>=5": 0.9657863727239625
+            "simultaneous": 0.6363636363636364,
+            "support>=10": 0.9620175878561079,
+            "support>=5": 0.9620175878561079
           },
           "unseen_strategy_test": {
-            "all": 0.9806342540606181,
+            "all": 0.9857884871169015,
             "episodes": 136,
-            "simultaneous": 0.6617647058823529,
-            "support>=10": 0.9806342540606181,
-            "support>=5": 0.9806342540606181
+            "simultaneous": 0.6985294117647058,
+            "support>=10": 0.9857884871169015,
+            "support>=5": 0.9857884871169015
           }
         },
-        "relative_width_median": 10.626066708901991,
-        "relative_width_median_support5": 10.626066708901991
+        "relative_width_median": 10.881189453854555,
+        "relative_width_median_support5": 10.881189453854555
       },
-      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.973 / 支持≥5 0.973 / 支持≥10 0.973、episode 全中 0.651；in_distribution_test 逐点带内 全部 0.969 / 支持≥5 0.969 / 支持≥10 0.969、episode 全中 0.672；unseen_physics_test 逐点带内 全部 0.966 / 支持≥5 0.966 / 支持≥10 0.966、episode 全中 0.591；unseen_strategy_test 逐点带内 全部 0.981 / 支持≥5 0.981 / 支持≥10 0.981、episode 全中 0.662；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
+      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.988 / 支持≥5 0.988 / 支持≥10 0.988、episode 全中 0.651；in_distribution_test 逐点带内 全部 0.986 / 支持≥5 0.986 / 支持≥10 0.986、episode 全中 0.703；unseen_physics_test 逐点带内 全部 0.962 / 支持≥5 0.962 / 支持≥10 0.962、episode 全中 0.636；unseen_strategy_test 逐点带内 全部 0.986 / 支持≥5 0.986 / 支持≥10 0.986、episode 全中 0.699；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
       "name": "1b mechanics 集合带内率",
       "status": "PASS"
     },
@@ -144,10 +144,10 @@
     },
     {
       "data": {
-        "relative_width_median": 10.626066708901991,
-        "relative_width_median_support5": 10.626066708901991
+        "relative_width_median": 10.881189453854555,
+        "relative_width_median_support5": 10.881189453854555
       },
-      "detail": "traction 集合相对宽度中位数 全部 10.626 / 支持≥5 10.626（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
+      "detail": "traction 集合相对宽度中位数 全部 10.881 / 支持≥5 10.881（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
       "name": "2b mechanics width",
       "status": "PASS"
     },

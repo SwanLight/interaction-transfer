@@ -75,6 +75,7 @@ v2 把 ``traction`` / ``moment_density`` 也改成**接触条件化**，并新�
 from __future__ import annotations
 
 import json
+import math
 import os
 import warnings
 from dataclasses import dataclass
@@ -143,6 +144,12 @@ TARGET_COVERAGE = 0.90
 #: mechanics 尺度地板取本任务 traction 量级的这个比例。**它是标定唯一的自由参数**，
 #: 必须随结果一起报（D-71：用绝对地板会让结论完全变样）。
 MECH_FLOOR_RELATIVE = 0.05
+#: region 密度的平滑带宽，单位是**命令格间距**。**默认 0 = 不平滑**：实测平滑会把
+#: 允许面积在擦拭上从 4.42% 涨到 8.02%、旋钮 1.37%→2.71%（几乎翻倍），而 width 正是
+#: `plan/03` §8.1 要最小化的那个数。平滑只作**兜底**用在原始估计量退化的那些
+#: artifact 上（τ* 发散），由调用方决定并逐份记录，见 D-78。
+REGION_SMOOTH = 0.0
+
 #: region 允许集合的 τ 搜索网格。A(τ) 随 τ 嵌套，所以可直接对 τ 做 split conformal。
 TAU_GRID = np.concatenate([np.linspace(0.50, 0.99, 50), [0.995, 0.999, 1.0]])
 #: mechanics 盒子的 k 搜索网格。集合随 k 单调膨胀，同理。
@@ -158,9 +165,14 @@ K_GRID = np.concatenate([np.linspace(0.25, 8.0, 156), [10.0, 14.0, 20.0, 30.0]])
 #: - ``kernel_area``：先按固定带宽核散射到冻结表面点，再在格内按面积平均。
 #:   守恒，但格远大于核时被稀释，仍随分辨率变；
 #: - ``kernel_point``：取该格代表点上的场值。分辨率无关，但粗档下欠采样；
-#: - ``kernel_forcew``：格内按 ``|f_j|`` 加权平均。**现行做法**。
-TRACTION_POOLING = "kernel_forcew"
-TRACTION_POOLINGS = ("nearest_area", "kernel_area", "kernel_point", "kernel_forcew")
+#: - ``kernel_forcew``：散射到表面点后格内按 ``|f_j|`` 加权平均。分辨率无关，
+#:   但比在线实现系统性低 1.48~1.75×，且隐含依赖精细采样密度（D-79 换掉了它）；
+#: - ``contact_kernel``：**现行做法**。直接在接触点上求核和，与在线实现同一个式子。
+TRACTION_POOLING = "contact_kernel"
+TRACTION_POOLINGS = ("nearest_area", "kernel_area", "kernel_point", "kernel_forcew",
+                     "contact_kernel")
+#: 归一化的高斯面密度核常数：∫G dA = 1。与 `ei_reward._GAUSS_NORM` 必须相同。
+_GAUSS_NORM = 1.0 / (2.0 * math.pi * SCATTER_SIGMA ** 2)
 
 #: 每个 cell 上"只在接触过的 episode 之间统计"的字段。它们必须共用同一个
 #: ``contact_frames > 0`` 掩码，否则同一个 cell 上不同字段来自不同的 episode 子集
@@ -596,6 +608,7 @@ def _fine_force_field(fine_idx: np.ndarray, force: np.ndarray, frame_of: np.ndar
 
 
 def _cell_traction(*, fine_idx: np.ndarray, force: np.ndarray, frame_of: np.ndarray,
+                   position_of: np.ndarray,
                    bin_of: np.ndarray, coarse: np.ndarray, surface: Surface,
                    n_bins: int, n_surface: int, contact_frames: np.ndarray,
                    occupied: np.ndarray, cell_area: np.ndarray,
@@ -621,6 +634,42 @@ def _cell_traction(*, fine_idx: np.ndarray, force: np.ndarray, frame_of: np.ndar
         # 整条 episode 一个有效接触都没有。occupied 全 False，各字段照 NaN 填，
         # 与其余接触条件化字段一致（不是 0——"没碰过"不等于"力为零"，P-59）。
         return np.full(shape + (3,), np.nan)
+
+    if pooling == "contact_kernel":
+        # **现行做法（D-79）。** 直接在接触点自己的位置上求核和：
+        #     t(x_k) = Σ_m F_m · G_σ(x_k - x_m)，  G_σ = exp(-d²/2σ²)/(2πσ²)
+        # 再按 |F| 加权池化到格、按接触帧平均。
+        #
+        # 为什么不再经过冻结表面点：
+        #
+        # 1. **它与在线实现（`ei_reward.surface_traction`）是同一个式子**，不是
+        #    "应该差不多"。先前的做法先散射到 16384 个表面点再在格内按 |f| 加权平均，
+        #    实测比在线低 1.48~1.75×（相关 0.93~0.98，是干净的系统偏差）——
+        #    于是一条**完美复现 source** 的轨迹在线上会读出 1.6 倍的 traction，
+        #    落在指令盒外面，`r_mech` 反过来惩罚正确行为。这种错不会报错；
+        # 2. 它连**精细采样密度**也不依赖了。散射版的值取决于表面采样了 4096 还是
+        #    16384 个点（一个我从没测过的隐含依赖），而这一版只依赖 σ；
+        # 3. 物理上更对：命令要说的是"你按住的地方该有多大面密度"，那就该在
+        #    **力实际所在的位置**取值，而不是把整个 cell（含没有接触的大片）平均进去。
+        frame_key = np.unique(frame_of)
+        order = np.searchsorted(frame_key, frame_of)
+        traction = np.zeros((len(force), 3))
+        for f_index in range(len(frame_key)):
+            rows = np.flatnonzero(order == f_index)
+            if not len(rows):
+                continue
+            delta = position_of[rows][:, None, :] - position_of[rows][None, :, :]
+            kernel = np.exp(-(delta ** 2).sum(-1) / (2.0 * sigma ** 2)) * _GAUSS_NORM
+            traction[rows] = kernel @ force[rows]
+        mass = np.linalg.norm(force, axis=1)
+        flat = bin_of * n_surface + coarse
+        denominator = np.bincount(flat, weights=mass, minlength=size)
+        numerator = _bincount2d(flat, mass[:, None] * traction, size, shape)
+        denominator = denominator.reshape(shape)[..., None]
+        out = np.full(shape + (3,), np.nan)
+        np.divide(numerator, denominator, out=out,
+                  where=occupied[..., None] & (denominator > 0))
+        return out
 
     if pooling == "nearest_area":
         force_sum = _bincount2d(bin_of * n_surface + coarse, force, size, shape)
@@ -756,6 +805,7 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
 
     traction = _cell_traction(
         fine_idx=idx[frame_of, slot_of], force=live_force, frame_of=frame_of,
+        position_of=position[frame_of, slot_of],
         bin_of=bin_of, coarse=coarse, surface=surface, n_bins=n_bins,
         n_surface=n_surface, contact_frames=contact_frames, occupied=occupied,
         cell_area=cell_area, pooling=pooling, sigma=sigma, kernel_k=kernel_k)
@@ -978,7 +1028,8 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
                    surface: Surface | None = None,
                    phase_floor: int = PHASE_FLOOR,
                    budget: tuple[int, ...] | None = None,
-                   calibration: Iterable[EpisodeRecord] | None = None
+                   calibration: Iterable[EpisodeRecord] | None = None,
+                   region_smooth: float = REGION_SMOOTH
                    ) -> InteractionTransfer:
     """从同一任务/物体/几何的多条成功 S4 records 构造统计 interaction command。
 
@@ -1059,6 +1110,14 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
 
     region = stack("region")
     region_mean = _nan_stat(region, "mean")
+    if region_smooth > 0:
+        # region 是"接触会落在哪"的**概率密度估计**，原始形式是 256 格上的直方图。
+        # ~150 条示教、每格每帧几个接触点，没被碰到的格概率恰好是 0，于是它在任何
+        # τ 下都进不了允许集合，split conformal 的 τ* 发散到 inf（D-78）。
+        # 平滑一个格是最小的修法。⚠️ 这与 traction 的核**不是一回事**：那个的带宽是
+        # 物理尺度且不能跟分辨率走（P-68），这个平滑的是直方图的格。
+        _, kernel = surface.cell_kernel(n_surface, region_smooth)
+        region_mean = region_mean @ kernel.T
     row_sum = region_mean.sum(axis=1, keepdims=True)
     region_mean = np.divide(region_mean, row_sum, out=np.zeros_like(region_mean),
                             where=row_sum > 0)
@@ -1169,6 +1228,7 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
         "point_mass_target": POINT_MASS_TARGET,
         "target_coverage": TARGET_COVERAGE,
         "mech_floor_relative": MECH_FLOOR_RELATIVE,
+        "region_smooth_cells": region_smooth,
         "note": ("未标定：region/allowed 退化成 τ=0.95 的描述性超水平集，"
                  "mech 的 lo/hi 只是 10/90 分位数。二者都没有覆盖保证，"
                  "不得直接当作 E-I 的跟踪目标（D-67 / D-71）"),
@@ -1220,6 +1280,7 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
             "target_coverage": TARGET_COVERAGE,
             "mech_floor_relative": MECH_FLOOR_RELATIVE,
             "region_tau": float(tau),
+            "region_smooth_cells": float(region_smooth),
             "mech_traction_k": float(k_traction),
             "mech_moment_k": float(k_moment),
             "mode_slip_speed_k": float(k_slip),

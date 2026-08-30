@@ -1,0 +1,431 @@
+{
+  "carriers": {
+    "crank": [
+      "dial",
+      "flap"
+    ],
+    "hook_pull": [
+      "plunger",
+      "slider"
+    ],
+    "pinch_hold": [
+      "block",
+      "slider"
+    ],
+    "pinch_move": [
+      "block",
+      "slider"
+    ],
+    "pinch_turn": [
+      "block",
+      "column"
+    ],
+    "pivot": [
+      "block",
+      "column"
+    ],
+    "poke": [
+      "ball",
+      "block",
+      "column",
+      "dial",
+      "flap",
+      "plunger",
+      "ridge",
+      "roller",
+      "slab",
+      "slider"
+    ],
+    "press": [
+      "ball",
+      "block",
+      "column",
+      "dial",
+      "ridge",
+      "slab",
+      "slider"
+    ],
+    "push": [
+      "block"
+    ],
+    "roll": [
+      "ball",
+      "roller"
+    ],
+    "rub": [
+      "ridge",
+      "slab"
+    ],
+    "shear": [
+      "block",
+      "ridge",
+      "slab"
+    ],
+    "slide_along": [
+      "plunger",
+      "slider"
+    ],
+    "slide_push": [
+      "block",
+      "column"
+    ],
+    "twist": [
+      "ball",
+      "column"
+    ]
+  },
+  "groups": [
+    {
+      "available": 182,
+      "calibration": 30,
+      "object": "ball",
+      "strategy_family": "poke",
+      "train": 152,
+      "usable": true
+    },
+    {
+      "available": 179,
+      "calibration": 30,
+      "object": "ball",
+      "strategy_family": "press",
+      "train": 149,
+      "usable": true
+    },
+    {
+      "available": 179,
+      "calibration": 30,
+      "object": "ball",
+      "strategy_family": "roll",
+      "train": 149,
+      "usable": true
+    },
+    {
+      "available": 53,
+      "calibration": 30,
+      "object": "ball",
+      "strategy_family": "twist",
+      "train": 23,
+      "usable": true
+    },
+    {
+      "available": 175,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "pinch_hold",
+      "train": 145,
+      "usable": true
+    },
+    {
+      "available": 175,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "pinch_move",
+      "train": 145,
+      "usable": true
+    },
+    {
+      "available": 173,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "pinch_turn",
+      "train": 143,
+      "usable": true
+    },
+    {
+      "available": 169,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "pivot",
+      "train": 139,
+      "usable": true
+    },
+    {
+      "available": 175,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "poke",
+      "train": 145,
+      "usable": true
+    },
+    {
+      "available": 170,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "press",
+      "train": 140,
+      "usable": true
+    },
+    {
+      "available": 172,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "push",
+      "train": 142,
+      "usable": true
+    },
+    {
+      "available": 173,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "shear",
+      "train": 143,
+      "usable": true
+    },
+    {
+      "available": 179,
+      "calibration": 30,
+      "object": "block",
+      "strategy_family": "slide_push",
+      "train": 149,
+      "usable": true
+    },
+    {
+      "available": 178,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "pinch_turn",
+      "train": 148,
+      "usable": true
+    },
+    {
+      "available": 68,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "pivot",
+      "train": 38,
+      "usable": true
+    },
+    {
+      "available": 175,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "poke",
+      "train": 145,
+      "usable": true
+    },
+    {
+      "available": 158,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "press",
+      "train": 128,
+      "usable": true
+    },
+    {
+      "available": 22,
+      "calibration": 10,
+      "object": "column",
+      "strategy_family": "push",
+      "train": 12,
+      "usable": false
+    },
+    {
+      "available": 43,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "slide_push",
+      "train": 13,
+      "usable": true
+    },
+    {
+      "available": 162,
+      "calibration": 30,
+      "object": "column",
+      "strategy_family": "twist",
+      "train": 132,
+      "usable": true
+    },
+    {
+      "available": 147,
+      "calibration": 30,
+      "object": "dial",
+      "strategy_family": "crank",
+      "train": 117,
+      "usable": true
+    },
+    {
+      "available": 143,
+      "calibration": 30,
+      "object": "dial",
+      "strategy_family": "poke",
+      "train": 113,
+      "usable": true
+    },
+    {
+      "available": 140,
+      "calibration": 30,
+      "object": "dial",
+      "strategy_family": "press",
+      "train": 110,
+      "usable": true
+    },
+    {
+      "available": 145,
+      "calibration": 30,
+      "object": "flap",
+      "strategy_family": "crank",
+      "train": 115,
+      "usable": true
+    },
+    {
+      "available": 162,
+      "calibration": 30,
+      "object": "flap",
+      "strategy_family": "poke",
+      "train": 132,
+      "usable": true
+    },
+    {
+      "available": 142,
+      "calibration": 30,
+      "object": "plunger",
+      "strategy_family": "hook_pull",
+      "train": 112,
+      "usable": true
+    },
+    {
+      "available": 143,
+      "calibration": 30,
+      "object": "plunger",
+      "strategy_family": "poke",
+      "train": 113,
+      "usable": true
+    },
+    {
+      "available": 153,
+      "calibration": 30,
+      "object": "plunger",
+      "strategy_family": "slide_along",
+      "train": 123,
+      "usable": true
+    },
+    {
+      "available": 169,
+      "calibration": 30,
+      "object": "ridge",
+      "strategy_family": "poke",
+      "train": 139,
+      "usable": true
+    },
+    {
+      "available": 187,
+      "calibration": 30,
+      "object": "ridge",
+      "strategy_family": "press",
+      "train": 157,
+      "usable": true
+    },
+    {
+      "available": 185,
+      "calibration": 30,
+      "object": "ridge",
+      "strategy_family": "rub",
+      "train": 155,
+      "usable": true
+    },
+    {
+      "available": 173,
+      "calibration": 30,
+      "object": "ridge",
+      "strategy_family": "shear",
+      "train": 143,
+      "usable": true
+    },
+    {
+      "available": 691,
+      "calibration": 30,
+      "object": "roller",
+      "strategy_family": "poke",
+      "train": 661,
+      "usable": true
+    },
+    {
+      "available": 319,
+      "calibration": 30,
+      "object": "roller",
+      "strategy_family": "roll",
+      "train": 289,
+      "usable": true
+    },
+    {
+      "available": 169,
+      "calibration": 30,
+      "object": "slab",
+      "strategy_family": "poke",
+      "train": 139,
+      "usable": true
+    },
+    {
+      "available": 187,
+      "calibration": 30,
+      "object": "slab",
+      "strategy_family": "press",
+      "train": 157,
+      "usable": true
+    },
+    {
+      "available": 185,
+      "calibration": 30,
+      "object": "slab",
+      "strategy_family": "rub",
+      "train": 155,
+      "usable": true
+    },
+    {
+      "available": 173,
+      "calibration": 30,
+      "object": "slab",
+      "strategy_family": "shear",
+      "train": 143,
+      "usable": true
+    },
+    {
+      "available": 154,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "hook_pull",
+      "train": 124,
+      "usable": true
+    },
+    {
+      "available": 151,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "pinch_hold",
+      "train": 121,
+      "usable": true
+    },
+    {
+      "available": 146,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "pinch_move",
+      "train": 116,
+      "usable": true
+    },
+    {
+      "available": 153,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "poke",
+      "train": 123,
+      "usable": true
+    },
+    {
+      "available": 152,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "press",
+      "train": 122,
+      "usable": true
+    },
+    {
+      "available": 160,
+      "calibration": 30,
+      "object": "slider",
+      "strategy_family": "slide_along",
+      "train": 130,
+      "usable": true
+    }
+  ]
+}

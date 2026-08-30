@@ -1,0 +1,79 @@
+探针数据集 calibration 划分按 (物体, 原语) 分层重划
+==============================================================================
+目标每组 30 条校准，训练至少留 12 条。
+**只在 train 与 calibration 之间移动，任何 *_test 划分一条都不动。**
+确定性：按 sha256(episode_id) 排序取前 N 条。
+
+  ball     poke         可用  182 → 校准  30 / 训练  152  
+  ball     press        可用  179 → 校准  30 / 训练  149  
+  ball     roll         可用  179 → 校准  30 / 训练  149  
+  ball     twist        可用   53 → 校准  30 / 训练   23  
+  block    pinch_hold   可用  175 → 校准  30 / 训练  145  
+  block    pinch_move   可用  175 → 校准  30 / 训练  145  
+  block    pinch_turn   可用  173 → 校准  30 / 训练  143  
+  block    pivot        可用  169 → 校准  30 / 训练  139  
+  block    poke         可用  175 → 校准  30 / 训练  145  
+  block    press        可用  170 → 校准  30 / 训练  140  
+  block    push         可用  172 → 校准  30 / 训练  142  
+  block    shear        可用  173 → 校准  30 / 训练  143  
+  block    slide_push   可用  179 → 校准  30 / 训练  149  
+  column   pinch_turn   可用  178 → 校准  30 / 训练  148  
+  column   pivot        可用   68 → 校准  30 / 训练   38  
+  column   poke         可用  175 → 校准  30 / 训练  145  
+  column   press        可用  158 → 校准  30 / 训练  128  
+  column   push         可用   22 → 校准  10 / 训练   12  ← 条数不足，排除出指令集
+  column   slide_push   可用   43 → 校准  30 / 训练   13  
+  column   twist        可用  162 → 校准  30 / 训练  132  
+  dial     crank        可用  147 → 校准  30 / 训练  117  
+  dial     poke         可用  143 → 校准  30 / 训练  113  
+  dial     press        可用  140 → 校准  30 / 训练  110  
+  flap     crank        可用  145 → 校准  30 / 训练  115  
+  flap     poke         可用  162 → 校准  30 / 训练  132  
+  plunger  hook_pull    可用  142 → 校准  30 / 训练  112  
+  plunger  poke         可用  143 → 校准  30 / 训练  113  
+  plunger  slide_along  可用  153 → 校准  30 / 训练  123  
+  ridge    poke         可用  169 → 校准  30 / 训练  139  
+  ridge    press        可用  187 → 校准  30 / 训练  157  
+  ridge    rub          可用  185 → 校准  30 / 训练  155  
+  ridge    shear        可用  173 → 校准  30 / 训练  143  
+  roller   poke         可用  691 → 校准  30 / 训练  661  
+  roller   roll         可用  319 → 校准  30 / 训练  289  
+  slab     poke         可用  169 → 校准  30 / 训练  139  
+  slab     press        可用  187 → 校准  30 / 训练  157  
+  slab     rub          可用  185 → 校准  30 / 训练  155  
+  slab     shear        可用  173 → 校准  30 / 训练  143  
+  slider   hook_pull    可用  154 → 校准  30 / 训练  124  
+  slider   pinch_hold   可用  151 → 校准  30 / 训练  121  
+  slider   pinch_move   可用  146 → 校准  30 / 训练  116  
+  slider   poke         可用  153 → 校准  30 / 训练  123  
+  slider   press        可用  152 → 校准  30 / 训练  122  
+  slider   slide_along  可用  160 → 校准  30 / 训练  130  
+
+------------------------------------------------------------------------------
+可用组 43 / 44，合计训练 6177 条、校准 1290 条
+
+被排除的组（条数不足，**不降低 conformal 门槛**）：
+  column   push         只有 22 条可移动
+
+原语承载核对（D-41：每条原语 ≥2 个几何不同的物体），共 15 条原语：
+  crank        2 个承载物体：dial、flap
+  hook_pull    2 个承载物体：plunger、slider
+  pinch_hold   2 个承载物体：block、slider
+  pinch_move   2 个承载物体：block、slider
+  pinch_turn   2 个承载物体：block、column
+  pivot        2 个承载物体：block、column
+  poke         10 个承载物体：ball、block、column、dial、flap、plunger、ridge、roller、slab、slider
+  press        7 个承载物体：ball、block、column、dial、ridge、slab、slider
+  push         1 个承载物体：block
+  roll         2 个承载物体：ball、roller
+  rub          2 个承载物体：ridge、slab
+  shear        3 个承载物体：block、ridge、slab
+  slide_along  2 个承载物体：plunger、slider
+  slide_push   2 个承载物体：block、column
+  twist        2 个承载物体：ball、column
+
+⚠️ 以下原语在**可标定指令集**上只剩 1 个承载物体，已知情接受（数据集本身的覆盖不变）：
+  push：['block']
+  E-I 在这条原语上只见过一种几何，S7 的 leave-one-primitive 分析必须把它单列（D-60）。
+
+已写回各 manifest。
