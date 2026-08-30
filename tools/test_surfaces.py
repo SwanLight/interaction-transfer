@@ -153,7 +153,10 @@ class TestSurfaces(unittest.TestCase):
         idx1, ok1, d1 = assign_to_surface(pts @ rot.T, s.rotated(rot), max_dist=5e-3)
         np.testing.assert_array_equal(idx0, idx1)
         np.testing.assert_array_equal(ok0, ok1)
-        np.testing.assert_allclose(d0, d1, atol=1e-9)
+        # 容差取 1 µm：`rotated()` 走 float32 往返，1e-9 m（1 纳米）比 float32
+        # 在米量级上的分辨率还小，那不是不变性判据，是在判浮点噪声。
+        # 真正要不变的是**索引与是否落在物体上**，那两条上面已经逐元素比过。
+        np.testing.assert_allclose(d0, d1, atol=1e-6)
 
     def test_assign_rejects_far_points(self):
         """离表面太远的点必须被判为不在容差内，而不是硬塞给最近的采样点。"""
