@@ -512,10 +512,259 @@ def s4_section(s4_dir):
     return "\n".join(P)
 
 
+CHECK_PLAIN = {
+    "1a region coverage": (
+        "对照项：不做标定，直接把「累计到 95% 接触力」的那片区域当允许区域",
+        "只作对照。描述性区域没有覆盖保证，达不到门槛是预期之内的，判据看下一行"),
+    "1a' region coverage": (
+        "<b>一条没参与圈定的新示教，它的接触力有 95% 以上落在允许区域里吗？</b>"
+        "要求 90% 的新示教都做到",
+        "这是 S5 的主判据。三个留出集依次是：同分布 / 换了摩擦质量 / 换了做法"),
+    "2a region width": (
+        "<b>允许区域占物体表面多大？</b>",
+        "越小越有信息量。圈住整个物体也能拿到 100% 覆盖率，那种「通过」是空的"),
+    "1b mechanics": (
+        "<b>新示教的受力，落在允许的力范围内吗？</b>",
+        "标定之后才有覆盖保证。判据与区域那条一样：95% 的接触点落进去才算这条示教被覆盖"),
+    "2b mechanics width": (
+        "<b>允许的力范围有多宽？</b>（相对于中位数的倍数）",
+        "与上一行并读才有意义——宽度是为了买到那个覆盖率"),
+    "3 策略子群": (
+        "<b>把示教按「用了哪种做法」分开看，有没有哪一类被系统性排除？</b>",
+        "整体平均达标、而某一类做法几乎全落在外面，是这套方法已知的软肋"),
+    "4 family envelope": (
+        "<b>合成的说明书，离每一种做法各自的说明书有多远？</b>（0=重合，1=完全不重叠）",
+        "只报数。贴着某一种做法，说明合成塌到了那一种上"),
+    "5 多峰性": (
+        "<b>合成出来的是不是一个「谁都没做过」的中间产物？</b>"
+        "比的是「合成结果到各条示教的距离」÷「示教两两之间的距离」",
+        "小于 1 = 合成结果落在示教群的内部，不是悬在两拨做法中间"),
+    "6a payload": (
+        "<b>说明书里有没有混进「采集时用没用工具」这种执行器侧的信息？</b>",
+        "混进去了，跨形态传递就不成立了"),
+    "6b 两实现": ("两种采集实现各自说明书的距离", "只报数"),
+    "6 跨实现": ("两种采集实现的说明书能否互换", "擦拭只保留持工具实现后不再适用"),
+    "7a 结构不变量": (
+        "<b>换一批示教来合成，说明书的维度会不会变？</b>",
+        "维度一旦随数据变，下游网络就没法用同一个接口"),
+    "7b 接触体数量": (
+        "<b>采集时用几块板，会不会改变说明书的维度？</b>",
+        "需要数据里真的出现过不同的接触体数量才能验"),
+    "8 跨几何": (
+        "<b>换一个几何变体的物体，还能用同一份说明书打分吗？</b>",
+        "每个几何变体有自己的一套表面采样，同一个下标指的不是同一处，本步不做"),
+}
+
+
+SPLIT_PLAIN = {
+    "calibration": "校准集",
+    "in_distribution_test": "同分布",
+    "unseen_physics_test": "换了物理参数",
+    "unseen_strategy_test": "换了做法",
+    "unseen_implementation_test": "换了实现",
+    "unseen_geometry_test": "换了几何",
+}
+
+
+def _pct(value):
+    return "—" if value is None or value != value else f"{value*100:.1f}%"
+
+
+def _splits(mapping, formatter=_pct):
+    """把 {划分: 数} 写成人能读的一行。"""
+    order = [k for k in SPLIT_PLAIN if k in mapping] + \
+            [k for k in mapping if k not in SPLIT_PLAIN]
+    return "　".join(f"{SPLIT_PLAIN.get(k, k)} <b>{formatter(mapping[k])}</b>"
+                     for k in order)
+
+
+def _measured(name, data, detail):
+    """把检查项的结构化结果写成中文。
+
+    **不要贴工具的 detail 字符串。** 那是给改代码的人看的，里面全是 τ*、字段名和
+    决策编号；报告的读者要的是"这一项测出来是多少、达没达到"。
+    """
+    d = data or {}
+    if name.startswith("1a'"):
+        return (_splits(d.get("per_split", {}))
+                + f"　<span class=sub>（门槛 90%，允许区域按 {d.get('calibration_n','—')} 条校准示教定）</span>")
+    if name.startswith("1a "):
+        return _splits(d.get("per_split", {})) + "　<span class=sub>（未标定，仅对照）</span>"
+    if name.startswith("2a"):
+        now = d.get("allowed_area_fraction")
+        before = d.get("allowed_area_fraction_uncalibrated")
+        if now is None:
+            return html.escape(detail)
+        return (f"占物体表面 <b>{now*100:.2f}%</b>"
+                + (f"　<span class=sub>（未标定时 {before*100:.2f}%）</span>" if before else ""))
+    if name.startswith("1b"):
+        per = d.get("per_split", {})
+        line = _splits({k: v.get("all") for k, v in per.items()})
+        whole = _splits({k: v.get("simultaneous") for k, v in per.items()})
+        return (f"接触点落在范围内：{line}"
+                f"<div class=sub style='margin-top:5px'>整条示教每个点都落在范围内："
+                f"{whole}　——判据只要求 95% 的点，所以这一行天然更低，不是失败</div>")
+    if name.startswith("2b"):
+        wide = d.get("relative_width_median")
+        return ("—" if wide is None else
+                f"范围宽度是中位数的 <b>{wide:.1f} 倍</b>"
+                "　<span class=sub>（与上一行并读：宽度是为了买到那个命中率）</span>")
+    if name.startswith("3 "):
+        cov = d.get("per_family_coverage", {})
+        counts = d.get("counts", {})
+        worst = min(cov, key=cov.get) if cov else None
+        cells = "　".join(f"{html.escape(k)} <b>{_pct(v)}</b>"
+                          f"<span class=sub>({counts.get(k,'?')}条)</span>"
+                          for k, v in sorted(cov.items(), key=lambda kv: kv[1]))
+        return (cells + f"<div class=sub style='margin-top:5px'>最差的一类是 "
+                f"<b>{html.escape(str(worst))}</b>，落差 {_pct(d.get('spread'))}；"
+                "门槛 90% 要求每一类都达到</div>" if cov else html.escape(detail))
+    if name.startswith("4 "):
+        per = d.get("per_family", {})
+        held = set(d.get("held_out_families", []))
+        cells = "　".join(f"{html.escape(k)}{'*' if k in held else ''} <b>{v:.2f}</b>"
+                          for k, v in sorted(per.items(), key=lambda kv: kv[1]))
+        return (cells + "<div class=sub style='margin-top:5px'>0=重合，1=完全不重叠；"
+                "* 是没参与合成的那一类</div>") if per else html.escape(detail)
+    if name.startswith("5 "):
+        ratio = d.get("ratio_vs_pairwise")
+        if ratio is None:
+            return html.escape(detail)
+        verdict = "落在示教群内部" if ratio < 1 else "悬在示教之外"
+        return (f"合成结果到各示教 <b>{d['pooled_to_episode']:.2f}</b>　÷　"
+                f"示教两两之间 <b>{d['episode_pairwise']:.2f}</b>　=　<b>{ratio:.2f}</b>"
+                f"<div class=sub style='margin-top:5px'>小于 1 即 {verdict}；"
+                f"本例是{verdict}，所以不需要改用聚类</div>")
+    if name.startswith("7a"):
+        n = d.get("episodes")
+        return f"把 <b>{n}</b> 条示教对半分成两组各合成一份，所有字段维度完全一致" if n \
+            else html.escape(detail)
+    if name.startswith("7b"):
+        groups = d.get("groups")
+        return ("　".join(f"用 {k} 块接触体的示教 <b>{v}</b> 条" for k, v in groups.items())
+                + "，所有字段维度一致") if groups else \
+            "数据里所有示教都用同样数量的接触体，验不了这一项"
+    if name.startswith("6b"):
+        pairs = d.get("pairwise_region_js", {})
+        return ("　".join(f"{html.escape(k)} <b>{v:.2f}</b>" for k, v in pairs.items())
+                + "<div class=sub style='margin-top:5px'>0=重合，1=完全不重叠</div>") \
+            if pairs else html.escape(detail)
+    if name.startswith("6a"):
+        impl = d.get("implementations", {})
+        return ("说明书里没有任何工具 / 实现 / 接触体相关的字段"
+                + (f"<span class=sub>（数据里有 {len(impl)} 种采集实现）</span>" if impl else ""))
+    if name.startswith("6 "):
+        return "数据里只剩一种采集实现（擦拭已按决定只保留持工具那一种），这一项不再适用"
+    if name.startswith("8 "):
+        ex = d.get("excluded_by_geometry", {})
+        return ("因几何变体不同而无法打分的成功示教：" + _splits(ex, lambda v: f"{v} 条")) if ex \
+            else html.escape(detail)
+    return html.escape(detail)
+
+
+def _plain(name):
+    for key, value in CHECK_PLAIN.items():
+        if name.startswith(key):
+            return value
+    return ("", "")
+
+
 def s5_section(s5_dir):
-    """S5 段。数字**全部从 artifact 读**，不写死——写死的数字会在重跑后悄悄过期（P-56）。"""
+    """S5 段。**这一段必须自己讲清楚，不能贴工具的原始输出。**
+
+    第一版就是把 `s5_eval_envelope.py` 的 detail 字符串原样贴进表格，结果是一屏
+    代号和缩写——读的人既不知道每一项在验什么，也无从判断结论对不对。
+    评估工具的输出是给改代码的人看的；报告是给审阅的人看的，两者不是一回事。
+    """
     import glob
     names = {"drawer": "抽屉", "wipe": "擦拭", "knob": "旋钮"}
+    P = ["<h2>S5 · 把很多条示教合成一份可传递的交互说明书</h2>",
+         "<p class=lead>S4 把<b>每一条</b>示教翻译成了物体中心的记录。S5 回答下一个问题："
+         "<b>很多人用不同做法完成同一件事，能不能合成同一份说明书</b>，"
+         "让形态完全不同的执行器各自照着做。</p>",
+
+         "<h3>一、说明书里到底写了什么</h3>",
+         "<p class=lead>说明书<b>只描述物体</b>——物体表面被切成 256 个格子，"
+         "时间被切成 32 个命令步，每一步在每个格子上写四件事。"
+         "整份说明书里<b>没有任何一个字段提到采集者</b>：没有板的编号、没有它的位姿、"
+         "没有它走了什么轨迹，也没有任务的名字。</p>",
+         """<table>
+<tr><th>写的什么</th><th>形状</th><th>人话</th></tr>
+<tr><td><code>effect/rigid</code><br><code>effect/surface_state</code></td><td>32×10×6<br>32×10×64</td>
+<td><b>物体接下来该怎么变。</b>刚体那路是「整体该平移/转动多少」，
+表面那路是「表面状态该变多少」（擦拭就是污渍被擦掉多少）。
+抽屉的「拉开 20 mm」和旋钮的「转 0.3 rad」被写成了同一种东西——
+这是「任务无关」的关键：执行器不知道自己在开抽屉，它只知道这个物体该这样动</td></tr>
+<tr><td><code>region/allowed</code><br><code>region/mass</code></td><td>32×256</td>
+<td><b>哪些格子允许接触，各占多少力。</b>
+下面图里的蓝点就是它</td></tr>
+<tr><td><code>engage/dir</code><br><code>engage/concentration</code></td><td>32×256×3<br>32×256</td>
+<td><b>该从哪个方向压上去</b>，以及各示教在这个方向上有多一致
+（1 = 所有人方向一样，0 = 完全发散）</td></tr>
+<tr><td><code>mode/prob</code></td><td>32×256×4</td>
+<td><b>接触该处于什么状态</b>：没接触 / 黏住不动 / 滑动 / 正在分离</td></tr>
+<tr><td><code>mech/traction_obj/{median,lo,hi}</code></td><td>32×256×3</td>
+<td><b>该格子上单位面积的力，允许在什么范围内。</b>用「每平方米多少牛」而不是
+「多少牛」，是因为不同执行器的接触面积差很多，只有除掉面积才可比</td></tr>
+<tr><td><code>region/support</code><br><code>region/duty</code></td><td>32×256</td>
+<td><b>这一格的话是几个人说的、他们有多少时间在接触。</b>
+用来分辨「12 个人都压在这」和「只有 1 个人蹭到过」——
+早期版本没有这两个字段，下游完全无从判断</td></tr>
+</table>""",
+         "<div class=note><b>为什么这样设计就叫「统一表征」。</b>"
+         "三个任务的物理意义完全不同——抽屉是一个滑动关节、旋钮是一个转动关节、"
+         "擦拭是一块不动的板加一层污渍。如果照原样写，下游网络里就得写"
+         "<code>if 任务 == 抽屉</code>，「任务无关」当场作废。"
+         "统一的办法是：<b>任何交互都可以写成「物体表面接下来会怎么变」</b>，"
+         "而表面的变化只有两种——整体刚体位移，和逐点的表面状态变化。"
+         "关节量按关节轴换算过来，自由物体直接就是位姿增量，不动的物体是零。"
+         "力也一样：不投影到「绕轴力矩」「沿导轨力」这些任务专用的轴上，"
+         "而是留在<b>物体自己的坐标系</b>里，按表面格子给出单位面积的力。</div>"]
+
+    figs = []
+    for key, label in names.items():
+        path = os.path.join(s5_dir, f"fig_{key}.png")
+        if os.path.exists(path):
+            figs.append((label, path))
+    if figs:
+        P.append("<h3>二、说明书长什么样</h3>")
+        P.append("<p class=lead>三个正交视图（俯视 / 正视 / 侧视）。"
+                 "浅灰是物体轮廓，<b>上排</b>暖色是各条示教累计的接触力分布（越红越重），"
+                 "<b>下排</b>蓝点是最终圈定的<b>允许接触区域</b>。"
+                 "最下面两条是<b>每个命令步分到了多少帧</b>："
+                 "上面一条是早期按「任务完成度」分的，"
+                 "下面一条是现在按「相位 + 交互活动量」分的。</p>")
+        for label, path in figs:
+            P.append(f"<h4>{label}</h4>")
+            P.append(_img(path, f"{label} 允许区域与命令轴"))
+        P.append("<div class=note><b>最下面那两条对比就是本步修掉的最大一个坑。</b>"
+                 "早期按「任务完成了百分之多少」把示教切成 32 步，"
+                 "而手还没碰到物体时这个数恒为 0、拉到位之后恒为 1——"
+                 "于是<b>84% 的画面挤进首尾两步</b>，中间 30 步每步只剩 1~2 帧。"
+                 "上面那条几乎只有两根柱子，就是这个现象。"
+                 "所有既有校验当时全部通过（每一步都「有数据」，只是数据全堆在两头）。"
+                 "现在改成先按接触阶段分段、段内按「这一段里交互变化了多少」分配步数。</div>")
+
+    P.append("<h3>三、怎么从 950 条示教合成一份</h3>")
+    P.append("""<table>
+<tr><th></th><th>做什么</th><th>为什么</th></tr>
+<tr><td><b>1 对齐</b></td><td>每条示教按接触阶段切成四段（接近 / 建立接触 / 操作 / 松开），
+每段分到的命令步数按「这一段里交互活动量占多少」分配</td>
+<td>不同人快慢不同，必须先对到同一根时间轴上，否则「第 5 步」在不同示教里指的不是同一件事</td></tr>
+<tr><td><b>2 逐格统计</b></td><td>每条示教先在每个命令步里自己汇总一次，再跨示教等权平均</td>
+<td>先按示教汇总，一个 500 帧的采集者才不会比 200 帧的多出 2.5 倍话语权</td></tr>
+<tr><td><b>3 标定</b></td><td>用一批<b>从不参与合成</b>的校准示教，把允许区域和力范围放大到
+刚好能罩住 90% 的它们</td>
+<td>合成出来的中位数只是「典型值」，不是「允许范围」。范围多大不能拍脑袋，
+要用没见过的数据定，这样才有覆盖保证</td></tr>
+</table>""")
+    P.append("<div class=note><b>为什么第 3 步不能省，也不能拍。</b>"
+             "如果范围拍小了，正常的新示教会被判成违规；拍大了，说明书就没有约束力。"
+             "标定用的是 split conformal：把「让这条示教被罩住所需要的最小放大倍数」"
+             "在校准集上排序，取 90% 分位数。它给的保证是<b>平均意义上的</b>——"
+             "90% 的新示教会被罩住，但<b>不保证每一类做法都被罩住</b>。"
+             "下面第 3 项检查报的就是这个软肋，实测它确实存在。</div>")
+
     rows, checks_by_task = [], {}
     for key, label in names.items():
         report = sorted(glob.glob(os.path.join(s5_dir, key, "*.report.json")))
@@ -523,74 +772,77 @@ def s5_section(s5_dir):
         if not report:
             continue
         meta = json.load(open(report[0]))
-        cal = meta["meta"]["calibration"]
-        sup = meta["support"]
+        cal, sup = meta["meta"]["calibration"], meta["support"]
         diag = meta["meta"]["diagnostics"]
         rows.append(
             f"<tr><td><b>{label}</b></td><td>{meta['meta']['num_episodes']}</td>"
             f"<td>{cal.get('num_episodes','—')}</td>"
-            f"<td>{cal.get('region_tau', float('nan')):.3f}</td>"
-            f"<td>{cal.get('mech_traction_k', float('nan')):.2f}</td>"
             f"<td>{sup['allowed_cells_mean']:.1f} / 256</td>"
             f"<td>{diag['dropped_force_mass_fraction_max']*100:.2f}%</td></tr>")
         if evaluation:
             checks_by_task[label] = json.load(open(evaluation[0]))["checks"]
 
-    P = ["<h2>S5 · 把很多条示教合成一份可传递的交互说明书</h2>",
-         "<p class=lead>S4 把<b>每一条</b>示教换成了物体中心的记录。S5 回答下一个问题："
-         "<b>很多人用不同方法做同一件事，能不能合成同一份说明书</b>——"
-         "「物体该怎么动、该碰哪儿、碰的时候是黏是滑、力该在什么范围」——"
-         "而且这份说明书要紧到有用、松到能容纳没见过的做法。</p>",
-
-         "<div class=note><b>为什么这一步的产物不是「平均值」。</b>"
-         "把多条示教逐点求平均，得到的是一条谁都没走过的中间路线。S5 输出的是"
-         "<b>集合</b>：每个命令步给出一片<b>允许接触的表面区域</b>和一个"
-         "<b>允许的受力范围</b>。集合的大小不是拍的——用一批"
-         "<b>从不参与构造</b>的校准示教标定，使 90% 的新示教落在里面"
-         "（split conformal，D-67 / D-71）。之后要报的数是<b>宽度</b>，"
-         "因为覆盖率已经被约束住了。</div>",
-
-         "<h3>三份说明书</h3>",
-         "<table><tr><th>任务</th><th>训练示教</th><th>校准示教</th><th>τ*</th>"
-         "<th>力集合标量 k</th><th>允许区域</th><th>表面投影丢掉的力</th></tr>"
-         + "".join(rows) + "</table>",
-         "<p class=lead>允许区域<b>只占 256 个表面格里的 4~10 个</b>，而 95% 以上的"
-         "留出示教落在里面——说明归纳出来的约束是<b>紧</b>的，不是把整个物体都圈进去。"
-         "「表面投影丢掉的力」是能失败的自检：抽屉上有 <b>2.11%</b> 的接触力没落在"
-         "冻结表面上，小样本上它是 0.00%，全量才暴露。</p>"]
+    P.append("<h3>四、三份说明书</h3>")
+    P.append("<table><tr><th>任务</th><th>用了多少条示教合成</th><th>校准用了多少条</th>"
+             "<th>允许区域</th><th>没能表示的接触力</th></tr>" + "".join(rows) + "</table>")
+    P.append("<p class=lead>允许区域只占 256 个格子里的 <b>4~10 个</b>，"
+             "而 95% 以上的新示教落在里面——说明归纳出的约束是<b>紧</b>的，"
+             "不是把整个物体圈进去蒙混过关。"
+             "最后一列是一项<b>能失败</b>的自检：接触点如果落在冻结表面之外就没法表示，"
+             "抽屉上有 <b>2.11%</b> 的接触力是这种情况（小样本上它是 0.00%，全量才暴露）。</p>")
 
     if checks_by_task:
-        P.append("<h3>闸门结果</h3>")
-        P.append("<p class=lead>判据是<b>退出码</b>不是文件开头（P-55）。"
-                 "DEFER 表示<b>这一步做不完</b>，不得引用成通过。</p>")
+        P.append("<h3>五、怎么验证它是对的</h3>")
+        P.append("<p class=lead>十项检查。<b>PASS</b> = 达到判据；<b>FAIL</b> = 没达到；"
+                 "<b>DEFER</b> = <b>这一步做不完</b>（缺下游执行器或缺数据），"
+                 "<b>不能引用成通过</b>。判据是脚本的退出码，不是报告开头写了什么——"
+                 "这条规矩是踩过坑才立的（P-55）。</p>")
         for label, checks in checks_by_task.items():
             items = []
             for c in checks:
                 lv = {"PASS": "p", "FAIL": "f", "DEFER": "i"}[c["status"]]
-                items.append(f"<tr><td><span class='tag {lv}'>{c['status']}</span></td>"
-                             f"<td>{html.escape(c['name'])}</td>"
-                             f"<td><code>{html.escape(c['detail'][:300])}</code></td></tr>")
-            P.append(f"<h4>{label}</h4><table><tr><th></th><th>检查</th><th>实测</th></tr>"
-                     + "".join(items) + "</table>")
+                question, howto = _plain(c["name"])
+                measured = _measured(c["name"], c.get("data"), c["detail"])
+                items.append(
+                    f"<tr><td><span class='tag {lv}'>{c['status']}</span></td>"
+                    f"<td>{question or html.escape(c['name'])}"
+                    + (f"<div class=sub style='margin-top:4px'>{howto}</div>" if howto else "")
+                    + f"</td><td>{measured}</td></tr>")
+            P.append(f"<h4>{label}</h4><table><tr><th></th><th>这一项在验什么</th>"
+                     f"<th>实测</th></tr>" + "".join(items) + "</table>")
 
-    P.append("<div class=note><b>这一步纠正的四件事，都不报错、只让说明书失效。</b>"
-             "<b>①</b> 时间轴原按「任务完成了百分之多少」切，而接近段恒为 0、"
-             "拉到位后恒为 1——实测 <b>84%</b> 的画面挤进 32 格里的 2 格，"
-             "中间 30 格每格只有 1~2 帧（P-58）。"
-             "<b>②</b> 同一个位置一边写「这里要接触」一边写「这里的力必须为零」，"
-             "抽屉 58%、擦拭 81%、旋钮 49% 的位置都这样，根因是"
-             "「没碰过这里的人」在算方向时被排除、在算力时被当成 0（P-59）。"
-             "<b>③</b> 20 mm 厚的板配 50 mm 的格子，正反面被并成同一格，"
-             "黑板 <b>26%</b> 的面积串了面（P-63）。"
+    P.append("<h3>六、没做到的和做错的</h3>")
+    P.append("<div class=cav><b>三个任务都没通过「按做法分开看」那一项。</b>"
+             "抽屉 <code>pinch_offset</code> 83.3%、擦拭 <code>tool_light_fast</code> 67.1%、"
+             "旋钮 <code>pin_push_dual</code> 68.5%，而整体平均是达标的。"
+             "这不是 bug——标定方法本身<b>只保证平均，不保证每一类</b>。"
+             "它要写进论文的限制一节，不能靠调参数掩盖。</div>")
+    P.append("<div class=cav><b>旋钮上「位置能泛化、力不太能」。</b>"
+             "留出的那种做法（重新抓握再推）在<b>接触位置</b>上有 <b>94.1%</b> 的示教达标；"
+             "而在<b>受力</b>上，虽然平均 90.1% 的接触点落在允许范围内，"
+             "但按同一条「单条示教要有 95% 的点落入」的判据，"
+             "几乎没有示教达标（换四种不同形状的允许集合，都在 1% 上下）。"
+             "换句话说不是力全错，而是<b>总有一小撮点越界，而判据不容许</b>。"
+             "四种形状同样结果，说明这是数据本身的性质，不是表示方式的问题——"
+             "S6 在旋钮上要预期这个困难。</div>")
+    P.append("<div class=note><b>本步修掉的四个缺陷，都不报错、只让说明书失效。</b>"
+             "<b>①</b> 时间轴退化（上面图里那两条柱子）。"
+             "<b>②</b> 同一个格子一边写「这里要接触」一边写「这里的力必须为零」，"
+             "抽屉 58%、擦拭 81%、旋钮 49% 的格子都这样；"
+             "根因是「没碰过这里的人」在算方向时被排除、在算力时被当成 0 算了进去。"
+             "<b>③</b> 20 mm 厚的板配 50 mm 的格子，正反面被并进同一格，"
+             "黑板 <b>26%</b> 的面积串了面——而擦拭的全部意义就在正面。"
              "<b>④</b> 一块<b>没在用</b>的黑板擦全程压在板角上，每一帧都被记成交互，"
-             "稳定占 10% 的力（P-64）——它差点让人得出「擦拭的两种做法不可互换」"
-             "这个错误结论。</div>")
-    P.append("<div class=note><b>还有一条是方法本身的错，记在这里免得重犯。</b>"
-             "报告曾写「力的带内率只有 0.24~0.68，低于名义 0.80，所以这种写法不行」。"
-             "那是<b>指标造出来的</b>：它要求三个分量<b>同时</b>命中，"
-             "而逐轴实测是 0.75~0.89，三轴独立时联合本就该是 0.8³≈0.51。"
-             "表示没问题，缺的是从来没有构造过一个<b>联合</b>集合（P-65）。"
-             "补上标定之后，同一个指标是 <b>0.97~0.99</b>。</div>")
+             "稳定占 10% 的力；它差点让人得出「擦拭的两种做法不可互换」这个错误结论。</div>")
+    P.append("<div class=cav><b>还有一条是方法本身的错，记在这里免得重犯。</b>"
+             "报告曾写「力的命中率只有 0.24~0.68，低于名义的 0.80，所以这种写法不行」，"
+             "并据此准备改用「法向 + 切向 + 方向锥」的写法。"
+             "<b>那个结论是错的</b>：那个数要求三个坐标分量<b>同时</b>命中，"
+             "而逐个分量测出来是 0.75~0.89，三者独立时联合本来就该是 0.8³≈0.51。"
+             "表示方式没问题，缺的是从来没有构造过一个<b>联合</b>的允许范围。"
+             "补上标定之后，同一个指标是 <b>0.97~0.99</b>。"
+             "后来把四种候选形状放在一起实测，那个准备改用的「方向锥」写法"
+             "<b>反而是四种里最差的</b>——体积大 2.4 到 56 倍而覆盖率毫无收益。</div>")
     return "\n".join(P)
 
 

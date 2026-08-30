@@ -1,5 +1,10 @@
 # S5 — 从多条示教形成可传递 interaction（全量结果）
 
+> **要看给人读的版本，打开 `out/report.html` 的 S5 段**——那里有允许区域画在物体上的图、
+> 命令轴分帧的对比图，每一项检查都写了"在验什么 / 怎么读 / 实测多少"。
+> 本文件是技术摘要，保留决策编号与字段名，供改代码的人对照。
+
+
 契约是 `interaction-transfer-v3`（D-65 / D-66 / D-67 / D-71，早期版本读到即报错）。
 三个任务各从 **train split 全量**构造一份 artifact，**标定烤在 artifact 里**——
 `region/allowed` 与 `mech/*/lo,hi` 用**冻结的 calibration 划分**做 split conformal 定出，
