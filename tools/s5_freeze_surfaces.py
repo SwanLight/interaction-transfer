@@ -25,10 +25,33 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from it.records import read_manifest  # noqa: E402
 from it.surfaces import load_surface, save_surface, surface_for  # noqa: E402
+
+
+def _stale_reason(path: Path) -> str | None:
+    """已冻结的文件是不是旧代码产的。
+
+    ⚠️ identity ``sha256`` 只覆盖 points / normals / part，**不含 ``parent``**。
+    所以池化规则改了之后，旧文件照样能通过 hash 核对而被 SKIP 掉——修好的代码
+    等于没生效（P-38 的同一个形状：结果逐位相同就该怀疑改动没生效）。
+    这里直接查当前要求的不变量：**粗粒代表点必须与被代表的点同部件**。
+    """
+    try:
+        surface = load_surface(path)
+    except Exception as error:                     # 读不动就当它旧，重生成
+        return f"读取失败（{error}）"
+    part = np.asarray(surface.part)
+    for level, mapping in sorted(surface.parent.items()):
+        crossed = int((part != part[mapping]).sum())
+        if crossed:
+            return (f"{level} 档有 {crossed} 个点（{crossed / len(part):.1%}）"
+                    "的代表点跨了部件")
+    return None
 
 
 def freeze(dataset: Path, *, force: bool) -> list[str]:
@@ -46,13 +69,16 @@ def freeze(dataset: Path, *, force: bool) -> list[str]:
         obj, geom = key.split("/", 1)
         destination = out_dir / f"{obj}-{geom}.npz"
         expected = str(info.get("sha256"))
-        if destination.exists() and not force:
+        stale = _stale_reason(destination) if destination.exists() else None
+        if destination.exists() and not force and stale is None:
             existing = load_surface(destination)
             if existing.sha256 != expected:
                 raise SystemExit(f"{destination} 已存在但 hash 与 manifest 不符；"
                                  "先查清楚它是哪来的，不要覆盖")
             messages.append(f"SKIP  {key} 已冻结 {destination.name}")
         else:
+            if stale:
+                messages.append(f"STALE {key}：{stale}，重新生成")
             surface = surface_for(obj, geom)
             if surface.sha256 != expected:
                 raise SystemExit(

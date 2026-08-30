@@ -804,12 +804,30 @@ def _build(obj: str, geom_tag: str, n_points: int | None) -> Surface:
     area = np.zeros(n_points, dtype=np.float64)
     np.add.at(area, owner, wgt)
 
-    # --- 低分辨率的代表点 ---
+    # --- 低分辨率的代表点：**只在同部件内部找** ---
+    #
+    # ⚠️ 纯几何最近邻会把薄物体的两个面并进同一个 cell。实测在 S5 用的 256 档上：
+    # 黑板 **26.0%** 的表面点被判给了另一个部件的代表点（back <-> work_face 各 1500 点
+    # 左右），旋钮 13.3%（rim_side <-> disc），抽屉 5.1%（含 bar_back <-> bar_bottom）。
+    # 黑板厚 20 mm，而 256 档的粗粒 pitch 约 50 mm——比厚度还大，两个面必然混。
+    #
+    # 后果不是精度问题而是**语义错误**：擦拭的 effect 定义在工作面上，旋钮的反证
+    # 恰恰是"销钉换成低摩擦轮缘"，抽屉唯一干净的 region 论证靠的是横杆背面 vs 正面。
+    # D-58 早就为力散射定过"同部件"这条规矩，池化这一侧当时漏了。
     parent = {}
     for level in LEVELS:
         if level > n_points:
             continue
-        parent[level] = _nearest(sel_pts, sel_pts[:level]).astype(np.int32)
+        mapping = np.empty(n_points, dtype=np.int64)
+        for label in np.unique(sel_lab):
+            rows = np.flatnonzero(sel_lab == label)
+            heads = rows[rows < level]
+            if not len(heads):
+                raise ValueError(
+                    f"{obj}/{geom_tag}: 部件 {parts[label]!r} 在 {level} 档里一个代表点都没有，"
+                    "该档粗到无法表示这个部件；宁可报错也不要静默并进别的部件")
+            mapping[rows] = heads[_nearest(sel_pts[rows], sel_pts[heads])]
+        parent[level] = mapping.astype(np.int32)
 
     surface_hash = _surface_sha256(obj, geom_tag, sel_pts, sel_nrm, sel_lab)
 

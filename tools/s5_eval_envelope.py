@@ -63,6 +63,9 @@ from it.transfer import (  # noqa: E402
 REGION_MASS_TARGET = 0.95
 #: coverage 的通过门槛（`plan/03` §8.1）。只对 region 生效；mechanics 只报数。
 COVERAGE_GATE = 0.90
+#: 第 4、6 项要用子集重建 envelope，每组最多保留这么多条 record，避免整份数据集驻留内存。
+#: 按 episode_id 排序后取前 N，与运行顺序无关。
+SUBSET_CAP = 200
 #: 允许集合的大小只由一个参数控制：累计到 pooled region mass 的哪一档。
 #: 这一族集合是**嵌套**的（τ 越大集合越大），所以 split conformal 可以直接在 τ 上做。
 TAU_GRID = np.concatenate([np.linspace(0.50, 0.99, 50), [0.995, 0.999, 1.0]])
@@ -116,21 +119,23 @@ def _prefix_lengths(cumulative: list[np.ndarray], tau: float) -> list[int]:
     return [int(np.searchsorted(cum, tau) + 1) if len(cum) else 0 for cum in cumulative]
 
 
+def _lengths_by_tau(cumulative: list[np.ndarray]) -> np.ndarray:
+    """(len(TAU_GRID), n_bins) 的前缀长度表。它只跟 pooled envelope 有关，算一次即可。"""
+    return np.array([_prefix_lengths(cumulative, tau) for tau in TAU_GRID], dtype=np.int64)
+
+
 def _mass_inside_curve(episode: np.ndarray, orders: list[np.ndarray],
-                       cumulative: list[np.ndarray]) -> np.ndarray:
+                       lengths: np.ndarray) -> np.ndarray:
     """这条 episode 在 ``A(τ)`` 里的接触质量占比，对整个 τ 网格一次算完。"""
     total = episode.sum()
     if total <= 0:
         return np.full(len(TAU_GRID), np.nan)
-    per_bin = []
-    for b, order in enumerate(orders):
-        row = np.cumsum(episode[b][order]) if len(order) else np.zeros(0)
-        per_bin.append(row)
     inside = np.zeros(len(TAU_GRID))
-    for i, tau in enumerate(TAU_GRID):
-        lengths = _prefix_lengths(cumulative, tau)
-        inside[i] = sum(float(per_bin[b][k - 1]) if k > 0 and len(per_bin[b]) else 0.0
-                        for b, k in enumerate(lengths))
+    for b, order in enumerate(orders):
+        if not len(order):
+            continue
+        cumulative_mass = np.concatenate([[0.0], np.cumsum(episode[b][order])])
+        inside += cumulative_mass[np.minimum(lengths[:, b], len(order))]
     return inside / total
 
 
@@ -209,7 +214,8 @@ def _summaries(records: list[EpisodeRecord], surface: Surface, transfer: Interac
 # ------------------------------------------------------------ 检查项
 
 def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, list],
-                             summaries: dict[str, list[dict[str, np.ndarray]]]) -> list[Check]:
+                             summaries: dict[str, list[dict[str, np.ndarray]]]
+                             ) -> tuple[list[Check], float]:
     """第 1、2 项：coverage 与 width，允许集合在**冻结的校准集**上做 split conformal。
 
     `plan/03` §8.1 的目标函数是"在 coverage ≥ 90% 的约束下最小化 width"。未标定的
@@ -230,7 +236,8 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
     n_surface = region.shape[1]
     active = region.sum(axis=1) > 0
 
-    curves = {split: [_mass_inside_curve(_episode_region(item), orders, cumulative)
+    lengths = _lengths_by_tau(cumulative)
+    curves = {split: [_mass_inside_curve(_episode_region(item), orders, lengths)
                       for item in items] for split, items in summaries.items()}
     required = {split: np.array([_required_tau(c) for c in values if np.isfinite(c).any()])
                 for split, values in curves.items()}
@@ -248,6 +255,7 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
         return float(np.mean(values <= tau))
 
     checks: list[Check] = []
+    tau_star = float("nan")
     calibration = required.get("calibration", np.array([]))
     held_out = [s for s in summaries if s not in ("train", "calibration")]
 
@@ -269,9 +277,15 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
         covered = {s: coverage_at(s, tau_star) for s in held_out}
         finite = [v for v in covered.values() if np.isfinite(v)]
         status = "PASS" if finite and min(finite) >= COVERAGE_GATE else "FAIL"
+        # τ* 顶到 1.0 意味着允许集合就是整个表面：coverage 必然 100%，而 envelope
+        # 没有约束任何东西。这种"通过"是空的，必须当失败报。
+        if not np.isfinite(tau_star) or tau_star >= 1.0:
+            status = "FAIL"
         checks.append(Check(
             "1a' region coverage（conformal）", status,
-            f"校准集 n={len(calibration)} 定出 τ*={tau_star:.3f}；留出 "
+            (f"τ* 顶到 {tau_star}：允许集合就是整个表面，envelope 没有约束任何东西，"
+             "coverage 100% 是空的。" if (not np.isfinite(tau_star) or tau_star >= 1.0) else "")
+            + f"校准集 n={len(calibration)} 定出 τ*={tau_star:.3f}；留出 "
             + "；".join(f"{k} {v:.3f} (n={len(required[k])})" for k, v in sorted(covered.items()))
             + f"；门槛 {COVERAGE_GATE}",
             {"tau_star": tau_star, "per_split": covered,
@@ -304,7 +318,7 @@ def check_coverage_and_width(transfer: InteractionTransfer, groups: dict[str, li
         "带很宽而带内率仍低，说明问题不是带窄了）",
         {"relative_width_median": band["relative_width_median"],
          "relative_width_median_support5": band["relative_width_median_support5"]}))
-    return checks
+    return checks, tau_star
 
 
 def _mechanics_band_report(transfer: InteractionTransfer,
@@ -361,14 +375,20 @@ def _mechanics_band_report(transfer: InteractionTransfer,
 
 def check_strategy_subgroups(transfer: InteractionTransfer,
                              summaries: dict[str, list[dict[str, np.ndarray]]],
-                             families: dict[str, list[str]]) -> Check:
+                             families: dict[str, list[str]], tau_star: float) -> Check:
     """第 3 项：按 strategy family 分开报 coverage。
 
     `plan/02` §7 第 4 条要的是"envelope 不轻易泄漏策略身份"。单份聚合 artifact 没有
     可分类的标签，真正的风险是**聚合塌到某一族上**：整体 coverage 好看，而其余族被
     系统性排除。所以这一项报的是各族 coverage 的**落差**。
     """
-    allowed = _allowed_region(_pooled_region(transfer))
+    # ⚠️ 必须用第 1a' 项标定出来的**同一个** τ*。早先这里用未标定的 τ=0.95，
+    # 于是 1a' 在标定集合上 PASS 而本项在另一个集合上 FAIL，两个数不可比。
+    region = _pooled_region(transfer)
+    if not np.isfinite(tau_star):
+        return Check("3 策略子群 coverage", "DEFER", "τ* 未标定，子群 coverage 无从比较")
+    orders, cumulative = _nested_allowed(region)
+    allowed = _allowed_at(orders, cumulative, tau_star, region.shape[1])
     per_family: dict[str, list[float]] = defaultdict(list)
     for split, items in summaries.items():
         if split == "train":
@@ -392,16 +412,23 @@ def check_strategy_subgroups(transfer: InteractionTransfer,
     spread = max(coverage.values()) - min(coverage.values())
     status = "PASS" if min(coverage.values()) >= COVERAGE_GATE else "FAIL"
     return Check("3 策略子群 coverage", status,
-                 "；".join(f"{k} {coverage[k]:.3f}（均值 {mean_mass[k]:.3f}, n={len(per_family[k])}）"
-                           for k in coverage)
-                 + f"；落差 {spread:.3f}",
+                 f"τ*={tau_star:.3f} 下 "
+                 + "；".join(f"{k} {coverage[k]:.3f}（均值 {mean_mass[k]:.3f}, n={len(per_family[k])}）"
+                             for k in coverage)
+                 + f"；落差 {spread:.3f}。conformal 只保证 marginal coverage，"
+                   "子群落差必须另报（D-59）",
                  {"per_family_coverage": coverage, "per_family_mean_mass": mean_mass,
                   "spread": spread, "counts": {k: len(v) for k, v in per_family.items()}})
 
 
 def check_family_envelopes(records_by_family: dict[str, list[EpisodeRecord]],
-                           surface: Surface, transfer: InteractionTransfer) -> Check:
-    """第 4 项：pooled envelope 与各族自建 envelope 的距离谱。"""
+                           surface: Surface, transfer: InteractionTransfer,
+                           family_splits: dict[str, set[str]]) -> Check:
+    """第 4 项：pooled envelope 与各族自建 envelope 的距离谱。
+
+    **留出族也要一起比**。pooled envelope 只由 train 构造，所以"它离某个从未参与
+    构造的族有多远"正是最该看的一列——标 ``*`` 的就是留出族。
+    """
     axis = _frozen_axis(transfer)
     usable = {k: v for k, v in records_by_family.items() if len(v) >= 2}
     if len(usable) < 2:
@@ -420,10 +447,14 @@ def check_family_envelopes(records_by_family: dict[str, list[EpisodeRecord]],
     finite = [v for v in distances.values() if np.isfinite(v)]
     spread = float(max(finite) - min(finite)) if finite else float("nan")
     # 只报数：多大的落差算"塌到一族上"要靠下游成功率定，现在没有 E-I 可比。
+    held_out = {k for k, splits in family_splits.items() if "train" not in splits}
     return Check("4 family envelope 距离", "DEFER",
-                 "；".join(f"{k} {v:.3f}" for k, v in distances.items())
-                 + f"；落差 {spread:.3f}（判据要 S6 的下游成功率，现在只报数）",
-                 {"per_family": distances, "spread": spread})
+                 "；".join(f"{k}{'*' if k in held_out else ''} {v:.3f}"
+                           for k, v in distances.items())
+                 + f"；落差 {spread:.3f}（* = 未参与构造的留出族；"
+                   "判据要 S6 的下游成功率，现在只报数）",
+                 {"per_family": distances, "spread": spread,
+                  "held_out_families": sorted(held_out)})
 
 
 def check_multimodality(transfer: InteractionTransfer,
@@ -488,12 +519,12 @@ def check_multimodality(transfer: InteractionTransfer,
 
 
 def check_cross_implementation(records_by_implementation: dict[str, list[EpisodeRecord]],
-                               surface: Surface, transfer: InteractionTransfer) -> Check:
+                               surface: Surface, transfer: InteractionTransfer) -> list[Check]:
     """第 6 项 = `plan/02` §7 第 8 条：擦拭两种实现必须产生可互换的 envelope。"""
     usable = {k: v for k, v in records_by_implementation.items() if len(v) >= 2}
     if len(usable) < 2:
-        return Check("6 跨实现可互换", "DEFER",
-                     f"只有 {len(usable)} 种实现有 ≥2 条训练 episode（非擦拭任务正常）")
+        return [Check("6 跨实现可互换", "DEFER",
+                      f"数据里只有 {len(usable)} 种 implementation（非擦拭任务正常）")]
     axis = _frozen_axis(transfer)
     built = {name: build_transfer(items, surface=surface, transfer_id=f"impl-{name}", **axis)
              for name, items in sorted(usable.items())}
@@ -510,14 +541,21 @@ def check_cross_implementation(records_by_implementation: dict[str, list[Episode
     payload_names = set(transfer.executor_arrays())
     forbidden = [n for n in payload_names
                  if any(token in n for token in ("tool", "impl", "plate", "gripper"))]
-    status = "FAIL" if forbidden else "PASS"
-    return Check("6 跨实现可互换", status,
-                 ("payload 含实现相关字段 " + str(forbidden)) if forbidden else
-                 "payload 无工具/实现字段；两实现 envelope 的 region JS 距离 "
-                 + "；".join(f"{k} {v:.3f}" for k, v in pairs.items())
-                 + "（可互换性的最终判据是把一份 envelope 交给只会另一种实现的执行器，要 S6）",
-                 {"pairwise_region_js": pairs, "implementations": {k: len(v)
-                                                                   for k, v in usable.items()}})
+    checks = [Check("6a payload 无实现字段", "FAIL" if forbidden else "PASS",
+                    ("payload 含实现相关字段 " + str(forbidden)) if forbidden
+                    else "payload 里没有工具/实现/接触体字段",
+                    {"implementations": {k: len(v) for k, v in usable.items()}})]
+    # ⚠️ 距离只报数，**不判 PASS/FAIL**。D-69：`direct_wipe` 的记录里有一个每帧都在、
+    # 力方差 2%、固定在板角的寄生接触（没被使用的黑板擦），稳定占 10% 的力。
+    # 在它被重采修掉之前，这个距离既不能证明可互换，也不能证明不可互换——
+    # 把采集缺陷写成"两种实现的功能交互不同"是本项目明令禁止的那一类事。
+    checks.append(Check(
+        "6b 两实现 envelope 距离（只报数）", "DEFER",
+        "region JS 距离 " + "；".join(f"{k} {v:.3f}" for k, v in pairs.items())
+        + "。⚠️ D-69：direct_wipe 记录含寄生接触（未使用的工具全程压在板角，占 ~10% 的力），"
+          "该数在重采之前不可解读；最终判据是把一份 envelope 交给只会另一种实现的执行器，要 S6",
+        {"pairwise_region_js": pairs}))
+    return checks
 
 
 def check_interface_invariance(records_by_family: dict[str, list[EpisodeRecord]],
@@ -637,7 +675,7 @@ def main() -> None:
     parser.add_argument("--splits", nargs="+",
                         default=["train", "calibration", "in_distribution_test",
                                  "unseen_strategy_test", "unseen_physics_test",
-                                 "unseen_geometry_test"])
+                                 "unseen_geometry_test", "unseen_implementation_test"])
     parser.add_argument("--limit", type=int, help="每个划分最多用多少条；只用于 smoke")
     parser.add_argument("--existing-only", action="store_true")
     parser.add_argument("--out", required=True, type=Path)
@@ -652,12 +690,17 @@ def main() -> None:
 
     groups, families, excluded = _load_group(manifest_path, manifest, transfer, args.splits,
                                              args.limit, args.existing_only)
-    # 只有 train 需要保留 record 本体（第 4、6、7 项要用子集重建 envelope）；
-    # 其余划分逐条投影完就丢，否则整份数据集会同时驻留内存。
+    # 逐条投影完就丢，只按 (family / implementation) 各留至多 SUBSET_CAP 条 record，
+    # 供第 4、6、7 项重建子集 envelope。否则整份数据集会同时驻留内存。
+    #
+    # ⚠️ 分组**跨全部划分**，不能只用 train：擦拭的 `direct_wipe` 373 条全部在
+    # `unseen_implementation_test` 里（这是有意的留出设计），只看 train 的话
+    # `plan/02` §7 第 8 条那项检查永远不会触发，而且会 DEFER 得像"数据不支持"。
     axis = _frozen_axis(transfer)
     summaries: dict[str, list[dict[str, np.ndarray]]] = {}
     by_family: dict[str, list[EpisodeRecord]] = defaultdict(list)
     by_implementation: dict[str, list[EpisodeRecord]] = defaultdict(list)
+    family_splits: dict[str, set[str]] = defaultdict(set)
     for split, entries in groups.items():
         if not entries:
             continue
@@ -665,16 +708,20 @@ def main() -> None:
         for entry in entries:
             record = load_episode(manifest_path.parent / entry["path"])
             collected.append(episode_summary(record, surface, **axis)[0])
-            if split == "train":
-                by_family[str(record.meta.get("strategy_family", "unknown"))].append(record)
-                by_implementation[str(record.meta.get("implementation", "unknown"))].append(record)
+            family = str(record.meta.get("strategy_family", "unknown"))
+            implementation = str(record.meta.get("implementation", "unknown"))
+            family_splits[family].add(split)
+            if len(by_family[family]) < SUBSET_CAP:
+                by_family[family].append(record)
+            if len(by_implementation[implementation]) < SUBSET_CAP:
+                by_implementation[implementation].append(record)
         summaries[split] = collected
 
-    checks = check_coverage_and_width(transfer, groups, summaries)
-    checks.append(check_strategy_subgroups(transfer, summaries, families))
-    checks.append(check_family_envelopes(by_family, surface, transfer))
+    checks, tau_star = check_coverage_and_width(transfer, groups, summaries)
+    checks.append(check_strategy_subgroups(transfer, summaries, families, tau_star))
+    checks.append(check_family_envelopes(by_family, surface, transfer, family_splits))
     checks.append(check_multimodality(transfer, summaries))
-    checks.append(check_cross_implementation(by_implementation, surface, transfer))
+    checks.extend(check_cross_implementation(by_implementation, surface, transfer))
     checks.extend(check_interface_invariance(by_family, surface, transfer))
     if excluded:
         checks.append(Check(

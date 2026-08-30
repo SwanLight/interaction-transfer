@@ -103,7 +103,7 @@ out/
 | **S4.6 传感** | ✅ **离线可观测性完成** | 实验七：在仿真观测模型下重建 region/mode/mechanics；"≤ 功能尺寸的 ~10%"是候选指标，不是下游控制或真机充分性结论 |
 | S4.5 分辨率 | ⛔ **卡住** | 判据是"下游成功率"，要 S6 的 E-T C4 checkpoint。**编号排在 S4 之后是错的**，别被它误导 |
 | **S5** | 🟨 **v2 契约 + 全量评估已跑** | `interaction-transfer-v2`（D-65/D-66 重做）；三任务全量 train artifact + 冻结留出划分上的八项检查 |
-| **S6 及之后** | ⬜ 未开始 | S5 全量诊断后进入最小 E-I decoder |
+| **S6 及之后** | ⬜ 未开始 | S5 的诊断已经给出两条**必须先答的问题**，见下 |
 
 ### S5 的当前状态（接手时先看这里）
 
@@ -132,7 +132,24 @@ S5 本身是纯 numpy、不需要 Isaac，但解释器得用那一个。
 
 ⚠️ P-57 仍然有效：S4 记录只存 surface identity hash，跨 NumPy 环境重新 FPS 会改点序。
 `tools/s5_freeze_surfaces.py` 已在**产生数据的那台机器上**核对 hash 后落盘
-`frozen-surface-v1` 并写回 manifest；之后一律走 `--surface`，不再现场重算。
+`frozen-surface-v1` 并写回 manifest（四份数据集共 9 个 surface，hash 全部对上）；
+之后一律走 `--surface`，不再现场重算。
+
+#### S5 留给 S6 的两个问题（**动手写 E-I 之前先答**）
+
+1. **逐点 10/90 分位数带不足以描述这批示教。** 实测留出划分上的逐点带内率只有
+   0.32~0.70，而 10/90 的名义值是 0.80；**按 cell 支持度分层后没有变化**
+   （旋钮 support≥10 的格上仍是 0.591），所以这不是"支持太少"造成的。
+   同时带宽已经是中位数量级的 1~3 倍——**带很宽而带内率仍低，说明问题不在带窄**，
+   而在逐点边缘分位数这个形式本身。`plan/04` §5.1 的 `r_mech` 直接拿这条带当
+   跟踪目标之前，必须先决定：换 CQR / functional simultaneous band，还是改成
+   按分量条件化。这正是 D-63 说的"冻结数据诊断显示需要时再加"的那个时刻。
+2. **region 允许集合必须标定，不能直接用描述性超水平集。** 未标定的 τ=0.95
+   在抽屉上只给 0.68~0.79 的 coverage；在冻结校准集上做 split conformal 之后
+   才回到门槛附近。**width 才是要报的数**（旋钮 τ*=0.930 时占表面积 1.44%，
+   平均 4.4/256 个 cell）。
+
+这两条都不阻塞 S6 开工，但会决定 `r_region` 与 `r_mech` 怎么写。
 
 ### S4 的当前状态（接手时先看这里）
 
@@ -392,6 +409,7 @@ tools/
   s5_build_transfer.py    从 S4 manifest 构造 train split 的 interaction transfer
   s5_eval_envelope.py     **S5 闸门**：coverage / width / 策略子群 / 多峰性 / 跨实现 / 接口不变量
   s5_all.sh               **S5 全套的唯一入口**：逐项收退出码，任一非零则整体失败（P-55）
+  s5_fetch.sh             把服务器上 S5 的**文本**产物取回 out/s5/（npz 不进版本控制）
   test_surfaces.py        本机单元测试（表面采样）
   test_interaction.py     本机单元测试（提取器：法向定向/等变/mode/合并/采集侧动作零影响）
   test_records.py         本机单元测试（数据契约）

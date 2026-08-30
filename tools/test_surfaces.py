@@ -107,6 +107,29 @@ class TestSurfaces(unittest.TestCase):
             # 前 level 个点必须以自己为代表
             np.testing.assert_array_equal(par[:level], np.arange(level))
 
+    def test_pooling_never_crosses_parts(self):
+        """粗粒代表点必须与被代表的点**同部件**。
+
+        纯几何最近邻会把薄物体的两个面并进同一个 cell：黑板厚 20 mm，而 S5 用的
+        256 档粗粒 pitch 约 50 mm，比厚度还大。实测修复前 **26.0%** 的黑板表面点
+        被判给了另一个部件（back <-> work_face），旋钮 13.3%、抽屉 5.1%。
+
+        这不是精度问题而是语义错误：擦拭的 effect 定义在工作面上，旋钮的反证是
+        "销钉换成低摩擦轮缘"，抽屉唯一干净的 region 论证靠横杆背面 vs 正面——
+        全都要求这两个部件在 region 热图里分得开。D-58 早就为力散射定过"同部件"，
+        池化这一侧当时漏了。
+        """
+        for obj in ("board", "drawer", "knob", "slider", "ball"):
+            s = surface_for(obj)
+            part = np.asarray(s.part)
+            for level in LEVELS:
+                if level not in s.parent:
+                    continue
+                crossed = part != part[s.parent[level]]
+                self.assertEqual(int(crossed.sum()), 0,
+                                 f"{obj} 在 {level} 档上有 {int(crossed.sum())} 个点"
+                                 f"（{crossed.mean():.1%}）被判给了另一个部件的代表点")
+
     def test_all_parts_reachable_at_lowest_level(self):
         """最粗那一档（64 点）也不该整个部件是空的。"""
         for obj in ("drawer", "knob", "slider"):
