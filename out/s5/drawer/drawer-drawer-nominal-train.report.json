@@ -741,7 +741,7 @@
   "source_split": "train",
   "source_surface_sha256": "f7774e4f2ec4260447a2796ae7d33367598799f79b33caa3bac3804990dbb026",
   "support": {
-    "allowed_cells_mean": 4.40625,
+    "allowed_cells_mean": 5.035714285714286,
     "cell_support_median": 108.5,
     "cell_support_under_half_fraction": 0.7738095238095238,
     "empty_bins": 0,

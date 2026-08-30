@@ -86,16 +86,16 @@
         "relative_width_median": 10.883212161278724,
         "relative_width_median_support5": 10.883212161278724
       },
-      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；calibration 逐点带内 全部 0.989 / 支持≥5 0.989 / 支持≥10 0.989、episode 全中 0.721；in_distribution_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.672；unseen_physics_test 逐点带内 全部 0.968 / 支持≥5 0.968 / 支持≥10 0.968、episode 全中 0.712；unseen_strategy_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.654；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 逐点数要求三分量**同时**命中，独立时就该是单轴的三次方（P-65）；有覆盖保证的是 episode 级那一列",
-      "name": "1b mechanics band（只报数，不设门槛）",
-      "status": "DEFER"
+      "detail": "artifact 自带标定的联合盒（D-71），逐点数已不受 P-65 的三分量复合影响；calibration 逐点带内 全部 0.989 / 支持≥5 0.989 / 支持≥10 0.989、episode 全中 0.721；in_distribution_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.672；unseen_physics_test 逐点带内 全部 0.968 / 支持≥5 0.968 / 支持≥10 0.968、episode 全中 0.712；unseen_strategy_test 逐点带内 全部 0.983 / 支持≥5 0.983 / 支持≥10 0.983、episode 全中 0.654；cell 支持分布 {'support==1': 0, 'support>=5': 168, 'support>=10': 168, 'occupied': 168}。⚠️ 标定针对的是「≥95% 力加权接触点落进集合」，**不是**「每个点都落进去」；'episode 全中'那一列因此天然更低，不是失败",
+      "name": "1b mechanics 集合带内率",
+      "status": "PASS"
     },
     {
       "data": {
         "relative_width_median": 10.883212161278724,
         "relative_width_median_support5": 10.883212161278724
       },
-      "detail": "traction 带相对宽度中位数 全部 10.883 / 支持≥5 10.883（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）",
+      "detail": "traction 集合相对宽度中位数 全部 10.883 / 支持≥5 10.883（= 标定标量 × max(10/90 半宽, 5% 量级)；与 1b 并读才有意义——宽度是为了买到那个带内率）",
       "name": "2b mechanics width",
       "status": "PASS"
     },
@@ -193,9 +193,9 @@
     }
   ],
   "tally": {
-    "DEFER": 7,
+    "DEFER": 6,
     "FAIL": 1,
-    "PASS": 4
+    "PASS": 5
   },
   "transfer_id": "drawer-drawer-nominal-train"
 }
