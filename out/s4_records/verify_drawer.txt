@@ -1,0 +1,22 @@
+[PASS] manifest schema  —— s4-record-v2
+[PASS] episode 数与 S3 一致  —— 800 vs 800
+[PASS] 划分原样继承 S3  —— 800 条一致，校准集 43 条
+[PASS] 表面采样已冻结（每个几何变体一个 hash）  —— 3 个变体
+[PASS] 表面 hash 可复现：drawer/g1  —— 83e3771636bb8592
+[PASS] 表面 hash 可复现：drawer/g2  —— 72b066617d0e50a1
+[PASS] 表面 hash 可复现：drawer/nominal  —— f7774e4f2ec42604
+[PASS] 抽查 SHA-256 一致  —— 40 条
+[PASS] 无 NaN / Inf
+[PASS] 字段归类 fail-closed 通过
+[PASS] 抽查的 episode 字段集合一致  —— 1 种字段集合
+[INFO] 接触力按部件（操作阶段，抽查集）  —— bar_back 93.23%  bar_front 6.77%
+[INFO] mode 迁移矩阵（行 = S3 原始，列 = S4 重判，法向力加权 %）
+          no_contact     sticking      sliding   separating
+       no_contact           0.0%         0.0%         0.0%         0.0%
+       sticking             0.0%        38.1%         0.7%         0.0%
+       sliding              0.0%        31.7%         0.6%         0.0%
+       separating           0.0%        22.4%         6.5%         0.0%
+[INFO] 超安全上限的帧  —— 0.59%（总接触力 > 25.0 N）
+[PASS] 动力学一致性（`plan/02` §8）  —— 重建广义力与物体动力学的相关中位 0.824，幅值比中位 2.37（38 条）
+
+===== 全部通过 =====

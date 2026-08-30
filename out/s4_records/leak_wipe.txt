@@ -1,0 +1,21 @@
+[PASS] 1. 场景刚体旋转：不变量逐元素一致  —— 10 条 × 随机旋转；region 索引差 0 个、滑移速度最大差 1.15e-05 m/s、离阈值 5% 以外的 mode 差 0 个、effect 最大差 0.00e+00
+[PASS] 1b. 物体系的力、力矩与广义力逐元素不变  —— 最大残差 0.00e+00 N / N·m
+[INFO] 1c. 这条测试的限制  —— 只检验提取器有没有混进硬编码世界轴；不检验仿真器的坐标处理
+[PASS] 2a. 记录里没有 source/* 字段  —— 29 个数组
+[INFO] 2. source/* 的分工  —— 声明读取 5 个['board_pos_w', 'board_quat_w', 'plate0/root_pose', 'plate1/root_pose', 'tool_pose']；应当零影响 6 个['cmd_delta', 'root_velocity', 'target_pose']
+[PASS] 2b. 删掉声明读取集以外的全部 source/*，输出逐位相同  —— 删了 6 个字段（指令 / 目标位姿 / 本体速度 / 板面编号 / PhysX 世界系接触点）；变化的字段：无
+[PASS] 2c. 删掉测量位姿后提取器必须报错  —— ValueError: wipe-direct_wipe-b00e011：拿不到被操作物体的世界位姿（source/<物体>_pos_w 与 _quat_w）。没有它就算不出接触点的相
+[PASS] 2d. 每个 source/* 都归了类，且声明读取的都是测量字段  —— 未归类 无；声明读取里的非测量字段 无
+[PASS] 7. 表示里没有执行器专属编号 / 部件名  —— []
+[PASS] 5. 模型输入里没有 source 身份类字段  —— strategy_family 只在 meta 的审计字段里
+[PASS] 3. 改变 source 接触体数量后表示维度不变  —— 6 个家族（含 [3] 个接触体的实现）共用同一套字段与维度
+[INFO] 4. 策略身份可识别性（**记录级**，不是 envelope 级）  —— 从 Oracle Record 0.941 vs 从原始 source 动作 0.950（随机 0.167，6 类）
+[DEFER] 4. envelope 级的那一半  —— `plan/02` §7 第 4 条要的是从 Functional Envelope 预测策略身份，envelope 是 S5 的产物；两个数将来并排报
+[INFO] 6. 物理参数可推断性（诊断，不设门槛）  —— 从记录预测 physics_variant 1.000（随机 0.500，['heldout_press', 'nominal']）—— 物理参数没有被直接写进表示，但它必然通过实际交互体现出来，这个数不该是 0
+[PASS] 8. 表示里没有工具的存在性/位姿/几何字段  —— 两种实现：['direct', 'with_tool']
+[INFO] 8b. 两种实现的记录级统计差异  —— 逐特征相对差中位 0.150（1.0 = 完全不同，0 = 完全一样）
+[DEFER] 8. envelope 互换实验  —— 要把实现 (a) 的 envelope 喂给只会实现 (b) 的执行器，属 S5/S7
+[DEFER] 9. region 可推导性探针  —— 单独一个脚本：tools/s4_region_probe.py
+
+===== 汇总：PASS 10 / FAIL 0 / DEFER 3 =====
+可在 S4 完成的项全部通过（DEFER 的几条留到 S5）

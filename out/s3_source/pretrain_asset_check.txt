@@ -1,0 +1,14 @@
+[PASS] 预训练集       滑块关节数                              num_joints = 1
+[PASS] 预训练集       滑块行程 80-300 mm                     limits = [0.0, 0.15] m
+[PASS] 预训练集       滑块可被推动                             施加 15 N 后位移 150.0 mm
+[PASS] 预训练集       滑块可被拉回（凸缘提供可勾结构）                   反向 15 N 后从 150.0 回到 0.0 mm
+[PASS] 预训练集       转盘关节数                              num_joints = 1
+[PASS] 预训练集       转盘可被转动                             施加 0.6 N·m 后转过 7.500 rad
+[PASS] 预训练集       wipeboard 固定不动（kinematic，filter 通道才有效） 线速度 0.000000 m/s
+[PASS] 预训练集       ridge 固定不动（kinematic，filter 通道才有效） 线速度 0.000000 m/s
+[PASS] 预训练集       block 静置稳定（无穿模/无飞出）                静置后 z = 20.0 mm
+[PASS] 预训练集       block 静置后速度趋零                      |v| = 0.0001 m/s
+[PASS] 预训练集       column 静置稳定（无穿模/无飞出）               静置后 z = 60.0 mm
+[PASS] 预训练集       column 静置后速度趋零                     |v| = 0.0002 m/s
+
+合计: PASS 12  FAIL 0  INFO 0

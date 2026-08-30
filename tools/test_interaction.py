@@ -30,8 +30,13 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from it.interaction import RECORD_SCHEMA, extract  # noqa: E402
-from it.records import SCHEMA_VERSION, EpisodeRecord  # noqa: E402
+from it.interaction import RECORD_SCHEMA, extract, reads_source  # noqa: E402
+from it.records import (  # noqa: E402
+    SCHEMA_VERSION,
+    EpisodeRecord,
+    is_action,
+    is_measurement,
+)
 from it.surfaces import surface_for  # noqa: E402
 
 #: 帧数取 64：未来窗口是 1 s = 50 帧，要让第 0 帧的整窗都存在。
@@ -125,6 +130,12 @@ def make_episode(*, bodies=("plate0", "plate1"), reported_normal_sign=+1.0,
                    + ENV_ORIGIN)          # 板也在世界系里，同样含 env 偏移
         arrays[f"source/{body}/root_pose"] = np.concatenate(
             [plate_p @ rot.T, _quat_mul_left(rot, quat)], axis=1).astype(np.float32)
+        # 采集侧的**指令**通道。提取器一位都不许读到它们（`SOURCE_READS`），
+        # 所以这里故意填成与真实位姿完全不同的数——真被读了，输出立刻会变。
+        arrays[f"source/{body}/target_pose"] = np.concatenate(
+            [plate_p @ rot.T + 0.37, _quat_mul_left(rot, quat)], axis=1).astype(np.float32)
+        arrays[f"source/{body}/cmd_delta"] = np.full((T, 6), 0.19, dtype=np.float32)
+        arrays[f"source/{body}/root_velocity"] = np.full((T, 6), -2.5, dtype=np.float32)
 
     meta = {
         "schema_version": SCHEMA_VERSION,
@@ -340,6 +351,44 @@ class TestExtract(unittest.TestCase):
         self.assertIn("phase", out.arrays)
         self.assertNotIn("phase", out.model_arrays())
         self.assertNotIn("progress", out.model_arrays())
+
+    def test_action_channels_have_zero_influence(self):
+        """`plan/02` §7 第 2 条的本体：删掉声明读取集以外的 `source/*`，输出**逐位相同**。
+
+        判据不是"一个 source 字段都不读"——提取器必须读接触面与物体的测量位姿，
+        那是真实装置也给得出的量（D-49 初版为了守错误的规矩而选了更差的判据）。
+        判据是**指令 / 目标位姿 / 本体速度一位都不得影响输出**。
+        服务器上的 `s4_leak_checks.py` 2b 在真数据上做同一件事，这里让它本机
+        就能跑到，改完提取器立刻有反馈。
+        """
+        rec = make_episode()
+        dropped = [k for k in rec.arrays if k.startswith("source/")
+                   and not reads_source(k)]
+        self.assertTrue(dropped, "夹具里没有可删的采集侧动作通道，这条测试是空的")
+        blind = EpisodeRecord(meta=dict(rec.meta),
+                              arrays={k: v for k, v in rec.arrays.items()
+                                      if k not in dropped})
+        a0, a1 = extract(make_episode()).arrays, extract(blind).arrays
+        self.assertEqual(set(a0), set(a1))
+        for key in sorted(a0):
+            np.testing.assert_array_equal(np.asarray(a0[key]), np.asarray(a1[key]),
+                                          err_msg=f"{key} 随采集侧动作通道变了")
+
+    def test_declared_reads_are_all_measurements(self):
+        """声明读取的每个字段都必须归类为**测量**，一个动作通道都不许混进去。
+
+        抓的是"注释说 A、代码做 B"那一类：`MEASUREMENT_TAILS` 曾经写成模糊后缀
+        `"_pose"`，把 `source/plate0/target_pose`（**指令**位姿）也算成了测量，
+        而同一个文件的注释表里它明明白白写着"绝对不行"。
+        """
+        rec = make_episode()
+        src = [k for k in rec.arrays if k.startswith("source/")]
+        for key in src:
+            with self.subTest(key=key):
+                self.assertNotEqual(is_measurement(key), is_action(key),
+                                    f"{key} 既是又不是测量——归类表有缝")
+                if reads_source(key):
+                    self.assertTrue(is_measurement(key), f"{key} 被读了却不是测量字段")
 
     def test_region_lands_on_the_right_part(self):
         """接触点必须归到 +X 面上，不是别的面。"""

@@ -1,0 +1,11 @@
+写出 /tmp/region_knob.png，618×824 像素
+跳过 18 条几何变体不同的 episode——不同变体是两套不同的采样，下标不能混用
+每行一个策略家族，三列依次是 俯视 XY / 正视 XZ / 侧视 YZ
+分组                    条数       累计法向力 N   力最大的三个部件
+pin_pinch             30         18923   pin_side 100.0%
+pin_push_dual         30         23232   pin_side 89.2%  pin_top 9.4%  disc_top 1.3%
+pin_push_single       30         19756   pin_side 100.0%
+pin_regrasp           30         21684   pin_side 100.0%
+
+说明：浅灰是物体表面轮廓，颜色越暖 = 该处累计法向力越大。
+      图上看的是**接触落在哪**；力打在哪一侧、哪片在滑要看 region/mode 的数。

@@ -1,0 +1,35 @@
+[PASS] Allegro    关节数                                num_joints = 16（期望 16）
+[PASS] Allegro    刚体数                                num_bodies = 21
+[INFO] Allegro    整手 AABB（自动测量）                      188.9 x 168.4 x 281.5 mm
+[INFO] Allegro    指尖最大间距（对捏跨度上限）                     342.6 mm，指尖 body: ['index_link_3', 'middle_link_3', 'ring_link_3', 'thumb_link_3', 'middle_biotac_tip', 'ring_biotac_tip', 'thumb_biotac_tip']
+[PASS] Allegro    指尖跨度足以跨抽屉把手净空                      跨度 342.6 mm > 净空 45 mm
+[PASS] Allegro    指尖跨度足以对捏销钉                         跨度 342.6 mm > 销钉直径 20 mm
+[PASS] Allegro    接触力可读                              activate_contact_sensors=True 已设，力读取见擦拭/钩杆检查
+[PASS] 抽屉         关节数量                               num_joints=1
+[PASS] 抽屉         行程覆盖目标 100-160 mm                  limits=[0.0, 0.18] m
+[PASS] 抽屉         把手净空 >= 45 mm（Allegro 手指可入）        净空 = 45 mm, 把手直径 = 22 mm
+[PASS] 抽屉         把手杆长容纳多点接触                         杆长 140 mm, 支撑柱间距 125 mm -> 可用接触段 109 mm
+[PASS] 抽屉         全行程可达且不越限                          拉开到 180.0 mm (上限 180), 推回到 0.0 mm
+[PASS] 钩杆         PD 摆位收敛                            目标位姿残差 = 0.6 mm
+[PASS] 钩杆         能与销钉建立接触                           摆位后接触点 0，扫掠过程峰值接触点 3；钩杆相对圆盘 [-0.0016, 0.0255, 0.1485]
+[PASS] 钩杆         能传递达成任务所需的力矩                       τ_hook(安全力内峰值) = 0.5152 N·m > τ_need = 0.420  (峰值法向力 10.11 N)
+[PASS] 钩杆         转矩方向正确                             Δθ = +0.1153 rad（开环扫掠 2.0 rad；脱开属控制问题，S2 由 Expert 解决）
+[PASS] 旋钮         关节数量                               num_joints=1 (期望 1)
+[PASS] 旋钮         关节名                                ['DiscJoint']
+[PASS] 旋钮         关节行程覆盖目标 1.0-2.2 rad               limits=[-0.175, 3.491] rad, span=3.665
+[PASS] 旋钮         已知力矩下角加速度/稳态速度合理                   1.5 N·m 施加 2 s: Δθ=3.491 rad, ω=-0.000 rad/s
+[PASS] 旋钮         设计裕量（解析）                           τ_rim=0.175 < τ_need=0.420 < τ_pin=1.300 N·m  (rim 比 0.42, pin 比 3.10)
+[PASS] 旋钮         推子与圆盘建立接触（诊断）                      峰值接触点数 = [4, 3]，峰值法向力 = [28.15, 18.26] N，推子到销钉最近距离 = [45.6, 22.0] mm (应 < 25 mm 才可能接触)
+[PASS] 旋钮         实测：轮缘在安全力上限内传不出所需力矩                τ_rim(峰值) = 0.1697 N·m < τ_need = 0.420  (峰值法向力 28.15 N)
+[PASS] 旋钮         实测：销钉在安全力上限内传得出所需力矩                τ_pin(峰值) = 23.4770 N·m > τ_need = 0.420  (峰值法向力 18.26 N)
+[PASS] 旋钮         D-14 成立（region 不可从 effect 推出）      实测 τ_rim 0.1697 < τ_need 0.420 < τ_pin 23.4770 N·m
+[PASS] 双板         自由落体后稳态接触力 ≈ mg（P-09）              |F| = 0.4905 N, mg = 0.4905 N, 比值 = 1.0000
+[PASS] 双板         板是动力学体而非 kinematic                 kinematic_enabled = False（kinematic 体可施加无限力）
+[PASS] 预训练集       滑块关节数                              num_joints = 1
+[PASS] 预训练集       滑块行程 80-200 mm                     limits = [0.0, 0.15] m
+[PASS] 预训练集       滑块可被推动                             施加 15 N 后位移 150.0 mm
+[PASS] 擦拭         filter 通道有效（P-17）                  接触对 counts=[4, 4]（0 表示 filter 目标不是刚体）
+[PASS] 擦拭         法向力落在 3-8 N 工作区间                   |Fn| = 5.079 N（目标 (3.0, 8.0)）
+[PASS] 擦拭         contact_pos_w 有效（非全 NaN）           NaN 比例 = 0.000
+[PASS] 擦拭         3-8 N 下平稳滑移（不跳动/不穿模）               |v_xy|=0.0498 m/s (目标 ~0.05), v_z=-0.0108, 滑动中 |Fn|=5.086 N, |Ff|=0.026 N (理论 μFn=1.780)
+[PASS] 擦拭         垫头杆可建立稳定面接触（力稳定性）                  滑动 1 s 内 Fn = 5.456 ± 0.369 N (变异 6.8%), 最小 5.086 N，接触点数 2

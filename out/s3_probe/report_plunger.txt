@@ -1,0 +1,36 @@
+S3 探针物体 `plunger` · 840 episode，成功 620 (73.8%)
+
+原语               条数    成功     脱手%     打中位点%     面接触度     工作面%     侧边%     力N     峰值N     位移mm     转角°     关节Δ
+hook_pull       210   205     1.9     100.0    0.882     87.6    12.4   6.53   29.22      0.0     0.0   0.055
+poke            210   205    72.4      99.0    1.000     97.6     0.0  11.01   41.83      0.0     0.0   0.055
+press           210     0     0.0     100.0    1.000    100.0     0.0   3.27   12.57      0.0     0.0   0.055
+slide_along     210   210     0.0     100.0    1.000    100.0     0.0   4.53   13.62      0.0     0.0   0.055
+
+接触模式分布（按法向力加权，`plan/02` §3.4）
+  no_contact       0.00%
+  sticking        32.71%
+  sliding          0.02%
+  separating      67.27%
+
+  invalid_frame_fraction           0.0024
+  pd_saturation_fraction           0.0001
+  mean_orientation_error_deg       0.2588
+  mean_contacts_per_frame          1.8046
+  plate_z_side_mm                  1.3670
+  face_normal_align                0.9705
+
+划分（按 episode，P-10）
+  train                     386
+  calibration                52
+  in_distribution_test       77
+  unseen_physics_test       105
+  unseen_geometry_test        0
+  unseen_strategy_test        0
+  unseen_implementation_test    0
+  failed                    220
+
+失败原因分布
+  物体本不该明显移动                 210
+  拿边角在蹭而不是用平面接触               5
+  脏帧过多                        5
+  接触没打在指定位点上                  2

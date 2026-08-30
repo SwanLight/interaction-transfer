@@ -1,0 +1,56 @@
+S3 抽屉双板 source · 800 episode，成功 739 (92.4%)
+
+家族                 条数    成功     开度mm     脱手%     受力向%     杆背面%     面接触度     工作面%     柱间%     力N
+asym_primary      160   160    141.1    10.2    100.0    100.0    0.985     84.7   100.0   1.53
+hook_both         160   157    139.6    12.0    100.0    100.0    0.993     82.2   100.0   2.03
+pinch_center      160   122    151.8     6.0     90.4     73.3    0.992     66.6   100.0   2.06
+pinch_offset      160   140    149.2     6.6     93.5     78.5    0.989     71.1   100.0   1.89
+single_finger     160   160    148.9     6.7    100.0     99.9    0.992     47.5   100.0   1.35
+
+接触落在抽屉的哪个部位（按法向力加权，全体 episode 平均）
+  bar_back        90.33%
+  bar_front        9.63%
+  bar_top          0.00%
+  bar_bottom       0.00%
+  post             0.00%
+  panel            0.00%
+  other            0.04%
+
+接触落在板的哪个面
+  work_face       70.42%
+  back_face       29.58%
+  edge             0.00%
+
+其他
+  peak_point_force_N            11.5402
+  invalid_frame_fraction         0.0000
+  pd_saturation_fraction         0.0000
+  unfiltered_force_ratio         0.4243
+  mean_contacts_per_frame        0.5791
+  mean_orientation_error_deg     5.6350
+  max_orientation_error_deg     11.9958
+  mean_pull_force_x_N            7.1450
+  face_normal_align              0.9901
+  substep_contact_fraction       0.1498
+  matrix_contact_fraction        0.2429
+  points_contact_fraction        0.3849
+
+接触模式分布（按法向力加权，`plan/02` §3.4）
+  no_contact       0.00%
+  sticking        34.88%
+  sliding         35.31%
+  separating      29.81%
+
+划分（按 episode，P-10）
+  train                     323
+  calibration                43
+  in_distribution_test       64
+  unseen_physics_test        66
+  unseen_geometry_test       83
+  unseen_strategy_test      160
+  unseen_implementation_test    0
+  failed                     61
+
+失败原因分布
+  受力方向不对                     58
+  操作阶段脱手过多                    3

@@ -1,0 +1,12 @@
+写出 /tmp/region_drawer.png，618×1030 像素
+跳过 20 条几何变体不同的 episode——不同变体是两套不同的采样，下标不能混用
+每行一个策略家族，三列依次是 俯视 XY / 正视 XZ / 侧视 YZ
+分组                    条数       累计法向力 N   力最大的三个部件
+asym_primary          30         12887   bar_back 99.2%  post 0.8%
+hook_both             30         16080   bar_back 100.0%
+pinch_center          30         22689   bar_back 74.9%  bar_front 25.1%
+pinch_offset          30         12902   bar_back 77.9%  bar_front 22.1%
+single_finger         30         12755   bar_back 100.0%
+
+说明：浅灰是物体表面轮廓，颜色越暖 = 该处累计法向力越大。
+      图上看的是**接触落在哪**；力打在哪一侧、哪片在滑要看 region/mode 的数。

@@ -1,0 +1,13 @@
+写出 /tmp/region_wipe.png，618×1236 像素
+跳过 46 条几何变体不同的 episode——不同变体是两套不同的采样，下标不能混用
+每行一个策略家族，三列依次是 俯视 XY / 正视 XZ / 侧视 YZ
+分组                    条数       累计法向力 N   力最大的三个部件
+direct_wipe           30         11361   work_face 98.2%  side 1.8%
+tool_center           30         33002   work_face 100.0%
+tool_heavy_slow       30         52330   work_face 100.0%
+tool_light_fast       30         39991   work_face 100.0%
+tool_offset           30         40558   work_face 100.0%
+tool_tilt             30         49279   work_face 100.0%
+
+说明：浅灰是物体表面轮廓，颜色越暖 = 该处累计法向力越大。
+      图上看的是**接触落在哪**；力打在哪一侧、哪片在滑要看 region/mode 的数。

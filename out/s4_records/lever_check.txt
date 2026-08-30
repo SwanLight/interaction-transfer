@@ -1,0 +1,5 @@
+抽屉        物体位姿已记录  最大 |local| 中位     17.6 mm  (plate0)  OK
+擦拭        物体位姿已记录  最大 |local| 中位     46.0 mm  (tool)  OK
+旋钮        物体位姿已记录  最大 |local| 中位     17.6 mm  (plate0)  OK
+探针block   物体位姿已记录  最大 |local| 中位     21.6 mm  (plate0)  OK
+探针dial    物体位姿已记录  最大 |local| 中位     17.6 mm  (plate0)  OK

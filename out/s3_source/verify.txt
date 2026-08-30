@@ -1,0 +1,18 @@
+[PASS] 划分之间不重叠  —— 800 个分配、800 个唯一
+[PASS] 划分覆盖全部 episode  —— 漏 0，多 0
+[PASS] unseen_strategy_test 只含声明的留出家族，且该家族不在训练集里  —— 声明留出 asym_primary，实际留出 ['asym_primary']，训练 ['hook_both', 'pinch_center', 'pinch_offset', 'single_finger']
+[PASS] unseen_geometry_test 只含非名义几何  —— ['g1', 'g2']
+[PASS] 所有成功、且不属于前序留出的几何变体都进了 unseen_geometry_test  —— 变体 120 条，应留出 83 条，实际 83 条
+[PASS] 训练集只含名义几何
+[PASS] unseen_physics_test 只含非名义物理参数  —— ['heldout_damping']
+[PASS] 所有成功、且不属于留出家族的物理变体都进了 unseen_physics_test  —— 变体 118 条，应留出 66 条，实际 66 条
+[PASS] 没有留出样本落在训练的物理参数区间内  —— 训练 [24.01, 35.99]，留出 0 个落在区间内；留出取值 [16.01, 44.99]
+[PASS] 训练集只含名义物理参数
+[PASS] 校准集非空（conformal 阈值要用，D-17）  —— 43 条
+[PASS] 抽查 40 条的 SHA-256 与 manifest 一致
+[PASS] 抽查的 episode 都能读回并通过契约校验
+[PASS] model_arrays() 里没有 source/* 审计字段
+[PASS] 所有 episode 帧数一致  —— [360]
+[PASS] 抽查 episode 无 NaN/Inf
+[PASS] 成功轨迹总数 ≥450（`plan/03` §6）  —— 739
+[PASS] 至少 3 个家族各有 ≥150 条成功轨迹（`plan/03` §6）  —— 达标 3 个，未达标 ['pinch_center', 'pinch_offset']

@@ -1,0 +1,25 @@
+S3 探针物体集 · 交互原语库覆盖核对
+10 个物体，10740 条 episode，成功 9250 (86.1%)
+
+判据：每条原语成功 ≥200 条，且由 ≥2 个几何不同的物体承载
+
+    原语                 总数     成功    物体  承载物体
+OK  press            1660   1437     7  ['ball', 'block', 'column', 'dial', 'ridge', 'slab', 'slider']
+OK  push              410    229     2  ['block', 'column']
+OK  slide_push        409    251     2  ['block', 'column']
+OK  rub               420    420     2  ['ridge', 'slab']
+OK  shear             624    624     3  ['block', 'ridge', 'slab']
+OK  poke             2680   2675    10  ['ball', 'block', 'column', 'dial', 'flap', 'plunger', 'ridge', 'roller', 'slab', 'slider']
+OK  pivot             410    284     2  ['block', 'column']
+OK  roll             1020    588     2  ['ball', 'roller']
+OK  crank             410    410     2  ['dial', 'flap']
+OK  slide_along       420    420     2  ['plunger', 'slider']
+OK  hook_pull         420    415     2  ['plunger', 'slider']
+OK  twist             619    263     2  ['ball', 'column']
+OK  pinch_hold        414    414     2  ['block', 'slider']
+OK  pinch_move        414    414     2  ['block', 'slider']
+OK  pinch_turn        410    406     2  ['block', 'column']
+
+两条判据都满足：15/15
+!! = 只满足一条    XX = 两条都不满足
+

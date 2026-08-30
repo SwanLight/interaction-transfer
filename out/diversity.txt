@@ -1,0 +1,60 @@
+===== /tmp/s3_drawer_v3 =====
+数据集 s3_drawer_source：739 条成功 episode，5 个策略家族
+
+特征维度 120，训练 518 / 测试 221
+准确率 0.742   随机 0.200   多数类 0.224
+相对随机提升 3.7×
+
+混淆矩阵（行=真值，列=预测）
+                   asym_prim hook_both pinch_cen pinch_off single_fi
+asym_primary              34        21         0         0         0
+hook_both                 14        29         0         0         0
+pinch_center               0         0        24         9         0
+pinch_offset               0         0        13        33         0
+single_finger              0         0         0         0        44
+
+[PASS] 原始 source 动作上的准确率显著高于随机（`plan/03` §4）
+
+注：本判据只说明**动作层面确实不同**。`plan/02` §7 第 4 条要的是
+    从 envelope 预测策略身份**显著更难**，要等 S4/S5 有 envelope 才能做，
+    届时两个数并排报，一高一低才说明表示抹掉了策略特异性。
+===== /tmp/s3_wipe_v5 =====
+数据集 s3_wipe_source：2606 条成功 episode，6 个策略家族
+
+特征维度 120，训练 1825 / 测试 781
+准确率 0.987   随机 0.167   多数类 0.173
+相对随机提升 5.9×
+
+混淆矩阵（行=真值，列=预测）
+                   direct_wi tool_cent tool_heav tool_ligh tool_offs tool_tilt
+direct_wipe              109         0         0         0         0         0
+tool_center                0       134         0         0         4         0
+tool_heavy_slow            0         0       118         0         0         0
+tool_light_fast            0         0         0       138         0         0
+tool_offset                0         6         0         0       137         0
+tool_tilt                  0         0         0         0         0       135
+
+[PASS] 原始 source 动作上的准确率显著高于随机（`plan/03` §4）
+
+注：本判据只说明**动作层面确实不同**。`plan/02` §7 第 4 条要的是
+    从 envelope 预测策略身份**显著更难**，要等 S4/S5 有 envelope 才能做，
+    届时两个数并排报，一高一低才说明表示抹掉了策略特异性。
+===== /tmp/s3_knob_v4 =====
+数据集 s3_knob_source：1693 条成功 episode，4 个策略家族
+
+特征维度 120，训练 1186 / 测试 507
+准确率 1.000   随机 0.250   多数类 0.295
+相对随机提升 4.0×
+
+混淆矩阵（行=真值，列=预测）
+                   pin_pinch pin_push_ pin_push_ pin_regra
+pin_pinch                130         0         0         0
+pin_push_dual              0        76         0         0
+pin_push_single            0         0       151         0
+pin_regrasp                0         0         0       150
+
+[PASS] 原始 source 动作上的准确率显著高于随机（`plan/03` §4）
+
+注：本判据只说明**动作层面确实不同**。`plan/02` §7 第 4 条要的是
+    从 envelope 预测策略身份**显著更难**，要等 S4/S5 有 envelope 才能做，
+    届时两个数并排报，一高一低才说明表示抹掉了策略特异性。

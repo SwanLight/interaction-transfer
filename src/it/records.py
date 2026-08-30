@@ -64,12 +64,33 @@ SOURCE_PREFIX = "source/"
 #: 所以这里显式列出**允许 oracle 读的测量字段后缀**。名字暂时留在 `source/`
 #: 下是为了不重采四份数据集；概念上它们属于 `measurement/`，
 #: 下一次重采时应当改名（见 D-52）。
-MEASUREMENT_SUFFIXES = ("/root_pose", "_pose", "_pos_w", "_quat_w")
+#:
+#: ⚠️ **按完整尾名匹配，不按模糊后缀。** 初版写的是 `"_pose"`，它把
+#: `source/plate0/target_pose`（采集侧的**指令**位姿，上表第一行）也算成了测量
+#: ——与上面那张表**自相矛盾**。这类"注释说 A、代码做 B"的错没有任何征兆，
+#: 因为没有谁去比对过两者；抓到它的是泄漏检查 2b 被重写成"逐位相同"之后。
+MEASUREMENT_TAILS = ("/root_pose", "/tool_pose", "/contact_pos_w",
+                     "_pos_w", "_quat_w")
+
+#: 采集侧**不可读**的通道：动作 / 指令 / 本体速度 / 执行器专属编号
+#: （`contact_plate_face` 是"接触在第几个板面上"，属 §7 第 7 条禁的那类）。
+#: 提取器读到任何一条都是泄漏——
+#: 那正是 `plan/02` §1 禁的东西："表示里不许出现是谁、怎么做的"。
+#: 逐条列出而不是"measurement 之外的全部"，是为了让新加的字段落进
+#: `is_measurement` 与 `is_action` **都不成立**的缝里，被 2b 当场抓住。
+ACTION_TAILS = ("/target_pose", "/cmd_delta", "/root_velocity",
+                "/contact_plate_face")
 
 
 def is_measurement(key: str) -> bool:
     """这个 `source/*` 字段是"接触面/物体的测量位姿"（可读），还是采集侧动作（不可读）。"""
-    return key.startswith(SOURCE_PREFIX) and key.endswith(MEASUREMENT_SUFFIXES)
+    return (key.startswith(SOURCE_PREFIX) and key.endswith(MEASUREMENT_TAILS)
+            and not key.endswith(ACTION_TAILS))
+
+
+def is_action(key: str) -> bool:
+    """这个 `source/*` 字段属于采集侧不可读通道（动作/指令/速度/板面编号）。"""
+    return key.startswith(SOURCE_PREFIX) and key.endswith(ACTION_TAILS)
 MODEL_INPUT_PREFIXES = ("object/", "contact/", "phase", "progress", "valid_")
 
 #: 每个 schema：(允许进模型输入的前缀, 只作追查/诊断而被丢弃的前缀)。

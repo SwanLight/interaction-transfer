@@ -60,6 +60,25 @@ from it.surfaces import LEVELS, Surface, assign_to_surface, surface_for
 #: S4 记录的 schema 版本，跟着 `it.records` 走（v1 已作废，见那里的说明）。
 RECORD_SCHEMA = IR_SCHEMA_VERSION
 
+#: 提取器**声明会读**的采集侧字段（按完整尾名匹配）。除此之外的 `source/*`
+#: ——指令、目标位姿、本体速度、板面编号、PhysX 报的世界系接触点——一律
+#: **不得影响输出的任何一位**。
+#:
+#: 这不是一句注释里的承诺：泄漏检查 2b 会把这张表以外的 `source/*` 全部删掉
+#: 重跑一遍提取，逐字段 `array_equal` 对比，**零容差**。反过来 2c 把这张表里的
+#: 删掉，要求提取器**直接报错**——宁可炸，也不在"物体大概在原点"这类假定
+#: 之上算出一份看起来正常的记录（P-54）。
+SOURCE_READS = ("/root_pose", "/tool_pose",
+                "/object_pos_w", "/object_quat_w",
+                "/drawer_pos_w", "/drawer_quat_w",
+                "/disc_pos_w", "/disc_quat_w",
+                "/board_pos_w", "/board_quat_w")
+
+
+def reads_source(key: str) -> bool:
+    """这个 `source/*` 字段在提取器的声明读取集里吗（见 `SOURCE_READS`）。"""
+    return key.startswith("source/") and key.endswith(SOURCE_READS)
+
 #: 未来窗口：1 s、10 个采样点（`plan/02` §3，50 Hz 记录 -> 每 5 帧一个）。
 FUTURE_HORIZON_S = 1.0
 FUTURE_SAMPLES = 10
@@ -904,7 +923,7 @@ def part_force_share(record: EpisodeRecord, surface: Surface,
                      phase: int | None = None) -> dict[str, float]:
     """S4 记录里接触力按物体部件的分布——用来与 S3 的接触部位统计对拍。
 
-    抽屉的 S3 实测是"把手横杆背面 90.2%、正面 9.8%、其余 0%"。提取器如果把
+    抽屉的 S3 实测是"把手横杆背面 90.3%、正面 9.6%、其余 0%"。提取器如果把
     法向定向或表面归属做错了，这张表立刻对不上；而成功率、接触力、脏帧比例
     全都看不出来（D-34）。
     """

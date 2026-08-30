@@ -10,7 +10,7 @@
 
 只用 numpy，不需要 Isaac Sim，系统 python3 就能跑::
 
-    python3 tools/s3_verify_dataset.py /tmp/s3_drawer_full --sample 40
+    python3 tools/s3_verify_dataset.py /tmp/s3_drawer_v3 --sample 40
 """
 
 from __future__ import annotations

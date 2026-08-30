@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成 S0–S3 的自包含 HTML 报告（`plan/06` §1 要求）。
+"""生成 S0–S4 的自包含 HTML 报告（`plan/06` §1 要求）。
 
 视频以 base64 data URI 内嵌，**整个报告是单个文件**——直接双击、在 IDE 预览、
 发给别人都能播。早期版本用相对路径引用 mp4，在 VSCode 预览的沙箱里只显示
@@ -8,7 +8,7 @@
 每个实验都要写清楚：**验证什么、用什么物体、参数多少、怎么做的、判据是什么**。
 报告是给别人看的，不是给自己对数字的。
 
-用法：python3 tools/make_report.py out/s0 log/s1/s1_report.txt out/report.html
+用法：python3 tools/make_report.py out/s1_assets log/s1/s1_report.txt out/report.html
 """
 import base64
 import html
@@ -271,7 +271,7 @@ S2_SCENES = [
 S3_TASKS = [
     ("抽屉 × 双板", "drawer", "800 条 / 739 成功（92.4%）",
      ["pinch_center", "pinch_offset", "hook_both", "asym_primary", "single_finger"],
-     "五个策略家族。接触 <b>90.2% 落在把手横杆背面</b>、9.8% 在正面（拇指该在的地方），"
+     "五个策略家族。接触 <b>90.3% 落在把手横杆背面</b>、9.6% 在正面（拇指该在的地方），"
      "横杆上下表面 / 支撑柱 / 面板全为 0；<b>100% 落在两根支撑柱之间</b>。"
      "<code>single_finger</code> 只用一块板——<code>plan/02</code> §7 第 3 条"
      "「改变 source 板数量后表示维度不变」这条泄漏检查，只有它能提供数据。"),
@@ -279,8 +279,8 @@ S3_TASKS = [
      ["pin_pinch", "pin_push_single", "pin_push_dual", "pin_regrasp", "rim_only"],
      "销钉是竖直插在盘面上的拨杆，所以<b>推力方向必须随圆盘一起转</b>：参考系挂在"
      "销钉<b>当前的实际角度</b>上，力控方向取该处切向，每个控制步重算。"
-     "实测力 <b>100% 打在销钉柱面</b>、<b>96.9~100% 打在推进方向的后侧</b>、"
-     "接触法向只偏离圆盘切向 <b>2.5~11.6°</b>（挂在「领先角」上的错版本偏 42°，"
+     "实测力 <b>≥99.2% 打在销钉柱面</b>、<b>96.3~100% 打在推进方向的后侧</b>、"
+     "接触法向只偏离圆盘切向 <b>2.4~11.7°</b>（挂在「领先角」上的错版本偏 42°，"
      "三分之一的力顶着销钉往圆心推）。"
      "<code>rim_only</code> 是<b>故意会失败</b>的对照：压足 19.5 N（安全上限 25 N 之内）"
      "只转到 0.019 rad，而销钉家族转到 2.3~2.8 rad —— τ_rim = 0.137 ≪ τ_need = 0.42 N·m。"
@@ -292,7 +292,7 @@ S3_TASKS = [
      "「envelope 与是否使用工具无关」只有它能验。两块板夹黑板擦的"
      "<b>两个 90×25 长侧面</b>（不是 45×25 的短端面）：扫掠沿 Y、长侧面的法向也是 Y，"
      "推力由<b>法向力直接传</b>；夹短端面时只能靠摩擦传，工具跟不住路径"
-     "（滑脱 13 mm、路径区域内 68%；改完 0.6 mm / 92.5%，成功率 82.7% → 96.5%）。"
+     "（滑脱 13 mm、路径区域内 68%；改完 0.6~0.7 mm / 92.0~92.3%，成功率 82.7% → 96.5%）。"
      "<b>录像里的褐色格子就是 dirt</b>，擦掉一格就消失一格。"),
     ("探针物体集（交互原语库）", "probe", "10740 条 / 9250 成功（86.1%）· 15/15 格",
      ["dial_crank", "flap_crank", "plunger_hook_pull", "ridge_rub", "roller_poke",
@@ -337,7 +337,7 @@ def s3_section(web_dir):
              "校准集必须独立于训练集和所有测试集——用训练集标定 conformal 阈值会让"
              "覆盖率保证失效。划分一律<b>按 episode</b>，不按帧。</p>")
     P.append("""<table><tr><th>划分</th><th>旋钮</th><th>擦拭</th><th>抽屉</th></tr>
-<tr><td>train</td><td>652</td><td>856</td><td>323</td></tr>
+<tr><td>train</td><td>652</td><td>950</td><td>323</td></tr>
 <tr><td>calibration</td><td>87</td><td>127</td><td>43</td></tr>
 <tr><td>in_distribution_test</td><td>130</td><td>190</td><td>64</td></tr>
 <tr><td><b>unseen_geometry_test</b></td><td><b>204</b></td><td><b>297</b></td><td><b>83</b></td></tr>
@@ -365,7 +365,7 @@ def s3_section(web_dir):
 <tr><td>两块板的朝向标记一致（录像可读）</td><td><code>06</code> §7</td>
 <td><span class='tag p'>PASS</span> 62 个家族/原语，矛盾 0 个</td></tr>
 <tr><td>旋钮接触部位与受力方向</td><td><code>03</code> §4</td>
-<td><span class='tag p'>PASS</span> 销钉 100% · 推进后侧 96.9~100% · 法向偏切向 2.5~11.6°</td></tr>
+<td><span class='tag p'>PASS</span> 销钉 ≥99.2% · 推进后侧 96.3~100% · 法向偏切向 2.4~11.7°</td></tr>
 </table>
 <p class=lead style="margin-top:14px">⚠️ 分类器这一项只证明<b>动作层面确实不同</b>。
 <code>plan/02</code> §7 第 4 条要的是「从 envelope 预测策略身份<b>显著更难</b>」，
@@ -432,7 +432,7 @@ def s4_section(s4_dir):
          "手指伸进净空往外拉；三、四行（中央夹持、偏置夹持）在背面之外多了一片"
          "<b>正面</b>的热点，那正是拇指该在的地方。最后一行单指同样只在背面。"
          "<b>这份分布是独立算出来的，与 S3 用另一套判据得到的家族表逐项对得上</b>"
-         "（中央夹持 74.9% vs 73.0%、单指 100% vs 99.9%）。"),
+         "（中央夹持 74.9% vs 73.3%、单指 100% vs 99.9%）。"),
         ("旋钮", "knob",
          "四个销钉家族。热点集中在<b>销钉的柱面</b>，圆盘顶面与低摩擦轮缘几乎为零——"
          "推销钉靠法向力直接产生力矩，蹭轮缘只能靠摩擦，而轮缘摩擦是刻意设低的。"),
@@ -453,7 +453,7 @@ def s4_section(s4_dir):
           "<b>「用另一条独立路径再算一遍，看对不对得上」</b>。</p>",
           "<table><tr><th>验收</th><th>拿什么对拍</th><th>结果</th></tr>"
           "<tr><td>接触部位</td><td>S4 走「归到最近表面采样点」，S3 走解析式部位判据，"
-          "两条路径没有共用代码</td><td>抽屉横杆背面 92.9% vs 90.2%；"
+          "两条路径没有共用代码</td><td>抽屉横杆背面 92.9% vs 90.3%；"
           "旋钮销钉 99.8% vs 100%</td></tr>"
           "<tr><td><b>动力学一致性</b></td><td>从接触点重建的绕轴力矩，"
           "与仿真器另记的一路关节广义力对拍</td><td>旋钮<b>相关 0.931、幅值比 0.90</b>。"
@@ -484,21 +484,41 @@ def s4_section(s4_dir):
           "<b>（3）法向触觉够给区域和压力，切向通道只在需要力的方向时才必需。</b></div>",
           "<div class=note><b>二、「该碰哪」这件事，是不是从「物体该怎么动」就能推出来？</b><br>"
           "如果能，那 region 这个字段在该任务上就是冗余的。实测：只看 effect 预测"
-          "region 热图的可解释方差，抽屉 0.05、擦拭 0.11、<b>旋钮 0.34</b>。"
-          "<b>旋钮与擦拭都要如实下调对 region 的声称</b>——销钉位置随转角连续变化、"
-          "擦拭的「哪片污渍被擦掉」本来就约等于「在哪接触」。"
-          "这是设计之初就写好的检查，结果不好看也照报，没有调参掩盖。</div>"]
+          "region 热图的可解释方差，抽屉 <b>0.03</b>、擦拭 0.12、<b>旋钮 0.69</b>。"
+          "<b>旋钮这一格是本工作自己给自己找的最不利证据</b>：0.69 已经<b>超过</b>了"
+          "「知道这条示教属于哪个策略家族」这个参照（0.55）——销钉在盘面上的位置固定，"
+          "接触落在它的哪一片随转角<b>连续</b>变化，effect 里本来就含着这个信息。"
+          "所以<b>旋钮基本丧失了检验 region 必要性的能力，后续实验里必须显式排除它</b>；"
+          "擦拭 0.12 占参照的 95%，同样要谨慎声称。"
+          "<b>抽屉是三个任务里唯一干净的载体</b>（0.03，占参照 19%）："
+          "同一个「拉开 20 mm」可以由横杆背面、正面、单指钩三种落点实现，"
+          "effect 相同而 region 不同。"
+          "这是设计之初就写好的检查，结果不好看也照报，没有调参掩盖。</div>",
+
+          "<h3 style='font-size:17px;margin:26px 0 8px'>一次返工，写在这里而不是删掉</h3>",
+          "<div class=note><b>「报告开头全是 PASS」不等于检查跑过了。</b>"
+          "泄漏检查脚本曾在第 2 条抛出未捕获异常，第 3~8 条<b>根本没跑</b>，"
+          "而落盘文件的头四行全是 <code>[PASS]</code>，尾部才是 traceback；"
+          "同一轮里三份 region 探针报告<b>整份都是 traceback</b>。"
+          "本报告此前那句「七条通过」就是照着文件开头写的。"
+          "根因是<b>判据错了</b>：<code>cmd &gt; report.txt</code> 的退出码没人看的时候，"
+          "报告开头只证明「脚本启动了」。"
+          "现在全部检查由一个脚本统一驱动，<b>任一段异常本身就是 FAIL、其余照跑</b>，"
+          "末尾报 PASS / FAIL / DEFER 的<b>条数</b>，任一项非零则整体非零。"
+          "重跑之后：抽屉 <b>9 PASS / 0 FAIL / 2 DEFER</b>、"
+          "擦拭 <b>10 / 0 / 3</b>、旋钮 <b>9 / 0 / 2</b>，"
+          "上面那些数字全部来自这一次运行。记在 P-55。</div>"]
     return "\n".join(P)
 
 
 def main(vid_dir, s1_txt, out_path):
     P = [f"<!doctype html><html lang=zh><meta charset=utf-8>",
-         "<title>S0–S3 验证报告 · Functional Interaction Transfer</title>",
+         "<title>S0–S4 验证报告 · Functional Interaction Transfer</title>",
          "<meta name=viewport content='width=device-width,initial-scale=1'>",
          f"<style>{CSS}</style><div class=wrap>",
-         "<h1>S0 / S1 / S2 / S3 验证报告</h1>",
+         "<h1>S0 / S1 / S2 / S3 / S4 验证报告</h1>",
          "<p class=sub>Functional Interaction Transfer —— 资产可行性自检、可视化链路、"
-         "与第一个 Privileged Expert</p>",
+         "第一个 Privileged Expert，与从示教里提取出的物体中心交互记录</p>",
          "<p class='sub env'>Isaac Sim <code>5.1.0-rc.19</code> + Isaac Lab <code>2.3.1</code>"
          "（快照 <code>2ab57ade</code>）· 8 × RTX 4090 · 物理步长 1/120 s</p>",
          "<p class=lead>本项目要验证的想法是：不迁移人的动作，而迁移动作所实现的"
@@ -558,7 +578,7 @@ def main(vid_dir, s1_txt, out_path):
     P.append(s4_section(os.path.join(os.path.dirname(vid_dir), "s4_records")))
 
     P.append("<h2>S1 自检完整结果</h2>")
-    P.append("<p class=lead>共 35 项，33 项 PASS、2 项 INFO（仅记录测量值，无判据）、0 项 FAIL。"
+    P.append("<p class=lead>共 51 项，49 项 PASS、2 项 INFO（仅记录测量值，无判据）、0 项 FAIL。"
              "由 <code>tools/s1_all.sh</code> 生成，每项检查独立进程。</p>")
     if os.path.exists(s1_txt):
         rows = []

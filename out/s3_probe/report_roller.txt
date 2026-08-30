@@ -1,0 +1,33 @@
+S3 探针物体 `roller` · 1620 episode，成功 1188 (73.3%)
+
+原语               条数    成功     脱手%     打中位点%     面接触度     工作面%     侧边%     力N     峰值N     位移mm     转角°     关节Δ
+poke            810   810    74.9     100.0    0.972     70.4     0.0   3.31   56.65     46.9    98.9   0.000
+roll            810   378    43.3      98.3    0.913     61.1     9.2  16.88   52.30    141.2   178.4   0.000
+
+接触模式分布（按法向力加权，`plan/02` §3.4）
+  no_contact       0.00%
+  sticking        66.38%
+  sliding         10.01%
+  separating      23.61%
+
+  invalid_frame_fraction           0.0000
+  pd_saturation_fraction           0.0119
+  mean_orientation_error_deg      10.1525
+  mean_contacts_per_frame          0.4883
+  plate_z_side_mm                  0.6171
+  face_normal_align                0.9425
+
+划分（按 episode，P-10）
+  train                     891
+  calibration               119
+  in_distribution_test      178
+  unseen_physics_test         0
+  unseen_geometry_test        0
+  unseen_strategy_test        0
+  unseen_implementation_test    0
+  failed                    432
+
+失败原因分布
+  操作阶段脱手过多                  351
+  拿边角在蹭而不是用平面接触              81
+  接触没打在指定位点上                 27

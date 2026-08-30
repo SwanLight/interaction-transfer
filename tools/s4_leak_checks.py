@@ -17,7 +17,7 @@
 旋转 R——把物体系里的接触位置/法向/摩擦力/相对速度、物体位姿和表面采样一起
 转过去——再看提取器的输出。**限制必须写明**：它检验的是提取器里有没有混进
 硬编码的世界轴，**不检验仿真器的坐标处理**；后者由 S3 已有的接触部位统计
-间接支撑（抽屉 90.2% 落在把手背面这类数字，坐标错了不可能对）。
+间接支撑（抽屉 90.3% 落在把手背面这类数字，坐标错了不可能对）。
 
 ``mech/generalized`` 也参加这个测试。它按物体的**标准轴**定义（抽屉沿 +X、
 旋钮绕 +Z、平面压 −Z），而那些轴长在物体自己身上——场景一转它们跟着转，
@@ -28,14 +28,21 @@ from __future__ import annotations
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from it.interaction import SLIP_SPEED_MIN, extract, spec_for  # noqa: E402
-from it.records import EpisodeRecord, load_episode, read_manifest  # noqa: E402
+from it.interaction import SLIP_SPEED_MIN, SOURCE_READS, extract, reads_source, spec_for  # noqa: E402
+from it.records import (  # noqa: E402
+    EpisodeRecord,
+    is_action,
+    is_measurement,
+    load_episode,
+    read_manifest,
+)
 from it.surfaces import surface_for  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -43,18 +50,40 @@ from s3_diversity import features as source_features  # noqa: E402
 from s3_diversity import softmax_fit  # noqa: E402
 
 FAIL: list[str] = []
+N_PASS = 0
+N_DEFER = 0
 
 
 def check(ok: bool, name: str, detail: str = "") -> None:
+    global N_PASS
     tag = "PASS" if ok else "FAIL"
     line = f"[{tag}] {name}" + (f"  —— {detail}" if detail else "")
-    print(line)
-    if not ok:
+    print(line, flush=True)
+    if ok:
+        N_PASS += 1
+    else:
         FAIL.append(line)
 
 
 def defer(name: str, detail: str) -> None:
-    print(f"[DEFER] {name}  —— {detail}")
+    global N_DEFER
+    N_DEFER += 1
+    print(f"[DEFER] {name}  —— {detail}", flush=True)
+
+
+def stage(name: str, fn) -> None:
+    """跑一段检查；**它崩了也不许把后面几条一起带走**。
+
+    P-55：第 2b 条曾抛出未捕获异常，脚本从第 3 条起整段没跑，而落盘的报告
+    开头四行全是 `[PASS]`——只看文件头会以为九条都过了，README 也就那么写了。
+    异常从此本身就是一条 FAIL，其余检查照跑，末尾的汇总给出 PASS/FAIL/DEFER
+    的**条数**，与"预期几条"对不上就是漏跑。
+    """
+    try:
+        fn()
+    except Exception as exc:                            # noqa: BLE001
+        check(False, f"{name}：本段异常中止", f"{type(exc).__name__}: {exc}")
+        traceback.print_exc()
 
 
 def info(name: str, detail: str = "") -> None:
@@ -129,129 +158,174 @@ def main() -> int:
     rng = np.random.default_rng(a.seed)
     src_by_id = {e["episode_id"]: e for e in src_man["episodes"]}
     ok_entries = [e for e in man["episodes"] if e["success"]]
+    sample = load_episode(root / ok_entries[0]["path"])
+    model_keys = sorted(sample.model_arrays())
 
     # ---------------- 1. 场景刚体旋转后物体系表示逐元素一致 ----------------
-    pick = rng.choice(len(ok_entries), size=min(a.sample, len(ok_entries)), replace=False)
-    worst = {"idx": 0, "mode": 0, "effect": 0.0, "wrench": 0.0, "slip": 0.0}
-    for i in pick:
-        e = ok_entries[int(i)]
-        src = load_episode(src_root / src_by_id[e["episode_id"]]["path"])
-        spec = spec_for(src.meta)
-        tag = str(src.meta.get("geometry_variant", "nominal"))
-        surf = surface_for(spec.obj, tag)
-        base = extract(src, surf)
-        rot = _rand_rot(rng)
-        # 表面采样不跟着转：场景转了，但物体在**自己**的坐标系里没变
-        turned = extract(rotate_scene(src, rot), surf)
+    def _rotation() -> None:
+        pick = rng.choice(len(ok_entries), size=min(a.sample, len(ok_entries)),
+                          replace=False)
+        worst = {"idx": 0, "mode": 0, "effect": 0.0, "wrench": 0.0, "slip": 0.0}
+        for i in pick:
+            e = ok_entries[int(i)]
+            src = load_episode(src_root / src_by_id[e["episode_id"]]["path"])
+            spec = spec_for(src.meta)
+            tag = str(src.meta.get("geometry_variant", "nominal"))
+            surf = surface_for(spec.obj, tag)
+            base = extract(src, surf)
+            rot = _rand_rot(rng)
+            # 表面采样不跟着转：场景转了，但物体在**自己**的坐标系里没变
+            turned = extract(rotate_scene(src, rot), surf)
 
-        worst["idx"] = max(worst["idx"], int(
-            (np.asarray(base.arrays["region/point_idx"])
-             != np.asarray(turned.arrays["region/point_idx"])).sum()))
-        # mode 比**连续量**，不比标签：标签是按 5 mm/s 切出来的，卡在阈值上的点
-        # 会因为旋转多绕几步浮点运算而翻面。那是数值噪声，不是坐标依赖。
-        # 判据因此是：滑移速度的差要小，且**离阈值不近**的点标签必须一致。
-        s0 = np.asarray(base.arrays["mode/slip_speed"], dtype=np.float64)
-        s1 = np.asarray(turned.arrays["mode/slip_speed"], dtype=np.float64)
-        worst["slip"] = max(worst["slip"], float(np.abs(s0 - s1).max()))
-        far = np.abs(s0 - SLIP_SPEED_MIN) > 0.05 * SLIP_SPEED_MIN
-        worst["mode"] = max(worst["mode"], int(
-            ((np.asarray(base.arrays["mode/label"])
-              != np.asarray(turned.arrays["mode/label"])) & far).sum()))
-        worst["effect"] = max(worst["effect"], float(np.abs(
-            np.asarray(base.arrays["effect/future"], dtype=np.float64)
-            - np.asarray(turned.arrays["effect/future"], dtype=np.float64)).max()))
-        # 物体系的力与力矩在场景旋转下**不变**（不是等变）——它们本来就表达在
-        # 物体自己的坐标系里，场景怎么摆与它无关。
-        for key in ("mech/wrench_obj", "mech/generalized"):
-            worst["wrench"] = max(worst["wrench"], float(np.abs(
-                np.asarray(base.arrays[key], dtype=np.float64)
-                - np.asarray(turned.arrays[key], dtype=np.float64)).max()))
+            worst["idx"] = max(worst["idx"], int(
+                (np.asarray(base.arrays["region/point_idx"])
+                 != np.asarray(turned.arrays["region/point_idx"])).sum()))
+            # mode 比**连续量**，不比标签：标签是按 5 mm/s 切出来的，卡在阈值上的点
+            # 会因为旋转多绕几步浮点运算而翻面。那是数值噪声，不是坐标依赖。
+            # 判据因此是：滑移速度的差要小，且**离阈值不近**的点标签必须一致。
+            s0 = np.asarray(base.arrays["mode/slip_speed"], dtype=np.float64)
+            s1 = np.asarray(turned.arrays["mode/slip_speed"], dtype=np.float64)
+            worst["slip"] = max(worst["slip"], float(np.abs(s0 - s1).max()))
+            far = np.abs(s0 - SLIP_SPEED_MIN) > 0.05 * SLIP_SPEED_MIN
+            worst["mode"] = max(worst["mode"], int(
+                ((np.asarray(base.arrays["mode/label"])
+                  != np.asarray(turned.arrays["mode/label"])) & far).sum()))
+            worst["effect"] = max(worst["effect"], float(np.abs(
+                np.asarray(base.arrays["effect/future"], dtype=np.float64)
+                - np.asarray(turned.arrays["effect/future"], dtype=np.float64)).max()))
+            # 物体系的力与力矩在场景旋转下**不变**（不是等变）——它们本来就表达在
+            # 物体自己的坐标系里，场景怎么摆与它无关。
+            for key in ("mech/wrench_obj", "mech/generalized"):
+                worst["wrench"] = max(worst["wrench"], float(np.abs(
+                    np.asarray(base.arrays[key], dtype=np.float64)
+                    - np.asarray(turned.arrays[key], dtype=np.float64)).max()))
 
-    measured = bool(load_episode(root / ok_entries[0]["path"])
-                    .meta["extraction"].get("object_pose_measured", True))
-    if not measured:
-        # 这份数据没记被操作物体的位姿（擦拭平面是 kinematic 的），场景一转
-        # 平面也该跟着转，而记录里没有那个自由度。**不许在假定之上报通过。**
-        defer("1. 场景刚体旋转",
-              "该数据集没有记录被操作物体的位姿（擦拭平面是 kinematic），"
-              "无法如实施加场景旋转。下一轮采集把平面的 root pose 记上（一列常量）"
-              "即可补测；region / effect / 力与力矩三项在下面单独报")
-        check(worst["idx"] == 0 and worst["effect"] < 1e-5,
-              "1a. 场景旋转下 region 与 effect 仍逐元素一致",
-              f"region 索引差 {worst['idx']} 个、effect 最大差 {worst['effect']:.2e}"
-              "（mode 那一路因上述原因不参与）")
-    else:
-        check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5
-              and worst["slip"] < 1e-4,
-              "1. 场景刚体旋转：不变量逐元素一致",
-              f"{len(pick)} 条 × 随机旋转；region 索引差 {worst['idx']} 个、"
-              f"滑移速度最大差 {worst['slip']:.2e} m/s、"
-              f"离阈值 5% 以外的 mode 差 {worst['mode']} 个、"
-              f"effect 最大差 {worst['effect']:.2e}")
+        measured = bool(sample.meta["extraction"].get("object_pose_measured", True))
+        if not measured:
+            # 这份数据没记被操作物体的位姿（擦拭平面是 kinematic 的），场景一转
+            # 平面也该跟着转，而记录里没有那个自由度。**不许在假定之上报通过。**
+            defer("1. 场景刚体旋转",
+                  "该数据集没有记录被操作物体的位姿（擦拭平面是 kinematic），"
+                  "无法如实施加场景旋转。下一轮采集把平面的 root pose 记上（一列常量）"
+                  "即可补测；region / effect / 力与力矩三项在下面单独报")
+            check(worst["idx"] == 0 and worst["effect"] < 1e-5,
+                  "1a. 场景旋转下 region 与 effect 仍逐元素一致",
+                  f"region 索引差 {worst['idx']} 个、effect 最大差 {worst['effect']:.2e}"
+                  "（mode 那一路因上述原因不参与）")
+        else:
+            check(worst["idx"] == 0 and worst["mode"] == 0 and worst["effect"] < 1e-5
+                  and worst["slip"] < 1e-4,
+                  "1. 场景刚体旋转：不变量逐元素一致",
+                  f"{len(pick)} 条 × 随机旋转；region 索引差 {worst['idx']} 个、"
+                  f"滑移速度最大差 {worst['slip']:.2e} m/s、"
+                  f"离阈值 5% 以外的 mode 差 {worst['mode']} 个、"
+                  f"effect 最大差 {worst['effect']:.2e}")
 
-    check(worst["wrench"] < 1e-3, "1b. 物体系的力、力矩与广义力逐元素不变",
-          f"最大残差 {worst['wrench']:.2e} N / N·m")
-    info("1c. 这条测试的限制",
-         "只检验提取器有没有混进硬编码世界轴；不检验仿真器的坐标处理")
+        check(worst["wrench"] < 1e-3, "1b. 物体系的力、力矩与广义力逐元素不变",
+              f"最大残差 {worst['wrench']:.2e} N / N·m")
+        info("1c. 这条测试的限制",
+             "只检验提取器有没有混进硬编码世界轴；不检验仿真器的坐标处理")
 
-    # ---------------- 2 / 5 / 7. 结构性隔离 ----------------
-    sample = load_episode(root / ok_entries[0]["path"])
-    keys = sorted(sample.arrays)
-    check(not [k for k in keys if k.startswith("source/")],
-          "2. 记录里没有 source/* 字段", f"{len(keys)} 个数组")
+    stage("1. 场景刚体旋转", _rotation)
 
-    # 更强的一条：把输入里的 source/* 全删掉，看输出有哪些字段会变。
-    # **允许变的只有滑移速度那两路**——mode 的主判据是接触体与物体的位姿差分
-    # （见 `interaction._pose_slip`），那是 oracle 用特权数据算出来的**物理量**，
-    # 不是把 source 字段写进表示。`plan/02` §1 禁的是后者。
-    # 其余任何字段一旦随 source 变化，就说明采集侧的东西漏进表示了。
-    src0 = load_episode(src_root / src_by_id[ok_entries[0]["episode_id"]]["path"])
-    spec0 = spec_for(src0.meta)
-    surf0 = surface_for(spec0.obj, str(src0.meta.get("geometry_variant", "nominal")))
-    stripped = EpisodeRecord(meta=dict(src0.meta),
-                             arrays={k: v for k, v in src0.arrays.items()
-                                     if not k.startswith("source/")})
-    a0, a1 = extract(src0, surf0).arrays, extract(stripped, surf0).arrays
-    differ = sorted(k for k in a0
-                    if not np.array_equal(np.asarray(a0[k]), np.asarray(a1[k])))
-    # 允许变的就是滑移那一路：`mode/slip_speed` 是主判据的值本身，
-    # `mode/pose_slip` 是它的诊断副本，`mode/label` 是按它切出来的标签。
-    allowed = {"mode/pose_slip", "mode/slip_speed", "mode/label"}
-    check(set(a0) == set(a1) and set(differ) <= allowed,
-          "2b. 去掉 source/* 后，只有滑移速度那一路会变",
-          f"实际变化的字段：{differ or '无'}（允许：{sorted(allowed)}）")
+    # ---------------- 2. 采集侧数据有没有漏进表示 ----------------
+    def _isolation() -> None:
+        keys = sorted(sample.arrays)
+        check(not [k for k in keys if k.startswith("source/")],
+              "2a. 记录里没有 source/* 字段", f"{len(keys)} 个数组")
 
-    model_keys = sorted(sample.model_arrays())
-    banned = [k for k in model_keys
-              if any(t in k for t in ("plate", "tool", "body", "joint_id", "family",
-                                      "strategy", "friction", "damping", "mass"))]
-    check(not banned, "7. 表示里没有执行器专属编号 / 部件名", str(banned))
-    check(not any(k.startswith("aux/") for k in model_keys),
-          "5. 模型输入里没有 source 身份类字段",
-          "strategy_family 只在 meta 的审计字段里")
+        # 真正的判据不是"一个 source 字段都不读"——提取器**必须**读接触面与物体
+        # 的测量位姿，那是真实装置也给得出的量，也是 mode 判据的物理基础（D-49）。
+        # 判据是：**声明读取集（`interaction.SOURCE_READS`）以外的 source/* 一律
+        # 不得影响输出的任何一位**。删掉它们重跑一遍提取，逐字段 array_equal。
+        src0 = load_episode(src_root / src_by_id[ok_entries[0]["episode_id"]]["path"])
+        spec0 = spec_for(src0.meta)
+        surf0 = surface_for(spec0.obj, str(src0.meta.get("geometry_variant", "nominal")))
+        src_keys = sorted(k for k in src0.arrays if k.startswith("source/"))
+        declared = [k for k in src_keys if reads_source(k)]
+        dropped = [k for k in src_keys if not reads_source(k)]
+        print(f"[INFO] 2. source/* 的分工  —— 声明读取 {len(declared)} 个"
+              f"{[k.split('/', 1)[1] for k in declared]}；"
+              f"应当零影响 {len(dropped)} 个"
+              f"{sorted({k.split('/')[-1] for k in dropped})}", flush=True)
+
+        a0 = extract(src0, surf0).arrays
+        stripped = EpisodeRecord(meta=dict(src0.meta),
+                                 arrays={k: v for k, v in src0.arrays.items()
+                                         if k not in dropped})
+        a1 = extract(stripped, surf0).arrays
+        differ = sorted(k for k in a0
+                        if not np.array_equal(np.asarray(a0[k]), np.asarray(a1[k])))
+        check(set(a0) == set(a1) and not differ,
+              "2b. 删掉声明读取集以外的全部 source/*，输出逐位相同",
+              f"删了 {len(dropped)} 个字段（指令 / 目标位姿 / 本体速度 / 板面编号 / "
+              f"PhysX 世界系接触点）；变化的字段：{differ or '无'}")
+
+        # 2c 是 2b 的反面：把声明会读的那几个删掉，提取器**必须报错**。
+        # 它守的是 P-54 的另一半——拿不到物体位姿时宁可炸，也不要在"物体大概
+        # 在原点"这个假定之上算出一份逐帧数值全都正常的废记录。
+        blind = EpisodeRecord(meta=dict(src0.meta),
+                              arrays={k: v for k, v in src0.arrays.items()
+                                      if k not in declared})
+        try:
+            extract(blind, surf0)
+            check(False, "2c. 删掉测量位姿后提取器必须报错", "它没有报错，静默算出了记录")
+        except Exception as exc:                        # noqa: BLE001
+            check(True, "2c. 删掉测量位姿后提取器必须报错",
+                  f"{type(exc).__name__}: {str(exc)[:80]}")
+
+        # 2d 守的是分类表本身：新加一个 source 字段而忘了归类时，它既不是
+        # measurement 也不是 action，会掉进缝里——那正是 `_pose` 后缀曾经把
+        # `target_pose` 误算成测量的那类错（见 `records.MEASUREMENT_TAILS`）。
+        unclassified = [k for k in src_keys if not is_measurement(k) and not is_action(k)]
+        misdeclared = [k for k in declared if not is_measurement(k)]
+        check(not unclassified and not misdeclared,
+              "2d. 每个 source/* 都归了类，且声明读取的都是测量字段",
+              f"未归类 {unclassified or '无'}；声明读取里的非测量字段 {misdeclared or '无'}")
+
+    stage("2. 采集侧隔离", _isolation)
+
+    # ---------------- 5 / 7. 结构性隔离 ----------------
+    def _structural() -> None:
+        banned = [k for k in model_keys
+                  if any(t in k for t in ("plate", "tool", "body", "joint_id", "family",
+                                          "strategy", "friction", "damping", "mass"))]
+        check(not banned, "7. 表示里没有执行器专属编号 / 部件名", str(banned))
+        check(not any(k.startswith("aux/") for k in model_keys),
+              "5. 模型输入里没有 source 身份类字段",
+              "strategy_family 只在 meta 的审计字段里")
+
+    stage("5/7. 结构性隔离", _structural)
 
     # ---------------- 3. 改变接触体数量，维度不变 ----------------
     by_family: dict[str, list] = {}
     for e in ok_entries:
         by_family.setdefault(e["strategy_family"], []).append(e)
-    shapes = {}
-    for fam, lst in sorted(by_family.items()):
-        rec = load_episode(root / lst[0]["path"])
-        shapes[fam] = (tuple(sorted(rec.arrays)),
-                       rec.arrays["mech/wrench_obj"].shape[1],
-                       rec.arrays["effect/future"].shape[1:],
-                       rec.meta["fields"]["n_bodies"])
-    fieldsets = {v[0] for v in shapes.values()}
-    dims = {(v[1], v[2]) for v in shapes.values()}
-    bodies = {v[3] for v in shapes.values()}
-    check(len(fieldsets) == 1 and len(dims) == 1,
-          "3. 改变 source 接触体数量后表示维度不变",
-          f"{len(shapes)} 个家族（含 {sorted(bodies)} 个接触体的实现）"
-          f"共用同一套字段与维度")
+
+    def _dims() -> None:
+        shapes = {}
+        for fam, lst in sorted(by_family.items()):
+            rec = load_episode(root / lst[0]["path"])
+            shapes[fam] = (tuple(sorted(rec.arrays)),
+                           rec.arrays["mech/wrench_obj"].shape[1],
+                           rec.arrays["effect/future"].shape[1:],
+                           rec.meta["fields"]["n_bodies"])
+        fieldsets = {v[0] for v in shapes.values()}
+        dims = {(v[1], v[2]) for v in shapes.values()}
+        bodies = {v[3] for v in shapes.values()}
+        check(len(fieldsets) == 1 and len(dims) == 1,
+              "3. 改变 source 接触体数量后表示维度不变",
+              f"{len(shapes)} 个家族（含 {sorted(bodies)} 个接触体的实现）"
+              f"共用同一套字段与维度")
+
+    stage("3. 接触体数量", _dims)
 
     # ---------------- 4. 从表示识别策略（记录级） ----------------
-    fams = sorted(by_family)
-    if len(fams) >= 2:
+    def _strategy_id() -> None:
+        fams = sorted(by_family)
+        if len(fams) < 2:
+            info("4. 策略身份可识别性", f"该数据集只有一个家族（{fams}），不适用")
+            return
         n_each = max(2, a.clf_sample // len(fams))
         xs_rec, xs_src, ys = [], [], []
         for ci, fam in enumerate(fams):
@@ -271,11 +345,16 @@ def main() -> int:
               "`plan/02` §7 第 4 条要的是从 Functional Envelope 预测策略身份，"
               "envelope 是 S5 的产物；两个数将来并排报")
 
+    stage("4. 策略身份", _strategy_id)
+
     # ---------------- 6. 物理参数不进表示 ----------------
-    phys = {}
-    for e in ok_entries:
-        phys.setdefault(e["physics_variant"], []).append(e)
-    if len(phys) >= 2:
+    def _physics() -> None:
+        phys: dict[str, list] = {}
+        for e in ok_entries:
+            phys.setdefault(e["physics_variant"], []).append(e)
+        if len(phys) < 2:
+            info("6. 物理参数可推断性", f"该数据集只有一个物理变体（{sorted(phys)}）")
+            return
         names = sorted(phys)
         n_each = max(2, a.clf_sample // len(names))
         xs, ys = [], []
@@ -289,9 +368,14 @@ def main() -> int:
              f"{names}）—— 物理参数没有被直接写进表示，但它必然通过"
              "实际交互体现出来，这个数不该是 0")
 
+    stage("6. 物理参数", _physics)
+
     # ---------------- 8. 擦拭：与"是否用工具"无关 ----------------
-    impls = sorted({e["implementation"] for e in ok_entries})
-    if len(impls) >= 2:
+    def _tool() -> None:
+        impls = sorted({e["implementation"] for e in ok_entries})
+        if len(impls) < 2:
+            info("8. 擦拭跨实现检查", f"该数据集只有一种实现（{impls}），不适用")
+            return
         tool_fields = [k for k in model_keys if "tool" in k or "eraser" in k]
         check(not tool_fields, "8. 表示里没有工具的存在性/位姿/几何字段",
               f"两种实现：{impls}")
@@ -307,17 +391,18 @@ def main() -> int:
              f"（1.0 = 完全不同，0 = 完全一样）")
         defer("8. envelope 互换实验",
               "要把实现 (a) 的 envelope 喂给只会实现 (b) 的执行器，属 S5/S7")
-    else:
-        info("8. 擦拭跨实现检查", f"该数据集只有一种实现（{impls}），不适用")
+
+    stage("8. 工具无关性", _tool)
 
     defer("9. region 可推导性探针", "单独一个脚本：tools/s4_region_probe.py")
 
+    # 汇总给**条数**：报告被半路截断时，只看文件头的 PASS 是看不出来的（P-55）。
+    print(f"\n===== 汇总：PASS {N_PASS} / FAIL {len(FAIL)} / DEFER {N_DEFER} =====")
     if FAIL:
-        print(f"\n===== {len(FAIL)} 项未通过 =====")
         for line in FAIL:
             print(line)
         return 1
-    print("\n===== 可在 S4 完成的项全部通过（DEFER 的两条留到 S5）=====")
+    print("可在 S4 完成的项全部通过（DEFER 的几条留到 S5）")
     return 0
 
 

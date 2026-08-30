@@ -1,0 +1,20 @@
+[PASS] manifest schema  —— s4-record-v2
+[PASS] episode 数与 S3 一致  —— 2040 vs 2040
+[PASS] 划分原样继承 S3  —— 2040 条一致，校准集 184 条
+[PASS] 表面采样已冻结（每个几何变体一个 hash）  —— 1 个变体
+[PASS] 表面 hash 可复现：block/nominal  —— b0c7c76f0038a9e8
+[PASS] 抽查 SHA-256 一致  —— 30 条
+[PASS] 无 NaN / Inf
+[PASS] 字段归类 fail-closed 通过
+[PASS] 抽查的 episode 字段集合一致  —— 1 种字段集合
+[INFO] 接触力按部件（操作阶段，抽查集）  —— face_px 49.87%  top 28.17%  face_nx 15.17%  face_py 6.58%  face_ny 0.21%
+[INFO] mode 迁移矩阵（行 = S3 原始，列 = S4 重判，法向力加权 %）
+          no_contact     sticking      sliding   separating
+       no_contact           0.0%         0.0%         0.0%         0.0%
+       sticking             0.0%        43.9%         0.1%         0.0%
+       sliding              0.0%         0.6%         0.1%         0.0%
+       separating           0.0%        53.7%         1.8%         0.0%
+[INFO] 超安全上限的帧  —— 0.14%（总接触力 > 25.0 N）
+[INFO] 动力学一致性  —— 该任务不适用（擦拭平面是 kinematic 刚体，接触力不进入它的运动方程）—— 如实标 N/A
+
+===== 全部通过 =====

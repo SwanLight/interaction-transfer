@@ -1,0 +1,39 @@
+S3 探针物体 `block` · 2040 episode，成功 1836 (90.0%)
+
+原语               条数    成功     脱手%     打中位点%     面接触度     工作面%     侧边%     力N     峰值N     位移mm     转角°     关节Δ
+pinch_hold      204   204     0.0     100.0    1.000    100.0     0.0   6.36    2.61      0.0     0.1   0.000
+pinch_move      204   204     0.0     100.0    1.000    100.0     0.0   5.20    2.96     45.1     0.1   0.000
+pinch_turn      204   204     0.0     100.0    1.000    100.0     0.0   7.40    5.36      0.2    45.6   0.000
+pivot           204   204     0.0     100.0    1.000    100.0     0.0   4.30    5.87     63.0    90.0   0.000
+poke            204   204    88.2     100.0    0.988     16.7     0.0   1.52   24.68    206.4     9.1   0.000
+press           204   204     0.0     100.0    1.000    100.0     0.0   3.70    2.66      0.0     0.1   0.000
+push            204   204     0.0     100.0    1.000     93.6     0.0   1.12    1.20    299.6     0.1   0.000
+shear           204   204     0.0     100.0    1.000    100.0     0.0   4.68    3.21      0.0     0.1   0.000
+slide_push      204   204     0.0     100.0    1.000     99.0     0.0   1.12    1.17    285.1     0.1   0.000
+twist           204     0     0.0     100.0    1.000    100.0     0.0   6.10    2.54      0.0     0.1   0.000
+
+接触模式分布（按法向力加权，`plan/02` §3.4）
+  no_contact       0.00%
+  sticking        39.74%
+  sliding          1.04%
+  separating      59.23%
+
+  invalid_frame_fraction           0.0000
+  pd_saturation_fraction           0.0000
+  mean_orientation_error_deg       2.5482
+  mean_contacts_per_frame          2.7035
+  plate_z_side_mm                  0.9569
+  face_normal_align                0.9988
+
+划分（按 episode，P-10）
+  train                    1377
+  calibration               184
+  in_distribution_test      275
+  unseen_physics_test         0
+  unseen_geometry_test        0
+  unseen_strategy_test        0
+  unseen_implementation_test    0
+  failed                    204
+
+失败原因分布
+  物体没有被转动                   204

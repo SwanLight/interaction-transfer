@@ -18,7 +18,13 @@ region"。Gate G 明确写了阴性结果可接受。调参让它不可推导，
 |---|---|---|
 | `mean` | 什么都不看，永远输出全数据集的平均热图 | 下界：不用 effect 能做到多好 |
 | `probe` | **只看 effect**（当前值 + 未来窗口 + 物体点云） | 待检验的那一个 |
-| `family` | 作弊上界：知道这条示教属于哪个策略家族，输出该家族的平均热图 | 上界：热图本身有多可重复 |
+| `family` | **家族级参照**：知道这条示教属于哪个策略家族，输出该家族的平均热图 | 热图在**家族之间**有多少可解释的差异 |
+
+⚠️ **`family` 不是全局上界，别把它当上界读。** 它只知道**离散的家族标签**，
+而 effect 是**连续量**——旋钮上实测 `probe` 0.687 **超过** `family` 0.553（124%），
+因为接触落在销钉的哪一片随转角连续变化，家族标签给不出这个而 effect 给得出。
+`probe > family` 出现时说明的是"effect 携带的 region 信息比家族身份还多"，
+是这条检查最强的阳性信号，不是数值异常。
 
 - `probe ≈ mean` → effect 推不出 region，**region 有独立信息**，该任务可以用来
   检验 region 的必要性；
@@ -72,7 +78,10 @@ def effect_features(rec) -> np.ndarray:
     cur = np.asarray(arrays["effect/current"], dtype=np.float64)
     fut = np.asarray(arrays["effect/future"], dtype=np.float64)
     ok = np.asarray(arrays["effect/future_valid"])
-    manip = np.asarray(arrays["phase"]) == 2
+    # `phase` 从 `rec.arrays` 取，不从 `model_arrays()`——D-55 之后它不再是模型
+    # 可见字段（那会给 policy 一个任务状态机）。这里它只用来**框出操作段**，
+    # 三个预测器用的是同一个框，不参与预测，因此不影响结论。
+    manip = np.asarray(rec.arrays["phase"]) == 2
     if not manip.any():
         manip = np.ones(len(cur), dtype=bool)
     f = [cur[manip].mean(0), cur[manip].std(0), cur[-1] - cur[0],
@@ -162,7 +171,7 @@ def main() -> int:
     print(f"{'预测器':<32}{'可解释方差':>12}{'余弦相似度':>12}")
     print(f"{'mean（什么都不看）':<32}{0.0:>12.3f}{cos_mean:>12.3f}")
     print(f"{'probe（只看 effect + 点云）':<32}{ev_probe:>12.3f}{cos_probe:>12.3f}")
-    print(f"{'family（作弊：知道策略家族）':<32}{ev_fam:>12.3f}{cos_fam:>12.3f}")
+    print(f"{'family（家族级参照：知道策略家族）':<32}{ev_fam:>12.3f}{cos_fam:>12.3f}")
     print()
     print("余弦相似度那一列会**饱和**（同一任务的热图都压在同一片区域上），"
           "读结论看可解释方差那一列。")
@@ -170,9 +179,14 @@ def main() -> int:
 
     span = ev_fam - 0.0
     if span > 1e-6:
-        print(f"probe 解释掉的方差占 family 那个作弊上界的 "
-              f"{100 * ev_probe / span:.0f}%——上界本身多大也要一起看，"
-              f"上界小就说明这个任务的热图本来就没什么可解释的差异")
+        print(f"probe 解释掉的方差是 family 这个家族级参照的 "
+              f"{100 * ev_probe / span:.0f}%——参照本身多大也要一起看，"
+              f"参照小就说明这个任务的热图在家族之间本来就没什么可解释的差异")
+        if ev_probe > ev_fam:
+            print("  ⚠️ probe **超过**了 family：family 只知道离散的家族标签，"
+                  "而 effect 是连续量。")
+            print("     这说明 effect 携带的 region 信息比策略身份还多，"
+                  "**是最强的阳性信号**，不是数值异常。")
         print()
     if ev_probe < 0.10:
         verdict = ("effect **推不出** region（可解释方差 < 0.10）—— region 在这个"
@@ -185,7 +199,7 @@ def main() -> int:
                    "结果一起解读，不能单独下结论")
     print(f"结论：{verdict}")
     if ev_fam < 0.05:
-        print("附注：family 这个作弊上界也接近 0，说明热图在**家族之间**本来就差别很小，")
+        print("附注：family 这个家族级参照也接近 0，说明热图在**家族之间**本来就差别很小，")
         print("      这个任务上 region 的形态几乎只有一种——这件事本身要写进报告。")
     print()
     print("说明：这条检查**不设通过门槛**。它回答的是「这个任务适不适合检验 region」，")

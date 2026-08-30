@@ -20,7 +20,7 @@
 
 用法::
 
-    PYTHONPATH=src /isaac-sim/python.sh tools/s3_diversity.py /tmp/s3_drawer_full
+    PYTHONPATH=src /isaac-sim/python.sh tools/s3_diversity.py /tmp/s3_drawer_v3
 """
 
 from __future__ import annotations

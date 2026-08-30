@@ -1,0 +1,21 @@
+[PASS] 划分之间不重叠  —— 2700 个分配、2700 个唯一
+[PASS] 划分覆盖全部 episode  —— 漏 0，多 0
+[PASS] unseen_strategy_test 只含声明的留出家族，且该家族不在训练集里  —— 声明留出 tool_tilt，实际留出 ['tool_tilt']，训练 ['tool_center', 'tool_heavy_slow', 'tool_light_fast', 'tool_offset']
+[PASS] unseen_geometry_test 只含非名义几何  —— ['g1', 'g2']
+[PASS] 所有成功、且不属于前序留出的几何变体都进了 unseen_geometry_test  —— 变体 450 条，应留出 297 条，实际 297 条
+[PASS] 训练集只含名义几何
+[PASS] 多实现数据集必须留出一种实现作跨实现测试  —— 实现有 ['direct', 'with_tool']，留出 373 条
+[PASS] unseen_implementation_test 只含**一种**实现  —— ['direct']
+[PASS] 训练集不含被留出的那种实现
+[PASS] 被留出实现的**全部**成功 episode 都在该桶里  —— 该实现成功 373 条，桶里 373 条
+[PASS] unseen_physics_test 只含非名义物理参数  —— ['heldout_press']
+[PASS] 所有成功、且不属于留出家族的物理变体都进了 unseen_physics_test  —— 变体 420 条，应留出 219 条，实际 219 条
+[PASS] 训练集只含名义物理参数
+[PASS] 校准集非空（conformal 阈值要用，D-17）  —— 127 条
+[PASS] 抽查 40 条的 SHA-256 与 manifest 一致
+[PASS] 抽查的 episode 都能读回并通过契约校验
+[PASS] model_arrays() 里没有 source/* 审计字段
+[PASS] 所有 episode 帧数一致  —— [390]
+[PASS] 抽查 episode 无 NaN/Inf
+[PASS] 成功轨迹总数 ≥1250（`plan/03` §6）  —— 2606
+[PASS] 至少 5 个家族各有 ≥250 条成功轨迹（`plan/03` §6）  —— 达标 6 个，未达标 []

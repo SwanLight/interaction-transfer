@@ -1,0 +1,30 @@
+S3 探针物体 `ridge` · 840 episode，成功 840 (100.0%)
+
+原语               条数    成功     脱手%     打中位点%     面接触度     工作面%     侧边%     力N     峰值N     位移mm     转角°     关节Δ
+poke            210   210    64.5     100.0    0.975    100.0     0.0   2.39   31.10      0.0     0.0   0.000
+press           210   210     0.0     100.0    0.963    100.0     0.0   5.41   23.57      0.0     0.0   0.000
+rub             210   210     0.0     100.0    1.000    100.0     0.0   3.14    2.74      0.0     0.0   0.000
+shear           210   210     0.0     100.0    1.000    100.0     0.0   4.19    2.63      0.0     0.0   0.000
+
+接触模式分布（按法向力加权，`plan/02` §3.4）
+  no_contact       0.00%
+  sticking        56.45%
+  sliding         12.22%
+  separating      31.33%
+
+  invalid_frame_fraction           0.0000
+  pd_saturation_fraction           0.0000
+  mean_orientation_error_deg       1.4878
+  mean_contacts_per_frame          1.3636
+  plate_z_side_mm                  1.4872
+  face_normal_align                0.9846
+
+划分（按 episode，P-10）
+  train                     630
+  calibration                84
+  in_distribution_test      126
+  unseen_physics_test         0
+  unseen_geometry_test        0
+  unseen_strategy_test        0
+  unseen_implementation_test    0
+  failed                      0

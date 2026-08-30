@@ -42,7 +42,16 @@ assets/
 .idea/
 .vscode/
 
-# S0/S1 产出（视频与报告，可由 tools/s0_all.sh + tools/make_report.py 重新生成）
-out/
+# S0~S4 产出。⚠️ **只排除能重新生成的二进制**（录像 / 热图 png / HTML 报告），
+# `out/**/README.md` 与各类 txt 摘要**要进版本控制**：D-23 的原意是排除
+# checkpoint、视频、数据集、Isaac 资产，不是排除文档；而那些 README 是手写的、
+# 没有任何脚本能重新生成，掉了就没了。P-56 讲的正是"数字没有产物就会悄悄过期"，
+# 把唯一记着这些数的文件排除在版本控制外，是同一个病。
+out/**/*.mp4
+out/**/*.png
+out/**/*.html
+out/*.mp4
+out/*.png
+out/*.html
 
 .git_sha
