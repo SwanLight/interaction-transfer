@@ -4,16 +4,18 @@ manifest  /Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/drawer/
 episodes  train 12
 命令轴    phase budget [2, 3, 25, 2]，32 格
 ==============================================================================
-[DEFER] 1a region coverage: 没有留出划分可评估
-[PASS] 2a region width: 允许区域面积占物体表面积 1.49%（越小越好，与 1a 并读）
-[DEFER] 1b mechanics band（只报数，不设门槛）: 10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；
-[PASS] 2b mechanics width: traction 带相对宽度中位数 2.215
-[DEFER] 3 策略子群 coverage: 留出划分里只有 0 个策略族，无法比较落差
-[DEFER] 4 family envelope 距离: hook_both 0.331；pinch_center 0.450；pinch_offset 0.227；single_finger 0.421；落差 0.224（判据要 S6 的下游成功率，现在只报数）
-[DEFER] 5 多峰性: pooled→episode 0.435 vs episode→最近邻 0.145（比值 3.01）；engage 集中度中位数 0.984；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数
-[DEFER] 6 跨实现可互换: 只有 1 种实现有 ≥2 条训练 episode（非擦拭任务正常）
+[DEFER] 1a region coverage（未标定 τ=0.95，仅作对照）: ；width 1.17%。描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'
+[DEFER] 1a' region coverage（conformal）: 校准集只有 0 条，标定不可靠
+[DEFER] 2a region width: τ* 未标定，width 无从谈起
+[DEFER] 1b mechanics band（只报数，不设门槛）: 10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；；cell 支持分布 {'support==1': 26, 'support>=5': 110, 'support>=10': 28, 'occupied': 164}。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教
+[PASS] 2b mechanics width: traction 带相对宽度中位数 全部 1.992 / 支持≥5 2.552（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）
+[DEFER] 3 策略子群 coverage: τ* 未标定，子群 coverage 无从比较
+[DEFER] 4 family envelope 距离: hook_both 0.321；pinch_center 0.457；pinch_offset 0.251；single_finger 0.411；落差 0.206（* = 未参与构造的留出族；判据要 S6 的下游成功率，现在只报数）
+[DEFER] 5 多峰性: pooled→episode 0.422 vs episode 两两 0.520（比值 0.81，>1 即质心落在示教之外）；最近邻 0.141（n=12，随样本量缩，只作辅助）；engage 集中度中位数 0.982；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数
+[DEFER] 6 跨实现可互换: 数据里只有 1 种 implementation（非擦拭任务正常）
 [PASS] 7a 结构不变量: 12 条对半分，30 个数组维度全部一致
 [DEFER] 7b 接触体数量不变量: 训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据
+[DEFER] 8 跨几何 coverage: 以下成功 episode 因为几何变体不同（各有各的冻结 surface 与点序）无法在这条命令轴上打分：unseen_geometry_test 83 条；unseen_strategy_test 24 条。跨几何要么各建各的 artifact（那就不再是「未见几何」），要么需要一张表面对应表；本步不做，如实记为未完成
 ==============================================================================
-PASS 3  FAIL 0  DEFER 7
+PASS 2  FAIL 0  DEFER 10
 ⚠️ 判据是退出码，不是这份文件的开头（P-55）。DEFER 的项目不得引用成通过。

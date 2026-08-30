@@ -1,7 +1,7 @@
 [
   {
     "artifact": "knob-knob-nominal-train.npz",
-    "artifact_sha256": "9d2218632865e958cac0c6c5219016ad6b1b341558a2a5014efdcd43bfe11c98",
+    "artifact_sha256": "3a59c5b235ad35344c0b4baa54cb1c21d1dad8bf82d2934ff83366f0368ce82c",
     "manifest": "/Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/knob/manifest.json",
     "manifest_dataset": "s4_s3_knob_source",
     "meta": {
@@ -41,7 +41,7 @@
           1.0
         ],
         "projection_residual_force_N": 8.80268569853437e-06,
-        "projection_residual_torque_Nm": 4.740933546465333e-07
+        "projection_residual_torque_Nm": 4.74093347105408e-07
       },
       "episode_ids": [
         "knob-pin_pinch-b00e005",

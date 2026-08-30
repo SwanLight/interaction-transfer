@@ -1,7 +1,7 @@
 [
   {
     "artifact": "drawer-drawer-nominal-train.npz",
-    "artifact_sha256": "39367d970d889060969e6ba80ebe4c79f052d5fc274ead2e0bf8f4de09a6a159",
+    "artifact_sha256": "bd4359fc361bfb22bd002ef9ba5e0d322f0f5e47f4f06ee0d4476bf4a6bd578f",
     "manifest": "/Users/swanny/Desktop/Interaction Transfer/out/s5_smoke_inputs/drawer/manifest.json",
     "manifest_dataset": "s4_s3_drawer_source",
     "meta": {
@@ -26,7 +26,7 @@
       },
       "diagnostics": {
         "cell_support_median": 5.0,
-        "cell_support_under_half_fraction": 0.5161290322580645,
+        "cell_support_under_half_fraction": 0.5426829268292683,
         "dropped_force_mass_fraction_max": 0.0,
         "empty_bin_fraction_max": 0.0,
         "episode_valid_frame_fraction": [
@@ -86,7 +86,7 @@
         ],
         "sha256": "f7774e4f2ec4260447a2796ae7d33367598799f79b33caa3bac3804990dbb026",
         "source_n_points": 16384,
-        "total_area_m2": 0.2776182293891907
+        "total_area_m2": 0.2776181995868683
       },
       "task": "drawer",
       "transfer_id": "drawer-drawer-nominal-train"
@@ -95,11 +95,11 @@
     "source_surface_sha256": "f7774e4f2ec4260447a2796ae7d33367598799f79b33caa3bac3804990dbb026",
     "support": {
       "cell_support_median": 5.0,
-      "cell_support_under_half_fraction": 0.5161290322580645,
+      "cell_support_under_half_fraction": 0.5426829268292683,
       "empty_bins": 0,
       "max_episodes_per_bin": 12,
       "min_episodes_per_bin": 12,
-      "occupied_cells": 155,
+      "occupied_cells": 164,
       "phase_budget": [
         2,
         3,

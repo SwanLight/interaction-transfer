@@ -3,87 +3,96 @@
   "checks": [
     {
       "data": {
-        "per_split": {
-          "train": {
-            "episode_coverage": 0.8333333333333334,
-            "episodes": 12,
-            "mean_mass_inside": 0.9644898797896134,
-            "p10_mass_inside": 0.8475335632004118
-          }
-        }
+        "per_split": {},
+        "width": 0.011733123103278606
       },
-      "detail": "没有留出划分可评估",
-      "name": "1a region coverage",
+      "detail": "；width 1.17%。描述性超水平集没有覆盖保证，达不到门槛属预期，判据看 1a'",
+      "name": "1a region coverage（未标定 τ=0.95，仅作对照）",
+      "status": "DEFER"
+    },
+    {
+      "data": {},
+      "detail": "校准集只有 0 条，标定不可靠",
+      "name": "1a' region coverage（conformal）",
+      "status": "DEFER"
+    },
+    {
+      "data": {},
+      "detail": "τ* 未标定，width 无从谈起",
+      "name": "2a region width",
       "status": "DEFER"
     },
     {
       "data": {
-        "allowed_area_fraction": 0.014932926704436326,
-        "allowed_cells_mean": 4.071428571428571,
-        "total_area_m2": 0.2776182062661974
-      },
-      "detail": "允许区域面积占物体表面积 1.49%（越小越好，与 1a 并读）",
-      "name": "2a region width",
-      "status": "PASS"
-    },
-    {
-      "data": {
+        "cell_support_histogram": {
+          "occupied": 164,
+          "support==1": 26,
+          "support>=10": 28,
+          "support>=5": 110
+        },
         "per_split": {
           "train": {
+            "all": 0.30806128706839764,
             "episodes": 12,
-            "pointwise": 0.31338147216867224,
-            "simultaneous": 0.0
+            "simultaneous": 0.0,
+            "support>=10": 0.3154761904761905,
+            "support>=5": 0.338578390999519
           }
         },
-        "relative_width_median": 2.2146913203158762
+        "relative_width_median": 1.991751859031066,
+        "relative_width_median_support5": 2.552142821573446
       },
-      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；",
+      "detail": "10/90 分位数是描述性统计，不是 conformal guarantee（D-59/D-63）；；cell 支持分布 {'support==1': 26, 'support>=5': 110, 'support>=10': 28, 'occupied': 164}。10/90 的名义带内率是 0.80，明显低于它就说明逐点分位数不足以描述这批示教",
       "name": "1b mechanics band（只报数，不设门槛）",
       "status": "DEFER"
     },
     {
       "data": {
-        "relative_width_median": 2.2146913203158762
+        "relative_width_median": 1.991751859031066,
+        "relative_width_median_support5": 2.552142821573446
       },
-      "detail": "traction 带相对宽度中位数 2.215",
+      "detail": "traction 带相对宽度中位数 全部 1.992 / 支持≥5 2.552（与 1b 并读：带很宽而带内率仍低，说明问题不是带窄了）",
       "name": "2b mechanics width",
       "status": "PASS"
     },
     {
       "data": {},
-      "detail": "留出划分里只有 0 个策略族，无法比较落差",
+      "detail": "τ* 未标定，子群 coverage 无从比较",
       "name": "3 策略子群 coverage",
       "status": "DEFER"
     },
     {
       "data": {
+        "held_out_families": [],
         "per_family": {
-          "hook_both": 0.3307570514362643,
-          "pinch_center": 0.4502782597401461,
-          "pinch_offset": 0.2267110854699516,
-          "single_finger": 0.42132167201966386
+          "hook_both": 0.32062542857792026,
+          "pinch_center": 0.4572600299580821,
+          "pinch_offset": 0.25107272161605476,
+          "single_finger": 0.41072415336382223
         },
-        "spread": 0.2235671742701945
+        "spread": 0.20618730834202736
       },
-      "detail": "hook_both 0.331；pinch_center 0.450；pinch_offset 0.227；single_finger 0.421；落差 0.224（判据要 S6 的下游成功率，现在只报数）",
+      "detail": "hook_both 0.321；pinch_center 0.457；pinch_offset 0.251；single_finger 0.411；落差 0.206（* = 未参与构造的留出族；判据要 S6 的下游成功率，现在只报数）",
       "name": "4 family envelope 距离",
       "status": "DEFER"
     },
     {
       "data": {
-        "engage_concentration_median": 0.9840756058692932,
-        "episode_to_neighbour": 0.14465515145481495,
+        "engage_concentration_median": 0.9824416637420654,
+        "episode_pairwise": 0.5203015192777013,
+        "episode_to_neighbour": 0.1411431917492871,
         "mode_entropy_median": 0.0,
-        "pooled_to_episode": 0.4349642393554825,
-        "ratio": 3.006904593310316
+        "pooled_to_episode": 0.42201857731238035,
+        "ratio_vs_pairwise": 0.8111038728048299,
+        "train_episodes": 12
       },
-      "detail": "pooled→episode 0.435 vs episode→最近邻 0.145（比值 3.01）；engage 集中度中位数 0.984；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数",
+      "detail": "pooled→episode 0.422 vs episode 两两 0.520（比值 0.81，>1 即质心落在示教之外）；最近邻 0.141（n=12，随样本量缩，只作辅助）；engage 集中度中位数 0.982；mode 熵中位数 0.000。判据要 S6 的下游成功率，现在只报数",
       "name": "5 多峰性",
       "status": "DEFER"
     },
     {
       "data": {},
-      "detail": "只有 1 种实现有 ≥2 条训练 episode（非擦拭任务正常）",
+      "detail": "数据里只有 1 种 implementation（非擦拭任务正常）",
       "name": "6 跨实现可互换",
       "status": "DEFER"
     },
@@ -100,12 +109,23 @@
       "detail": "训练集里 fields.n_bodies 只有 [2]；S4 已合并 source body，同任务内通常是常数，需跨任务/跨实现数据",
       "name": "7b 接触体数量不变量",
       "status": "DEFER"
+    },
+    {
+      "data": {
+        "excluded_by_geometry": {
+          "unseen_geometry_test": 83,
+          "unseen_strategy_test": 24
+        }
+      },
+      "detail": "以下成功 episode 因为几何变体不同（各有各的冻结 surface 与点序）无法在这条命令轴上打分：unseen_geometry_test 83 条；unseen_strategy_test 24 条。跨几何要么各建各的 artifact（那就不再是「未见几何」），要么需要一张表面对应表；本步不做，如实记为未完成",
+      "name": "8 跨几何 coverage",
+      "status": "DEFER"
     }
   ],
   "tally": {
-    "DEFER": 7,
+    "DEFER": 10,
     "FAIL": 0,
-    "PASS": 3
+    "PASS": 2
   },
   "transfer_id": "drawer-drawer-nominal-train"
 }
