@@ -5,7 +5,8 @@
 本文件回答：这个项目在做什么、现在做到哪、下一步做什么、怎么在服务器上跑东西、
 以及哪些坑会浪费你半天。
 
-最后更新：2026-08-31（S6 开工：指令来源、指令通道、跟踪 reward、网络与环境已就位并验过；PPO 训练循环未接）
+最后更新：2026-08-31（S6 接管纠正；静态 Stage A 固定 `model_79`；候选 v5 demand
+已在隔离目录真正接入并验证，远端主目录仍是 v4，见 `out/s6/README.md` §7–8）
 
 ---
 
@@ -102,8 +103,8 @@ out/
 | **S4 提取** | ✅ **完成** | 16 640 条全部提取；独立验收全通过；泄漏检查 **抽屉 9/擦拭 10/旋钮 9 条 PASS，0 FAIL**，其余如实 DEFER 到 S5 |
 | **S4.6 传感** | ✅ **离线可观测性完成** | 实验七：在仿真观测模型下重建 region/mode/mechanics；"≤ 功能尺寸的 ~10%"是候选指标，不是下游控制或真机充分性结论 |
 | S4.5 分辨率 | ⛔ **要等 S6** | 判据是"下游成功率"，要一个能跑的 C4 执行器。**编号是历史顺序不是执行顺序**：S6 → S4.6 下游段 + S4.5 → S7，见 `plan/README` §7.1 |
-| **S5** | 🟨 **v4 契约 + 全量评估已跑** | `interaction-transfer-v4`（D-65/D-66/D-67/D-71 + **D-72/D-73/D-74**）；三任务全量 artifact + 十一项闸门，结果见 `out/s5/README.md` |
-| **S6** | 🟨 **地基完成，训练未跑** | 指令来源（43 份探针 + 3 份任务 artifact）、指令通道、跟踪 reward、网络与 Isaac 环境都已写好并通过 18 项单测 + 离线体检；**PPO 训练循环还没接 rsl_rl**，见下 |
+| **S5** | 🟨 **v4 已发布；v5 候选隔离验证完成** | 远端主目录仍用 v4；v5 补累计 `effect/bin_demand`，按 D-92 修掉“字段没接线”和静态抖动假需求后，29 项测试与三任务对拍通过 |
+| **S6** | 🟨 **静态课程 A 已有可用 checkpoint** | 错误六路训练已停。padrod×block/press 的 `model_79` deterministic 100% 完成、0 timeout/failure；更长训练 policy drift。dynamic v5 canary 尚未做，不能扩张结论 |
 | **S7 及之后** | ⬜ 未开始 | 要 S6 的 checkpoint |
 
 ### S5 的当前状态（接手时先看这里）
@@ -198,6 +199,62 @@ S5 本身是纯 numpy、不需要 Isaac，但解释器得用那一个。
 
 ### S6 的当前状态（接手时先看这里）
 
+> **2026-08-31 接手复查：上一轮写的"地基完成、通过 18 项单测 + 两份离线体检"是真的，
+> 但那套检查里有 9 处缺陷它们查不到，7 处不报错。全部细节在
+> `out/s6/README.md` 第 3 节，动手前先读那一节。** 下面这一小节是最要紧的三条。
+
+**一、`--dry-run` 不能当接触验证。** 2026-08-30 那次退出码 0、四项 reward "都在
+0~1 之间"，被记成"装配通过，各项量级合理"。回头看 `/tmp/s6dry3.log`：
+`region / mode / mech` **三项恒等于 0.0000**——真实含义是**全程一次接触都没发生**
+（没有台面、物体自由落体；`own_radius` 默认 0.08 m 又比垫头杆的垫面到杆根的
+0.108 m 还小，碰上了也会被当 foreign 丢掉）。**一个随机策略"没碰到"和一个环境
+"测不到接触"，在日志里长得一模一样。** 现在这一条由 `tools/s6_smoke.py` 把关，
+它**主动**去建立接触（P-75）。
+
+**二、退出码在 Isaac 下不是判据。** 脚本一旦创建过 `SimulationApp`，
+**未捕获异常也会以退出码 0 收场**（五行最小复现见 P-74）。P-55 说"报告开头不是判据、
+退出码才是"，这一条要补上后半句。`run_remote.sh` 现在会再 grep 一次日志，
+每个 Isaac 脚本也自己 `try/except → os._exit(1)`。
+
+**三、候选契约是 `interaction-transfer-v5`，v4 读到即报错（D-91/D-92）。**
+`WindowTracker.demand()` 原来取 `effect/rigid/median[b, 0]`——那是**未来 0.1 s 的
+位移**，一个**速率**；而 `achieved` 是整格累计。D-80 说改成了"累计对累计"，
+**实际只有分子改了**。实测比值 抽屉 0.408 / 旋钮 0.590 / **擦拭 8.233**（跨格散 13 倍）：
+demand 偏小时窗口按 `min_dwell` 一路冲到底、推进判据形同虚设；偏大时永远靠超时挪格。
+Claude 初版虽补了字段，tracker 实际仍没消费；离线又漏了在线 0.5 mm 死区，导致
+block/press 总 demand 43、column/press 583。D-92 修成 tracker 直读字段、离线/在线
+共享死区；静态 press/hold demand 全为 0，三任务对拍 0.931 / 1.000 / 1.002。
+**S5 的 coverage / width 逐位不变**（已重跑核对）。⚠️ **切换要一次做完**，
+步骤见 `out/s6/README.md` §7。
+
+**四、reward 全 ≤ 0 时最优策略是"永远别碰那个物体"。** 实测悬停 −0.43/步、
+一段大致压对了的开环执行 −278/步。`r_region` 现在是**带符号的占比** ∈[−1,+1]，
+是四项里唯一能取正的；hinge 项按允许集合的宽度封顶到 [−1,0]，不再除标定值
+（D-84 / P-77）。**这一条由冒烟第六节实测把关**（+0.97 vs −0.01），不靠推理。
+
+**跑 S6 的四条命令**（服务器上，按顺序）：
+
+```bash
+IT_PY=/isaac-sim/python.sh bash tools/s6_commands.sh          # 造指令（已跑过，幂等）
+IT_GPU=0 ./tools/run_remote.sh \
+    "PYTHONPATH=src /isaac-sim/python.sh tools/s6_smoke.py --out /tmp/s6/smoke.txt" s6smoke
+IT_GPU=0 IT_WAIT=0 ./tools/run_remote.sh \
+    "PYTHONPATH=src /isaac-sim/python.sh tools/s6_train.py --stage a \
+     --executor padrod --object block --primitive press --envs 512 --iterations 80" s6a
+```
+
+另有两条纯 numpy 的对拍，不占 GPU，改动 reward / 接触口径之后必跑：
+`tools/s6_reward_probe.py`（四节，含 demand 的时间基准）与
+`tools/s6_force_check.py`（在线构造的接触力 vs S4 的 `mech/force_obj`）。
+
+冒烟不过 `s6_train.py` **会拒绝启动**（它读 `/tmp/s6/smoke.json` 的 `failed`）。
+`IT_WAIT=0` 只投递不轮询。当前禁止多卡并发；每个新组合必须先单独 smoke + 短 canary。
+
+**看训练必须看分项**：新发现的 6 件里有 3 件**只能从 `extras["log"]` 的分项看出来**，
+总 reward 曲线全都是"平"或"在涨"。最有用的四项是
+`diag/touching`、`diag/inside_region_share`、`diag/anchor_distance`、`diag/failed`。
+
+
 **做完并验过的**（`tools/test_ei.py` 18 项 + 两份离线体检，全绿）：
 
 | | 是什么 | 在哪 |
@@ -209,9 +266,9 @@ S5 本身是纯 numpy、不需要 Isaac，但解释器得用那一个。
 | **环境** | 混合力/位控动作、物体系接触、位姿差分滑移 | `src/it/envs/interaction.py` |
 | **训练入口** | 三段课程 + 留出禁令写进 dataloader | `tools/s6_train.py` |
 
-**没做完的：PPO 训练循环还没接 rsl_rl。** `tools/s6_train.py --dry-run` 能装配环境、
-跑几步、打印各项 reward 量级；`--stage a` 之后的正式训练会显式报错说明缺什么。
-**下一个人从这里开始。**
+**PPO 已经接上 rsl_rl 3.0.1**（D-87）。接线的三个坑都写在那条决策里：
+自定义策略类要注进 runner 的模块命名空间、**观测归一化必须关掉**（观测里有两个
+整数下标）、critic 返回 `(N,1)` 不是 `(N,)`。
 
 ⚠️ **动手前必须知道的三件**：
 
@@ -471,6 +528,8 @@ src/it/
   ei_command.py     **E-I 指令通道**：白名单、空间/时间特征、按自己的进度推窗口
   ei_reward.py      **E-I 任务无关跟踪 reward**：五项，跟踪项是 hinge（集合内恰好为零）
   ei_policy.py      **E-I 网络**：PointNet + GRU + MLP，asymmetric AC，字段掩码
+  probe_scene.py    **探针场景的唯一真值**：台面、物体初始位姿、刚体在哪个 prim。
+                    采集侧与 E-I 共用一份（D-81）
   records.py        episode 数据契约（npz + manifest，前缀隔离，fail-closed）
   envs/
     base.py         增量动作接口 + 定长接触摘要
@@ -514,7 +573,11 @@ tools/
   s6_probe_split.py       探针 calibration 按 (物体, 原语) 分层重划（D-76）
   s6_commands.sh          **S6 指令来源的唯一入口**：freeze → split → build
   s6_reward_probe.py      **跟踪 reward 的离线体检**：在线/离线是否同一个量、reward 分不分得开指令
-  s6_train.py             E-I 训练入口（三段课程 + 留出禁令写进 dataloader）
+  s6_train.py             E-I 训练入口（三段课程 + 留出禁令 + rsl_rl PPO）
+  s6_force_check.py       **在线接触力 vs S4 `mech/force_obj` 的对拍**（从原始量开始）
+  s6_smoke.py             **能失败的接触冒烟**：主动把执行器压到指令 region 上。
+                          `--dry-run` 分不出"随机策略没碰到"和"环境测不到接触"
+  test_probe_scene.py     本机单元测试（探针场景表与采集侧逐字对拍）
   test_ei.py              **服务器**单元测试（指令通道 / reward / 网络）——要 torch，不要 Isaac
   s5_exclude_episodes.py  按范围决定把一批 episode 移出数据集，理由写进 manifest
   s5_eval_envelope.py     **S5 闸门**：coverage / width / 策略子群 / 多峰性 / 跨实现 / 接口不变量
@@ -534,6 +597,7 @@ PYTHONPATH=src python3 tools/test_surfaces.py     # ~110 s
 PYTHONPATH=src python3 tools/test_interaction.py
 PYTHONPATH=src python3 tools/test_records.py
 PYTHONPATH=src python3 tools/test_transfer.py
+PYTHONPATH=src python3 tools/test_probe_scene.py
 ```
 
 **服务器一套**（要 torch，但**不要** Isaac）：

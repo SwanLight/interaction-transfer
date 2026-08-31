@@ -1,0 +1,32 @@
+{
+  "evaluated_env_steps": 20296,
+  "failed_share": 0.0,
+  "finished_share": 1.0,
+  "mean": {
+    "action_abs": 0.08078710659589526,
+    "anchor_distance": 0.004684696590380962,
+    "contact_required": 0.8990934174221521,
+    "effect": 0.0,
+    "inside_region_share": 0.6890597489578404,
+    "mech": -0.059918316351716024,
+    "mode": -0.0005731012203771391,
+    "region": 0.6688171745368614,
+    "reward": 1.2835952686010077,
+    "safety": -2.0276179808640684e-05,
+    "touching": 0.7093023255813954
+  },
+  "meta": {
+    "checkpoint": "model_79.pt",
+    "checkpoint_sha256": "16d47a95fbea3f5b2311303a26da8e6cf76993fa7506712a2b82c3a4a5f75a96",
+    "envs": 256,
+    "executor": "padrod",
+    "implementation_fingerprint": "044e5ff9250fd736951d8ef9db3f10ad1eede21290a98d63a4f42fa54ac81de2",
+    "max_steps": 300,
+    "object": "block",
+    "primitive": "press",
+    "run": "canary_padrod_block_press_handoff_v1",
+    "seed": 123
+  },
+  "touching_when_contact_required": 0.7717010083296799,
+  "unfinished_share": 0.0
+}

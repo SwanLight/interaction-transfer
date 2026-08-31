@@ -1,0 +1,3318 @@
+Loading user config located at: '/isaac-sim/kit/data/Kit/Isaac-Sim/5.1/user.config.json'
+[Info] [carb] Logging to file: /isaac-sim/kit/logs/Kit/Isaac-Sim/5.1/kit_20260831_061527.log
+2026-08-31T06:15:27Z [434ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-08-31T06:15:28Z [1,241ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+2026-08-31T06:15:28Z [1,254ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+2026-08-31T06:15:29Z [1,899ms] [Warning] [omni.platforminfo.plugin] failed to open the default display.  Can't verify X Server version.
+2026-08-31T06:15:36Z [8,655ms] [Warning] [carb.cudainterop.plugin] CUDA_VISIBLE_DEVICES environment variable is set.
+2026-08-31T06:15:36Z [8,655ms] [Warning] [carb.cudainterop.plugin] Note CUDA device enumeration and Omniverse device enumeration are different.
+2026-08-31T06:15:36Z [8,655ms] [Warning] [carb.cudainterop.plugin] Setting CUDA_VISIBLE_DEVICES can lead to undesired behavior or crashes.
+2026-08-31T06:15:36Z [8,961ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,961ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,961ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,961ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,962ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Skipping NVIDIA GPU due CUDA being in bad state: NVIDIA GeForce RTX 4090
+2026-08-31T06:15:36Z [8,963ms] [Warning] [gpu.foundation.plugin] Please restart your system if CUDA is known to work in your system.
+
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 550.54.14     | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 4090          | Yes: 0 |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | f90ca153.. |
+|     |                                  |        |     |            | 1b        |            |
+|---------------------------------------------------------------------------------------------|
+| 1   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | fd1394cf.. |
+|     |                                  |        |     |            | 1e        |            |
+|---------------------------------------------------------------------------------------------|
+| 2   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | 28c8f30f.. |
+|     |                                  |        |     |            | 22        |            |
+|---------------------------------------------------------------------------------------------|
+| 3   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | 7e0db62a.. |
+|     |                                  |        |     |            | 23        |            |
+|---------------------------------------------------------------------------------------------|
+| 4   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | e0e9bbb0.. |
+|     |                                  |        |     |            | 4f        |            |
+|---------------------------------------------------------------------------------------------|
+| 5   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | 196f30a0.. |
+|     |                                  |        |     |            | 52        |            |
+|---------------------------------------------------------------------------------------------|
+| 6   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | 5fd0d481.. |
+|     |               [INFO][AppLauncher]: Using device: cuda:0
+[INFO][AppLauncher]: Loading experience file: /workspace/isaaclab/apps/isaaclab.python.headless.kit
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : None
+	Physics step-size     : 0.006666666666666667
+	Rendering step-size   : 0.02
+	Environment step-size : 0.02
+[INFO]: Time taken for scene creation : 0.617272 seconds
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 512
+	Environment spacing   : 2.0
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : []
+	Replicate physics     : True
+[INFO]: Starting the simulation. This may take a few seconds. Please wait...
+[INFO]: Time taken for simulation start : 0.661561 seconds
+[INFO]: Completed setting up the environment...
+[S6] 课程 a / 执行器 padrod / 物体 block
+[S6] 指令 1 份，留出禁令 ('wipe', 'board', 'drawer', 'knob')
+[S6] reward scale {'effect': 0.08524589985609055, 'mech': 0.013825266200001352, 'mode': 0.023667769390158355, 'region': 0.04051423375494778}
+[S6] 失败终止惩罚 1.0/剩余步（γ=0.99）
+--------------------------------------------------------------------------------
+Resolved observation sets: 
+	 policy :  ['policy']
+	 critic :  ['critic']
+--------------------------------------------------------------------------------
+[S6] 策略参数 818,157
+[S6] 日志 runs/s6_corrected/canary_padrod_block_press_handoff_v1
+[S6] 迭代 80 × 32 步 × 512 env = 1,310,720 帧
+################################################################################
+                       [1m Learning iteration 0/80 [0m                        
+
+                       Computation: 3713 steps/s (collection: 2.102s, learning 2.311s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 0.1035
+               Mean surrogate loss: 0.0439
+                 Mean entropy loss: -1.7150
+                       Mean reward: -0.52
+               Mean episode length: 17.28
+                     reward/effect: 0.0000
+                     reward/region: 0.0275
+                       reward/mode: -0.0180
+                       reward/mech: -0.0200
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0156
+             reward/mode_saturated: 0.0137
+                     diag/touching: 0.0332
+             diag/contact_required: 0.9844
+          diag/inside_region_share: 0.0303
+               diag/contact_points: 0.0352
+            diag/peak_normal_force: 0.0344
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0006
+                     diag/slip_max: 0.0007
+               diag/mech_saturated: 0.0156
+               diag/mode_saturated: 0.0137
+               diag/exec_ang_speed: 0.1392
+               diag/exec_lin_speed: 0.0292
+                 diag/pad_tilt_deg: 0.0314
+              diag/anchor_distance: 0.0062
+                      diag/shaping: -0.0119
+                       diag/failed: 0.0000
+                     diag/finished: 0.0000
+--------------------------------------------------------------------------------
+                   Total timesteps: 16384
+                    Iteration time: 4.41s
+                      Time elapsed: 00:00:04
+                               ETA: 00:05:52
+
+Could not find git repository in /isaac-sim/kit/python/lib/python3.11/site-packages/rsl_rl/__init__.py. Skipping.
+################################################################################
+                       [1m Learning iteration 1/80 [0m                        
+
+                       Computation: 5071 steps/s (collection: 1.310s, learning 1.921s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 33.8905
+               Mean surrogate loss: 0.0330
+                 Mean entropy loss: -1.7148
+                       Mean reward: 3.19
+               Mean episode length: 38.03
+                     reward/effect: 0.0000
+                     reward/region: 0.3265
+                       reward/mode: -0.3573
+                       reward/mech: -0.2977
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0957
+             reward/mode_saturated: 0.2969
+                     diag/touching: 0.7441
+             diag/contact_required: 0.9805
+          diag/inside_region_share: 0.5353
+               diag/contact_points: 0.7852
+            diag/peak_normal_force: 1.0638
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0127
+                     diag/slip_max: 0.0174
+               diag/mech_saturated: 0.0957
+               diag/mode_saturated: 0.2969
+               diag/exec_ang_speed: 0.3281
+               diag/exec_lin_speed: 0.0557
+                 diag/pad_tilt_deg: 1.0699
+              diag/anchor_distance: 0.0073
+                      diag/shaping: -0.0141
+                       diag/failed: 0.0000
+                     diag/finished: 0.0000
+--------------------------------------------------------------------------------
+                   Total timesteps: 32768
+                    Iteration time: 3.23s
+                      Time elapsed: 00:00:07
+                               ETA: 00:05:01
+
+################################################################################
+                       [1m Learning iteration 2/80 [0m                        
+
+                       Computation: 5105 steps/s (collection: 1.286s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 41.1336
+               Mean surrogate loss: -0.0005
+                 Mean entropy loss: -1.7155
+                       Mean reward: 13.44
+               Mean episode length: 75.27
+                     reward/effect: 0.0000
+                     reward/region: 0.0888
+                       reward/mode: -0.2836
+                       reward/mech: -0.2831
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0859
+             reward/mode_saturated: 0.2422
+                     diag/touching: 0.7461
+             diag/contact_required: 0.9727
+          diag/inside_region_share: 0.4174
+               diag/contact_points: 0.7812
+            diag/peak_normal_force: 1.2898
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0099
+                     diag/slip_max: 0.0158
+               diag/mech_saturated: 0.0859
+               diag/mode_saturated: 0.2422
+               diag/exec_ang_speed: 0.3711
+               diag/exec_lin_speed: 0.0594
+                 diag/pad_tilt_deg: 1.2858
+              diag/anchor_distance: 0.0103
+                      diag/shaping: -0.0198
+                       diag/failed: 0.0000
+                     diag/finished: 0.0020
+--------------------------------------------------------------------------------
+                   Total timesteps: 49152
+                    Iteration time: 3.21s
+                      Time elapsed: 00:00:10
+                               ETA: 00:04:42
+
+################################################################################
+                       [1m Learning iteration 3/80 [0m                        
+
+                       Computation: 5081 steps/s (collection: 1.300s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 46.7418
+               Mean surrogate loss: 0.0027
+                 Mean entropy loss: -1.7197
+                       Mean reward: -1.52
+               Mean episode length: 119.90
+                     reward/effect: 0.0000
+                     reward/region: 0.0103
+                       reward/mode: -0.1458
+                       reward/mech: -0.1693
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0742
+             reward/mode_saturated: 0.1133
+                     diag/touching: 0.4688
+             diag/contact_required: 0.8906
+          diag/inside_region_share: 0.2395
+               diag/contact_points: 0.5098
+            diag/peak_normal_force: 0.7925
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0044
+                     diag/slip_max: 0.0088
+               diag/mech_saturated: 0.0742
+               diag/mode_saturated: 0.1133
+               diag/exec_ang_speed: 0.3255
+               diag/exec_lin_speed: 0.0727
+                 diag/pad_tilt_deg: 0.6281
+              diag/anchor_distance: 0.0113
+                      diag/shaping: -0.0217
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 65536
+                    Iteration time: 3.22s
+                      Time elapsed: 00:00:14
+                               ETA: 00:04:30
+
+################################################################################
+                       [1m Learning iteration 4/80 [0m                        
+
+                       Computation: 5062 steps/s (collection: 1.311s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 41.0741
+               Mean surrogate loss: 0.0005
+                 Mean entropy loss: -1.7205
+                       Mean reward: -25.27
+               Mean episode length: 135.47
+                     reward/effect: 0.0000
+                     reward/region: 0.1978
+                       reward/mode: -0.2423
+                       reward/mech: -0.2024
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0742
+             reward/mode_saturated: 0.1992
+                     diag/touching: 0.5117
+             diag/contact_required: 0.9453
+          diag/inside_region_share: 0.3548
+               diag/contact_points: 0.5508
+            diag/peak_normal_force: 0.7620
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0100
+                     diag/slip_max: 0.0134
+               diag/mech_saturated: 0.0742
+               diag/mode_saturated: 0.1992
+               diag/exec_ang_speed: 0.3006
+               diag/exec_lin_speed: 0.0588
+                 diag/pad_tilt_deg: 0.7391
+              diag/anchor_distance: 0.0078
+                      diag/shaping: -0.0150
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 81920
+                    Iteration time: 3.24s
+                      Time elapsed: 00:00:17
+                               ETA: 00:04:23
+
+################################################################################
+                       [1m Learning iteration 5/80 [0m                        
+
+                       Computation: 5083 steps/s (collection: 1.290s, learning 1.932s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 60.5325
+               Mean surrogate loss: 0.0014
+                 Mean entropy loss: -1.7190
+                       Mean reward: -16.87
+               Mean episode length: 136.51
+                     reward/effect: 0.0000
+                     reward/region: 0.3647
+                       reward/mode: -0.3239
+                       reward/mech: -0.3136
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.1055
+             reward/mode_saturated: 0.2676
+                     diag/touching: 0.7246
+             diag/contact_required: 0.9648
+          diag/inside_region_share: 0.5447
+               diag/contact_points: 0.7559
+            diag/peak_normal_force: 1.1680
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0119
+                     diag/slip_max: 0.0156
+               diag/mech_saturated: 0.1055
+               diag/mode_saturated: 0.2676
+               diag/exec_ang_speed: 0.3687
+               diag/exec_lin_speed: 0.0588
+                 diag/pad_tilt_deg: 1.4610
+              diag/anchor_distance: 0.0070
+                      diag/shaping: -0.0134
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 98304
+                    Iteration time: 3.22s
+                      Time elapsed: 00:00:20
+                               ETA: 00:04:16
+
+################################################################################
+                       [1m Learning iteration 6/80 [0m                        
+
+                       Computation: 5070 steps/s (collection: 1.307s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 57.2085
+               Mean surrogate loss: 0.0078
+                 Mean entropy loss: -1.7225
+                       Mean reward: 33.17
+               Mean episode length: 113.98
+                     reward/effect: 0.0000
+                     reward/region: 0.2282
+                       reward/mode: -0.2581
+                       reward/mech: -0.2465
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0742
+             reward/mode_saturated: 0.2227
+                     diag/touching: 0.6426
+             diag/contact_required: 0.9043
+          diag/inside_region_share: 0.4354
+               diag/contact_points: 0.6895
+            diag/peak_normal_force: 1.0607
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0103
+                     diag/slip_max: 0.0148
+               diag/mech_saturated: 0.0742
+               diag/mode_saturated: 0.2227
+               diag/exec_ang_speed: 0.3641
+               diag/exec_lin_speed: 0.0819
+                 diag/pad_tilt_deg: 1.4029
+              diag/anchor_distance: 0.0095
+                      diag/shaping: -0.0183
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 114688
+                    Iteration time: 3.23s
+                      Time elapsed: 00:00:23
+                               ETA: 00:04:11
+
+################################################################################
+                       [1m Learning iteration 7/80 [0m                        
+
+                       Computation: 5059 steps/s (collection: 1.313s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 56.2570
+               Mean surrogate loss: 0.0143
+                 Mean entropy loss: -1.7235
+                       Mean reward: 16.65
+               Mean episode length: 120.61
+                     reward/effect: 0.0000
+                     reward/region: 0.2449
+                       reward/mode: -0.2594
+                       reward/mech: -0.2194
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0781
+             reward/mode_saturated: 0.2031
+                     diag/touching: 0.5684
+             diag/contact_required: 0.9277
+          diag/inside_region_share: 0.4066
+               diag/contact_points: 0.6133
+            diag/peak_normal_force: 0.9014
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0104
+                     diag/slip_max: 0.0133
+               diag/mech_saturated: 0.0781
+               diag/mode_saturated: 0.2031
+               diag/exec_ang_speed: 0.3126
+               diag/exec_lin_speed: 0.0667
+                 diag/pad_tilt_deg: 1.0409
+              diag/anchor_distance: 0.0075
+                      diag/shaping: -0.0145
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 131072
+                    Iteration time: 3.24s
+                      Time elapsed: 00:00:27
+                               ETA: 00:04:06
+
+################################################################################
+                       [1m Learning iteration 8/80 [0m                        
+
+                       Computation: 5078 steps/s (collection: 1.300s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 59.9378
+               Mean surrogate loss: 0.0087
+                 Mean entropy loss: -1.7236
+                       Mean reward: 16.49
+               Mean episode length: 121.42
+                     reward/effect: 0.0000
+                     reward/region: 0.4154
+                       reward/mode: -0.3415
+                       reward/mech: -0.2904
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0996
+             reward/mode_saturated: 0.2910
+                     diag/touching: 0.6562
+             diag/contact_required: 0.9453
+          diag/inside_region_share: 0.5358
+               diag/contact_points: 0.6836
+            diag/peak_normal_force: 1.0489
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0146
+                     diag/slip_max: 0.0173
+               diag/mech_saturated: 0.0996
+               diag/mode_saturated: 0.2910
+               diag/exec_ang_speed: 0.3240
+               diag/exec_lin_speed: 0.0753
+                 diag/pad_tilt_deg: 1.0116
+              diag/anchor_distance: 0.0071
+                      diag/shaping: -0.0136
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 147456
+                    Iteration time: 3.23s
+                      Time elapsed: 00:00:30
+                               ETA: 00:04:01
+
+################################################################################
+                       [1m Learning iteration 9/80 [0m                        
+
+                       Computation: 5044 steps/s (collection: 1.314s, learning 1.934s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 66.2021
+               Mean surrogate loss: -0.0019
+                 Mean entropy loss: -1.7240
+                       Mean reward: 41.35
+               Mean episode length: 105.93
+                     reward/effect: 0.0000
+                     reward/region: 0.3903
+                       reward/mode: -0.2986
+                       reward/mech: -0.2893
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0977
+             reward/mode_saturated: 0.2480
+                     diag/touching: 0.6660
+             diag/contact_required: 0.9316
+          diag/inside_region_share: 0.5281
+               diag/contact_points: 0.6992
+            diag/peak_normal_force: 1.0942
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0126
+                     diag/slip_max: 0.0158
+               diag/mech_saturated: 0.0977
+               diag/mode_saturated: 0.2480
+               diag/exec_ang_speed: 0.3394
+               diag/exec_lin_speed: 0.0746
+                 diag/pad_tilt_deg: 1.1859
+              diag/anchor_distance: 0.0070
+                      diag/shaping: -0.0134
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 163840
+                    Iteration time: 3.25s
+                      Time elapsed: 00:00:33
+                               ETA: 00:03:57
+
+################################################################################
+                       [1m Learning iteration 10/80 [0m                       
+
+                       Computation: 5070 steps/s (collection: 1.304s, learning 1.928s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 53.7450
+               Mean surrogate loss: 0.0044
+                 Mean entropy loss: -1.7323
+                       Mean reward: 51.46
+               Mean episode length: 101.46
+                     reward/effect: 0.0000
+                     reward/region: 0.3026
+                       reward/mode: -0.2504
+                       reward/mech: -0.2496
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0977
+             reward/mode_saturated: 0.2012
+                     diag/touching: 0.5664
+             diag/contact_required: 0.9062
+          diag/inside_region_share: 0.4345
+               diag/contact_points: 0.5898
+            diag/peak_normal_force: 0.9742
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0098
+                     diag/slip_max: 0.0122
+               diag/mech_saturated: 0.0977
+               diag/mode_saturated: 0.2012
+               diag/exec_ang_speed: 0.3305
+               diag/exec_lin_speed: 0.0696
+                 diag/pad_tilt_deg: 1.1243
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0122
+                       diag/failed: 0.0000
+                     diag/finished: 0.0176
+--------------------------------------------------------------------------------
+                   Total timesteps: 180224
+                    Iteration time: 3.23s
+                      Time elapsed: 00:00:36
+                               ETA: 00:03:53
+
+################################################################################
+                       [1m Learning iteration 11/80 [0m                       
+
+                       Computation: 5038 steps/s (collection: 1.319s, learning 1.933s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 60.0512
+               Mean surrogate loss: 0.0488
+                 Mean entropy loss: -1.7392
+                       Mean reward: 46.99
+               Mean episode length: 101.71
+                     reward/effect: 0.0000
+                     reward/region: 0.4362
+                       reward/mode: -0.2728
+                       reward/mech: -0.2880
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0996
+             reward/mode_saturated: 0.2109
+                     diag/touching: 0.6523
+             diag/contact_required: 0.9453
+          diag/inside_region_share: 0.5443
+               diag/contact_points: 0.6953
+            diag/peak_normal_force: 1.0587
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0110
+                     diag/slip_max: 0.0135
+               diag/mech_saturated: 0.0996
+               diag/mode_saturated: 0.2109
+               diag/exec_ang_speed: 0.3299
+               diag/exec_lin_speed: 0.0594
+                 diag/pad_tilt_deg: 1.1019
+              diag/anchor_distance: 0.0051
+                      diag/shaping: -0.0098
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 196608
+                    Iteration time: 3.25s
+                      Time elapsed: 00:00:39
+                               ETA: 00:03:49
+
+################################################################################
+                       [1m Learning iteration 12/80 [0m                       
+
+                       Computation: 5068 steps/s (collection: 1.306s, learning 1.927s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 70.0481
+               Mean surrogate loss: -0.0008
+                 Mean entropy loss: -1.7397
+                       Mean reward: 51.31
+               Mean episode length: 100.18
+                     reward/effect: 0.0000
+                     reward/region: 0.4571
+                       reward/mode: -0.3526
+                       reward/mech: -0.3656
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1309
+             reward/mode_saturated: 0.3086
+                     diag/touching: 0.7168
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.5869
+               diag/contact_points: 0.7598
+            diag/peak_normal_force: 1.2718
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0166
+                     diag/slip_max: 0.0199
+               diag/mech_saturated: 0.1309
+               diag/mode_saturated: 0.3086
+               diag/exec_ang_speed: 0.3648
+               diag/exec_lin_speed: 0.0785
+                 diag/pad_tilt_deg: 1.4602
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0114
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 212992
+                    Iteration time: 3.23s
+                      Time elapsed: 00:00:43
+                               ETA: 00:03:45
+
+################################################################################
+                       [1m Learning iteration 13/80 [0m                       
+
+                       Computation: 5083 steps/s (collection: 1.297s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 56.3072
+               Mean surrogate loss: -0.0009
+                 Mean entropy loss: -1.7466
+                       Mean reward: 51.65
+               Mean episode length: 96.29
+                     reward/effect: 0.0000
+                     reward/region: 0.3899
+                       reward/mode: -0.2826
+                       reward/mech: -0.2719
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1016
+             reward/mode_saturated: 0.2168
+                     diag/touching: 0.5996
+             diag/contact_required: 0.8984
+          diag/inside_region_share: 0.4948
+               diag/contact_points: 0.6348
+            diag/peak_normal_force: 1.0458
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0118
+                     diag/slip_max: 0.0145
+               diag/mech_saturated: 0.1016
+               diag/mode_saturated: 0.2168
+               diag/exec_ang_speed: 0.3306
+               diag/exec_lin_speed: 0.0776
+                 diag/pad_tilt_deg: 1.3248
+              diag/anchor_distance: 0.0064
+                      diag/shaping: -0.0122
+                       diag/failed: 0.0000
+                     diag/finished: 0.0195
+--------------------------------------------------------------------------------
+                   Total timesteps: 229376
+                    Iteration time: 3.22s
+                      Time elapsed: 00:00:46
+                               ETA: 00:03:42
+
+################################################################################
+                       [1m Learning iteration 14/80 [0m                       
+
+                       Computation: 5047 steps/s (collection: 1.321s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 64.5684
+               Mean surrogate loss: 0.0134
+                 Mean entropy loss: -1.7637
+                       Mean reward: 52.79
+               Mean episode length: 93.18
+                     reward/effect: 0.0000
+                     reward/region: 0.5321
+                       reward/mode: -0.3460
+                       reward/mech: -0.3384
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1172
+             reward/mode_saturated: 0.2773
+                     diag/touching: 0.7227
+             diag/contact_required: 0.9453
+          diag/inside_region_share: 0.6274
+               diag/contact_points: 0.7754
+            diag/peak_normal_force: 1.1773
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0146
+                     diag/slip_max: 0.0168
+               diag/mech_saturated: 0.1172
+               diag/mode_saturated: 0.2773
+               diag/exec_ang_speed: 0.3504
+               diag/exec_lin_speed: 0.0684
+                 diag/pad_tilt_deg: 1.1845
+              diag/anchor_distance: 0.0047
+                      diag/shaping: -0.0091
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 245760
+                    Iteration time: 3.25s
+                      Time elapsed: 00:00:49
+                               ETA: 00:03:38
+
+################################################################################
+                       [1m Learning iteration 15/80 [0m                       
+
+                       Computation: 5093 steps/s (collection: 1.293s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 73.9602
+               Mean surrogate loss: 0.0115
+                 Mean entropy loss: -1.7649
+                       Mean reward: 53.26
+               Mean episode length: 91.87
+                     reward/effect: 0.0000
+                     reward/region: 0.5363
+                       reward/mode: -0.3255
+                       reward/mech: -0.3701
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1406
+             reward/mode_saturated: 0.2754
+                     diag/touching: 0.7090
+             diag/contact_required: 0.9297
+          diag/inside_region_share: 0.6226
+               diag/contact_points: 0.7402
+            diag/peak_normal_force: 1.2945
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0152
+                     diag/slip_max: 0.0174
+               diag/mech_saturated: 0.1406
+               diag/mode_saturated: 0.2754
+               diag/exec_ang_speed: 0.3721
+               diag/exec_lin_speed: 0.0777
+                 diag/pad_tilt_deg: 1.3360
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0113
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 262144
+                    Iteration time: 3.22s
+                      Time elapsed: 00:00:52
+                               ETA: 00:03:34
+
+################################################################################
+                       [1m Learning iteration 16/80 [0m                       
+
+                       Computation: 5099 steps/s (collection: 1.289s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 52.9023
+               Mean surrogate loss: -0.0008
+                 Mean entropy loss: -1.7683
+                       Mean reward: 57.73
+               Mean episode length: 91.34
+                     reward/effect: 0.0000
+                     reward/region: 0.3636
+                       reward/mode: -0.2547
+                       reward/mech: -0.2420
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0762
+             reward/mode_saturated: 0.2012
+                     diag/touching: 0.5820
+             diag/contact_required: 0.8926
+          diag/inside_region_share: 0.4728
+               diag/contact_points: 0.6172
+            diag/peak_normal_force: 0.8856
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0106
+                     diag/slip_max: 0.0139
+               diag/mech_saturated: 0.0762
+               diag/mode_saturated: 0.2012
+               diag/exec_ang_speed: 0.3119
+               diag/exec_lin_speed: 0.0799
+                 diag/pad_tilt_deg: 0.8689
+              diag/anchor_distance: 0.0069
+                      diag/shaping: -0.0132
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 278528
+                    Iteration time: 3.21s
+                      Time elapsed: 00:00:56
+                               ETA: 00:03:31
+
+################################################################################
+                       [1m Learning iteration 17/80 [0m                       
+
+                       Computation: 5106 steps/s (collection: 1.284s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 68.5703
+               Mean surrogate loss: 0.0035
+                 Mean entropy loss: -1.7753
+                       Mean reward: 56.73
+               Mean episode length: 91.83
+                     reward/effect: 0.0000
+                     reward/region: 0.5641
+                       reward/mode: -0.3142
+                       reward/mech: -0.3366
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1016
+             reward/mode_saturated: 0.2441
+                     diag/touching: 0.7480
+             diag/contact_required: 0.9316
+          diag/inside_region_share: 0.6561
+               diag/contact_points: 0.8066
+            diag/peak_normal_force: 1.2034
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0130
+                     diag/slip_max: 0.0153
+               diag/mech_saturated: 0.1016
+               diag/mode_saturated: 0.2441
+               diag/exec_ang_speed: 0.3344
+               diag/exec_lin_speed: 0.0682
+                 diag/pad_tilt_deg: 1.0271
+              diag/anchor_distance: 0.0052
+                      diag/shaping: -0.0100
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 294912
+                    Iteration time: 3.21s
+                      Time elapsed: 00:00:59
+                               ETA: 00:03:27
+
+################################################################################
+                       [1m Learning iteration 18/80 [0m                       
+
+                       Computation: 5110 steps/s (collection: 1.282s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 73.7208
+               Mean surrogate loss: 0.0277
+                 Mean entropy loss: -1.7784
+                       Mean reward: 56.42
+               Mean episode length: 91.09
+                     reward/effect: 0.0000
+                     reward/region: 0.4495
+                       reward/mode: -0.2946
+                       reward/mech: -0.3007
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0996
+             reward/mode_saturated: 0.2539
+                     diag/touching: 0.7031
+             diag/contact_required: 0.8789
+          diag/inside_region_share: 0.5763
+               diag/contact_points: 0.7500
+            diag/peak_normal_force: 1.1901
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0124
+                     diag/slip_max: 0.0159
+               diag/mech_saturated: 0.0996
+               diag/mode_saturated: 0.2539
+               diag/exec_ang_speed: 0.3500
+               diag/exec_lin_speed: 0.0796
+                 diag/pad_tilt_deg: 1.1579
+              diag/anchor_distance: 0.0064
+                      diag/shaping: -0.0123
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 311296
+                    Iteration time: 3.21s
+                      Time elapsed: 00:01:02
+                               ETA: 00:03:23
+
+################################################################################
+                       [1m Learning iteration 19/80 [0m                       
+
+                       Computation: 5101 steps/s (collection: 1.287s, learning 1.924s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 50.8062
+               Mean surrogate loss: 0.0112
+                 Mean entropy loss: -1.7786
+                       Mean reward: 59.22
+               Mean episode length: 90.40
+                     reward/effect: 0.0000
+                     reward/region: 0.4332
+                       reward/mode: -0.3178
+                       reward/mech: -0.2599
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0898
+             reward/mode_saturated: 0.2441
+                     diag/touching: 0.6152
+             diag/contact_required: 0.9102
+          diag/inside_region_share: 0.5242
+               diag/contact_points: 0.6602
+            diag/peak_normal_force: 0.8883
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0125
+                     diag/slip_max: 0.0155
+               diag/mech_saturated: 0.0898
+               diag/mode_saturated: 0.2441
+               diag/exec_ang_speed: 0.3099
+               diag/exec_lin_speed: 0.0751
+                 diag/pad_tilt_deg: 0.8474
+              diag/anchor_distance: 0.0058
+                      diag/shaping: -0.0112
+                       diag/failed: 0.0000
+                     diag/finished: 0.0195
+--------------------------------------------------------------------------------
+                   Total timesteps: 327680
+                    Iteration time: 3.21s
+                      Time elapsed: 00:01:05
+                               ETA: 00:03:20
+
+################################################################################
+                       [1m Learning iteration 20/80 [0m                       
+
+                       Computation: 5082 steps/s (collection: 1.294s, learning 1.930s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 77.0704
+               Mean surrogate loss: 0.0310
+                 Mean entropy loss: -1.7788
+                       Mean reward: 56.98
+               Mean episode length: 90.57
+                     reward/effect: 0.0000
+                     reward/region: 0.5992
+                       reward/mode: -0.3778
+                       reward/mech: -0.3535
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1113
+             reward/mode_saturated: 0.3027
+                     diag/touching: 0.7598
+             diag/contact_required: 0.9219
+          diag/inside_region_share: 0.6795
+               diag/contact_points: 0.8027
+            diag/peak_normal_force: 1.2088
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0157
+                     diag/slip_max: 0.0176
+               diag/mech_saturated: 0.1113
+               diag/mode_saturated: 0.3027
+               diag/exec_ang_speed: 0.3451
+               diag/exec_lin_speed: 0.0797
+                 diag/pad_tilt_deg: 1.0997
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0113
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 344064
+                    Iteration time: 3.22s
+                      Time elapsed: 00:01:08
+                               ETA: 00:03:16
+
+################################################################################
+                       [1m Learning iteration 21/80 [0m                       
+
+                       Computation: 5058 steps/s (collection: 1.314s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 58.0131
+               Mean surrogate loss: -0.0032
+                 Mean entropy loss: -1.7794
+                       Mean reward: 58.53
+               Mean episode length: 90.16
+                     reward/effect: 0.0000
+                     reward/region: 0.4051
+                       reward/mode: -0.3221
+                       reward/mech: -0.2670
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0938
+             reward/mode_saturated: 0.2617
+                     diag/touching: 0.6367
+             diag/contact_required: 0.8770
+          diag/inside_region_share: 0.5209
+               diag/contact_points: 0.6797
+            diag/peak_normal_force: 1.0111
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0138
+                     diag/slip_max: 0.0170
+               diag/mech_saturated: 0.0938
+               diag/mode_saturated: 0.2617
+               diag/exec_ang_speed: 0.3273
+               diag/exec_lin_speed: 0.0928
+                 diag/pad_tilt_deg: 0.9807
+              diag/anchor_distance: 0.0070
+                      diag/shaping: -0.0135
+                       diag/failed: 0.0000
+                     diag/finished: 0.0176
+--------------------------------------------------------------------------------
+                   Total timesteps: 360448
+                    Iteration time: 3.24s
+                      Time elapsed: 00:01:12
+                               ETA: 00:03:13
+
+################################################################################
+                       [1m Learning iteration 22/80 [0m                       
+
+                       Computation: 5068 steps/s (collection: 1.306s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 51.7044
+               Mean surrogate loss: 0.0141
+                 Mean entropy loss: -1.7835
+                       Mean reward: 53.98
+               Mean episode length: 90.30
+                     reward/effect: 0.0000
+                     reward/region: 0.4470
+                       reward/mode: -0.3134
+                       reward/mech: -0.2446
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0664
+             reward/mode_saturated: 0.2461
+                     diag/touching: 0.6367
+             diag/contact_required: 0.9121
+          diag/inside_region_share: 0.5418
+               diag/contact_points: 0.6855
+            diag/peak_normal_force: 0.8860
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0132
+                     diag/slip_max: 0.0160
+               diag/mech_saturated: 0.0664
+               diag/mode_saturated: 0.2461
+               diag/exec_ang_speed: 0.2883
+               diag/exec_lin_speed: 0.0718
+                 diag/pad_tilt_deg: 0.8796
+              diag/anchor_distance: 0.0054
+                      diag/shaping: -0.0104
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 376832
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:15
+                               ETA: 00:03:10
+
+################################################################################
+                       [1m Learning iteration 23/80 [0m                       
+
+                       Computation: 5053 steps/s (collection: 1.306s, learning 1.936s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 73.5479
+               Mean surrogate loss: 0.0341
+                 Mean entropy loss: -1.7846
+                       Mean reward: 57.10
+               Mean episode length: 91.21
+                     reward/effect: 0.0000
+                     reward/region: 0.5626
+                       reward/mode: -0.3765
+                       reward/mech: -0.3194
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0879
+             reward/mode_saturated: 0.3027
+                     diag/touching: 0.7480
+             diag/contact_required: 0.9238
+          diag/inside_region_share: 0.6553
+               diag/contact_points: 0.7891
+            diag/peak_normal_force: 1.1342
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0152
+                     diag/slip_max: 0.0176
+               diag/mech_saturated: 0.0879
+               diag/mode_saturated: 0.3027
+               diag/exec_ang_speed: 0.3155
+               diag/exec_lin_speed: 0.0730
+                 diag/pad_tilt_deg: 1.1678
+              diag/anchor_distance: 0.0055
+                      diag/shaping: -0.0105
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 393216
+                    Iteration time: 3.24s
+                      Time elapsed: 00:01:18
+                               ETA: 00:03:06
+
+################################################################################
+                       [1m Learning iteration 24/80 [0m                       
+
+                       Computation: 5038 steps/s (collection: 1.316s, learning 1.936s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 56.4581
+               Mean surrogate loss: 0.0187
+                 Mean entropy loss: -1.7848
+                       Mean reward: 58.24
+               Mean episode length: 90.29
+                     reward/effect: 0.0000
+                     reward/region: 0.4021
+                       reward/mode: -0.3091
+                       reward/mech: -0.2275
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0547
+             reward/mode_saturated: 0.2617
+                     diag/touching: 0.5996
+             diag/contact_required: 0.8945
+          diag/inside_region_share: 0.5009
+               diag/contact_points: 0.6328
+            diag/peak_normal_force: 0.8865
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0129
+                     diag/slip_max: 0.0159
+               diag/mech_saturated: 0.0547
+               diag/mode_saturated: 0.2617
+               diag/exec_ang_speed: 0.3074
+               diag/exec_lin_speed: 0.0809
+                 diag/pad_tilt_deg: 1.0041
+              diag/anchor_distance: 0.0065
+                      diag/shaping: -0.0125
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 409600
+                    Iteration time: 3.25s
+                      Time elapsed: 00:01:21
+                               ETA: 00:03:03
+
+################################################################################
+                       [1m Learning iteration 25/80 [0m                       
+
+                       Computation: 5072 steps/s (collection: 1.305s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 60.2971
+               Mean surrogate loss: -0.0020
+                 Mean entropy loss: -1.7877
+                       Mean reward: 56.99
+               Mean episode length: 90.96
+                     reward/effect: 0.0000
+                     reward/region: 0.4840
+                       reward/mode: -0.3802
+                       reward/mech: -0.2913
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0820
+             reward/mode_saturated: 0.2910
+                     diag/touching: 0.6973
+             diag/contact_required: 0.9141
+          diag/inside_region_share: 0.5906
+               diag/contact_points: 0.7344
+            diag/peak_normal_force: 1.0402
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0143
+                     diag/slip_max: 0.0170
+               diag/mech_saturated: 0.0820
+               diag/mode_saturated: 0.2910
+               diag/exec_ang_speed: 0.3138
+               diag/exec_lin_speed: 0.0728
+                 diag/pad_tilt_deg: 1.0347
+              diag/anchor_distance: 0.0053
+                      diag/shaping: -0.0101
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 425984
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:25
+                               ETA: 00:03:00
+
+################################################################################
+                       [1m Learning iteration 26/80 [0m                       
+
+                       Computation: 5076 steps/s (collection: 1.303s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 66.7696
+               Mean surrogate loss: 0.0218
+                 Mean entropy loss: -1.8045
+                       Mean reward: 57.55
+               Mean episode length: 89.34
+                     reward/effect: 0.0000
+                     reward/region: 0.5065
+                       reward/mode: -0.3320
+                       reward/mech: -0.3525
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1133
+             reward/mode_saturated: 0.2500
+                     diag/touching: 0.7520
+             diag/contact_required: 0.9160
+          diag/inside_region_share: 0.6292
+               diag/contact_points: 0.7988
+            diag/peak_normal_force: 1.3015
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0131
+                     diag/slip_max: 0.0164
+               diag/mech_saturated: 0.1133
+               diag/mode_saturated: 0.2500
+               diag/exec_ang_speed: 0.3452
+               diag/exec_lin_speed: 0.0809
+                 diag/pad_tilt_deg: 1.0528
+              diag/anchor_distance: 0.0061
+                      diag/shaping: -0.0118
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 442368
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:28
+                               ETA: 00:02:56
+
+################################################################################
+                       [1m Learning iteration 27/80 [0m                       
+
+                       Computation: 4900 steps/s (collection: 1.413s, learning 1.930s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 49.0467
+               Mean surrogate loss: 0.0187
+                 Mean entropy loss: -1.8067
+                       Mean reward: 53.26
+               Mean episode length: 88.55
+                     reward/effect: 0.0000
+                     reward/region: 0.3822
+                       reward/mode: -0.2860
+                       reward/mech: -0.2881
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0977
+             reward/mode_saturated: 0.2344
+                     diag/touching: 0.6543
+             diag/contact_required: 0.8887
+          diag/inside_region_share: 0.5183
+               diag/contact_points: 0.6992
+            diag/peak_normal_force: 1.1560
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0128
+                     diag/slip_max: 0.0158
+               diag/mech_saturated: 0.0977
+               diag/mode_saturated: 0.2344
+               diag/exec_ang_speed: 0.3153
+               diag/exec_lin_speed: 0.0807
+                 diag/pad_tilt_deg: 0.7688
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0122
+                       diag/failed: 0.0000
+                     diag/finished: 0.0215
+--------------------------------------------------------------------------------
+                   Total timesteps: 458752
+                    Iteration time: 3.34s
+                      Time elapsed: 00:01:31
+                               ETA: 00:02:53
+
+################################################################################
+                       [1m Learning iteration 28/80 [0m                       
+
+                       Computation: 4994 steps/s (collection: 1.355s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 64.9648
+               Mean surrogate loss: -0.0008
+                 Mean entropy loss: -1.8067
+                       Mean reward: 54.29
+               Mean episode length: 87.70
+                     reward/effect: 0.0000
+                     reward/region: 0.5644
+                       reward/mode: -0.3538
+                       reward/mech: -0.3137
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0957
+             reward/mode_saturated: 0.2715
+                     diag/touching: 0.7363
+             diag/contact_required: 0.9336
+          diag/inside_region_share: 0.6504
+               diag/contact_points: 0.7676
+            diag/peak_normal_force: 1.1848
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0142
+                     diag/slip_max: 0.0157
+               diag/mech_saturated: 0.0957
+               diag/mode_saturated: 0.2715
+               diag/exec_ang_speed: 0.3133
+               diag/exec_lin_speed: 0.0665
+                 diag/pad_tilt_deg: 0.9352
+              diag/anchor_distance: 0.0048
+                      diag/shaping: -0.0093
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 475136
+                    Iteration time: 3.28s
+                      Time elapsed: 00:01:34
+                               ETA: 00:02:50
+
+################################################################################
+                       [1m Learning iteration 29/80 [0m                       
+
+                       Computation: 5055 steps/s (collection: 1.315s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 72.9121
+               Mean surrogate loss: 0.0024
+                 Mean entropy loss: -1.8066
+                       Mean reward: 59.40
+               Mean episode length: 86.64
+                     reward/effect: 0.0000
+                     reward/region: 0.5270
+                       reward/mode: -0.2868
+                       reward/mech: -0.3158
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1035
+             reward/mode_saturated: 0.2305
+                     diag/touching: 0.7324
+             diag/contact_required: 0.8906
+          diag/inside_region_share: 0.6297
+               diag/contact_points: 0.7852
+            diag/peak_normal_force: 1.2217
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0119
+                     diag/slip_max: 0.0147
+               diag/mech_saturated: 0.1035
+               diag/mode_saturated: 0.2305
+               diag/exec_ang_speed: 0.3360
+               diag/exec_lin_speed: 0.0784
+                 diag/pad_tilt_deg: 1.0355
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0113
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 491520
+                    Iteration time: 3.24s
+                      Time elapsed: 00:01:38
+                               ETA: 00:02:46
+
+################################################################################
+                       [1m Learning iteration 30/80 [0m                       
+
+                       Computation: 5057 steps/s (collection: 1.313s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 57.4625
+               Mean surrogate loss: 0.0005
+                 Mean entropy loss: -1.8055
+                       Mean reward: 61.05
+               Mean episode length: 86.81
+                     reward/effect: 0.0000
+                     reward/region: 0.4896
+                       reward/mode: -0.2657
+                       reward/mech: -0.2652
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0703
+             reward/mode_saturated: 0.2070
+                     diag/touching: 0.6602
+             diag/contact_required: 0.9160
+          diag/inside_region_share: 0.5749
+               diag/contact_points: 0.6973
+            diag/peak_normal_force: 0.9961
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0109
+                     diag/slip_max: 0.0130
+               diag/mech_saturated: 0.0703
+               diag/mode_saturated: 0.2070
+               diag/exec_ang_speed: 0.3055
+               diag/exec_lin_speed: 0.0701
+                 diag/pad_tilt_deg: 1.0013
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0113
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 507904
+                    Iteration time: 3.24s
+                      Time elapsed: 00:01:41
+                               ETA: 00:02:43
+
+################################################################################
+                       [1m Learning iteration 31/80 [0m                       
+
+                       Computation: 5079 steps/s (collection: 1.301s, learning 1.925s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 74.8347
+               Mean surrogate loss: 0.0106
+                 Mean entropy loss: -1.8097
+                       Mean reward: 61.84
+               Mean episode length: 86.51
+                     reward/effect: 0.0000
+                     reward/region: 0.5591
+                       reward/mode: -0.3531
+                       reward/mech: -0.3226
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0840
+             reward/mode_saturated: 0.2793
+                     diag/touching: 0.7676
+             diag/contact_required: 0.9160
+          diag/inside_region_share: 0.6633
+               diag/contact_points: 0.8008
+            diag/peak_normal_force: 1.1495
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0141
+                     diag/slip_max: 0.0168
+               diag/mech_saturated: 0.0840
+               diag/mode_saturated: 0.2793
+               diag/exec_ang_speed: 0.3264
+               diag/exec_lin_speed: 0.0695
+                 diag/pad_tilt_deg: 1.1043
+              diag/anchor_distance: 0.0055
+                      diag/shaping: -0.0106
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 524288
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:44
+                               ETA: 00:02:40
+
+################################################################################
+                       [1m Learning iteration 32/80 [0m                       
+
+                       Computation: 5051 steps/s (collection: 1.307s, learning 1.936s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 62.7781
+               Mean surrogate loss: 0.0253
+                 Mean entropy loss: -1.8122
+                       Mean reward: 61.81
+               Mean episode length: 88.34
+                     reward/effect: 0.0000
+                     reward/region: 0.4598
+                       reward/mode: -0.2664
+                       reward/mech: -0.2483
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0664
+             reward/mode_saturated: 0.2012
+                     diag/touching: 0.6621
+             diag/contact_required: 0.8828
+          diag/inside_region_share: 0.5610
+               diag/contact_points: 0.7246
+            diag/peak_normal_force: 0.9743
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0108
+                     diag/slip_max: 0.0135
+               diag/mech_saturated: 0.0664
+               diag/mode_saturated: 0.2012
+               diag/exec_ang_speed: 0.3066
+               diag/exec_lin_speed: 0.0776
+                 diag/pad_tilt_deg: 0.9315
+              diag/anchor_distance: 0.0071
+                      diag/shaping: -0.0137
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 540672
+                    Iteration time: 3.24s
+                      Time elapsed: 00:01:47
+                               ETA: 00:02:37
+
+################################################################################
+                       [1m Learning iteration 33/80 [0m                       
+
+                       Computation: 5071 steps/s (collection: 1.305s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 55.8976
+               Mean surrogate loss: 0.0008
+                 Mean entropy loss: -1.8133
+                       Mean reward: 61.64
+               Mean episode length: 87.95
+                     reward/effect: 0.0000
+                     reward/region: 0.4509
+                       reward/mode: -0.2712
+                       reward/mech: -0.2548
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0801
+             reward/mode_saturated: 0.2051
+                     diag/touching: 0.6426
+             diag/contact_required: 0.9121
+          diag/inside_region_share: 0.5467
+               diag/contact_points: 0.6816
+            diag/peak_normal_force: 0.9068
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0111
+                     diag/slip_max: 0.0130
+               diag/mech_saturated: 0.0801
+               diag/mode_saturated: 0.2051
+               diag/exec_ang_speed: 0.2935
+               diag/exec_lin_speed: 0.0674
+                 diag/pad_tilt_deg: 0.8473
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0120
+                       diag/failed: 0.0000
+                     diag/finished: 0.0195
+--------------------------------------------------------------------------------
+                   Total timesteps: 557056
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:51
+                               ETA: 00:02:33
+
+################################################################################
+                       [1m Learning iteration 34/80 [0m                       
+
+                       Computation: 5069 steps/s (collection: 1.305s, learning 1.927s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 73.0509
+               Mean surrogate loss: 0.0013
+                 Mean entropy loss: -1.8223
+                       Mean reward: 59.07
+               Mean episode length: 90.41
+                     reward/effect: 0.0000
+                     reward/region: 0.5123
+                       reward/mode: -0.3283
+                       reward/mech: -0.2851
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0879
+             reward/mode_saturated: 0.2461
+                     diag/touching: 0.7324
+             diag/contact_required: 0.9375
+          diag/inside_region_share: 0.6223
+               diag/contact_points: 0.7891
+            diag/peak_normal_force: 1.0557
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0121
+                     diag/slip_max: 0.0148
+               diag/mech_saturated: 0.0879
+               diag/mode_saturated: 0.2461
+               diag/exec_ang_speed: 0.3168
+               diag/exec_lin_speed: 0.0646
+                 diag/pad_tilt_deg: 1.0981
+              diag/anchor_distance: 0.0061
+                      diag/shaping: -0.0118
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 573440
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:54
+                               ETA: 00:02:30
+
+################################################################################
+                       [1m Learning iteration 35/80 [0m                       
+
+                       Computation: 5066 steps/s (collection: 1.304s, learning 1.930s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 58.9759
+               Mean surrogate loss: 0.0225
+                 Mean entropy loss: -1.8336
+                       Mean reward: 58.72
+               Mean episode length: 89.68
+                     reward/effect: 0.0000
+                     reward/region: 0.3865
+                       reward/mode: -0.2838
+                       reward/mech: -0.2429
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0605
+             reward/mode_saturated: 0.2285
+                     diag/touching: 0.6523
+             diag/contact_required: 0.8867
+          diag/inside_region_share: 0.5194
+               diag/contact_points: 0.6914
+            diag/peak_normal_force: 0.9465
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0108
+                     diag/slip_max: 0.0142
+               diag/mech_saturated: 0.0605
+               diag/mode_saturated: 0.2285
+               diag/exec_ang_speed: 0.2980
+               diag/exec_lin_speed: 0.0741
+                 diag/pad_tilt_deg: 1.0284
+              diag/anchor_distance: 0.0073
+                      diag/shaping: -0.0139
+                       diag/failed: 0.0000
+                     diag/finished: 0.0234
+--------------------------------------------------------------------------------
+                   Total timesteps: 589824
+                    Iteration time: 3.23s
+                      Time elapsed: 00:01:57
+                               ETA: 00:02:27
+
+################################################################################
+                       [1m Learning iteration 36/80 [0m                       
+
+                       Computation: 5078 steps/s (collection: 1.300s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 55.6565
+               Mean surrogate loss: -0.0011
+                 Mean entropy loss: -1.8341
+                       Mean reward: 54.27
+               Mean episode length: 91.71
+                     reward/effect: 0.0000
+                     reward/region: 0.4991
+                       reward/mode: -0.3146
+                       reward/mech: -0.2402
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0488
+             reward/mode_saturated: 0.2441
+                     diag/touching: 0.6660
+             diag/contact_required: 0.9082
+          diag/inside_region_share: 0.5825
+               diag/contact_points: 0.7031
+            diag/peak_normal_force: 0.8873
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0129
+                     diag/slip_max: 0.0151
+               diag/mech_saturated: 0.0488
+               diag/mode_saturated: 0.2441
+               diag/exec_ang_speed: 0.2879
+               diag/exec_lin_speed: 0.0701
+                 diag/pad_tilt_deg: 0.8952
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0121
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 606208
+                    Iteration time: 3.23s
+                      Time elapsed: 00:02:00
+                               ETA: 00:02:23
+
+################################################################################
+                       [1m Learning iteration 37/80 [0m                       
+
+                       Computation: 5068 steps/s (collection: 1.298s, learning 1.935s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 61.9445
+               Mean surrogate loss: -0.0008
+                 Mean entropy loss: -1.8395
+                       Mean reward: 61.57
+               Mean episode length: 89.55
+                     reward/effect: 0.0000
+                     reward/region: 0.5027
+                       reward/mode: -0.3385
+                       reward/mech: -0.2759
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0703
+             reward/mode_saturated: 0.2656
+                     diag/touching: 0.7109
+             diag/contact_required: 0.9336
+          diag/inside_region_share: 0.6068
+               diag/contact_points: 0.7480
+            diag/peak_normal_force: 0.9650
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0130
+                     diag/slip_max: 0.0156
+               diag/mech_saturated: 0.0703
+               diag/mode_saturated: 0.2656
+               diag/exec_ang_speed: 0.3113
+               diag/exec_lin_speed: 0.0627
+                 diag/pad_tilt_deg: 1.0550
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0121
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 622592
+                    Iteration time: 3.23s
+                      Time elapsed: 00:02:04
+                               ETA: 00:02:20
+
+################################################################################
+                       [1m Learning iteration 38/80 [0m                       
+
+                       Computation: 5069 steps/s (collection: 1.305s, learning 1.927s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 55.7081
+               Mean surrogate loss: 0.0012
+                 Mean entropy loss: -1.8602
+                       Mean reward: 61.36
+               Mean episode length: 92.12
+                     reward/effect: 0.0000
+                     reward/region: 0.4014
+                       reward/mode: -0.2821
+                       reward/mech: -0.2274
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0449
+             reward/mode_saturated: 0.2305
+                     diag/touching: 0.6250
+             diag/contact_required: 0.8828
+          diag/inside_region_share: 0.5132
+               diag/contact_points: 0.6680
+            diag/peak_normal_force: 0.8233
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0106
+                     diag/slip_max: 0.0134
+               diag/mech_saturated: 0.0449
+               diag/mode_saturated: 0.2305
+               diag/exec_ang_speed: 0.2993
+               diag/exec_lin_speed: 0.0777
+                 diag/pad_tilt_deg: 1.0399
+              diag/anchor_distance: 0.0074
+                      diag/shaping: -0.0142
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 638976
+                    Iteration time: 3.23s
+                      Time elapsed: 00:02:07
+                               ETA: 00:02:17
+
+################################################################################
+                       [1m Learning iteration 39/80 [0m                       
+
+                       Computation: 5086 steps/s (collection: 1.294s, learning 1.927s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 58.3577
+               Mean surrogate loss: 0.0018
+                 Mean entropy loss: -1.8742
+                       Mean reward: 61.02
+               Mean episode length: 92.42
+                     reward/effect: 0.0000
+                     reward/region: 0.5257
+                       reward/mode: -0.3217
+                       reward/mech: -0.2639
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0547
+             reward/mode_saturated: 0.2520
+                     diag/touching: 0.6953
+             diag/contact_required: 0.9160
+          diag/inside_region_share: 0.6105
+               diag/contact_points: 0.7305
+            diag/peak_normal_force: 0.9540
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0120
+                     diag/slip_max: 0.0141
+               diag/mech_saturated: 0.0547
+               diag/mode_saturated: 0.2520
+               diag/exec_ang_speed: 0.3084
+               diag/exec_lin_speed: 0.0642
+                 diag/pad_tilt_deg: 1.0386
+              diag/anchor_distance: 0.0056
+                      diag/shaping: -0.0108
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 655360
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:10
+                               ETA: 00:02:13
+
+################################################################################
+                       [1m Learning iteration 40/80 [0m                       
+
+                       Computation: 5086 steps/s (collection: 1.295s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 65.9868
+               Mean surrogate loss: -0.0011
+                 Mean entropy loss: -1.8836
+                       Mean reward: 64.00
+               Mean episode length: 91.19
+                     reward/effect: 0.0000
+                     reward/region: 0.5511
+                       reward/mode: -0.2956
+                       reward/mech: -0.2934
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0664
+             reward/mode_saturated: 0.2402
+                     diag/touching: 0.7207
+             diag/contact_required: 0.9102
+          diag/inside_region_share: 0.6359
+               diag/contact_points: 0.7637
+            diag/peak_normal_force: 1.0489
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0119
+                     diag/slip_max: 0.0137
+               diag/mech_saturated: 0.0664
+               diag/mode_saturated: 0.2402
+               diag/exec_ang_speed: 0.3279
+               diag/exec_lin_speed: 0.0725
+                 diag/pad_tilt_deg: 1.1001
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0122
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 671744
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:13
+                               ETA: 00:02:10
+
+################################################################################
+                       [1m Learning iteration 41/80 [0m                       
+
+                       Computation: 5087 steps/s (collection: 1.294s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 48.0378
+               Mean surrogate loss: 0.0050
+                 Mean entropy loss: -1.8952
+                       Mean reward: 67.68
+               Mean episode length: 88.96
+                     reward/effect: 0.0000
+                     reward/region: 0.4463
+                       reward/mode: -0.2538
+                       reward/mech: -0.2474
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0547
+             reward/mode_saturated: 0.1992
+                     diag/touching: 0.6191
+             diag/contact_required: 0.9004
+          diag/inside_region_share: 0.5327
+               diag/contact_points: 0.6543
+            diag/peak_normal_force: 0.8558
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0094
+                     diag/slip_max: 0.0116
+               diag/mech_saturated: 0.0547
+               diag/mode_saturated: 0.1992
+               diag/exec_ang_speed: 0.3058
+               diag/exec_lin_speed: 0.0742
+                 diag/pad_tilt_deg: 0.9621
+              diag/anchor_distance: 0.0068
+                      diag/shaping: -0.0131
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 688128
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:16
+                               ETA: 00:02:07
+
+################################################################################
+                       [1m Learning iteration 42/80 [0m                       
+
+                       Computation: 5084 steps/s (collection: 1.296s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 56.9372
+               Mean surrogate loss: 0.0034
+                 Mean entropy loss: -1.9064
+                       Mean reward: 64.43
+               Mean episode length: 90.97
+                     reward/effect: 0.0000
+                     reward/region: 0.5176
+                       reward/mode: -0.3133
+                       reward/mech: -0.2559
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0508
+             reward/mode_saturated: 0.2520
+                     diag/touching: 0.6562
+             diag/contact_required: 0.9492
+          diag/inside_region_share: 0.5869
+               diag/contact_points: 0.6914
+            diag/peak_normal_force: 0.8782
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0115
+                     diag/slip_max: 0.0131
+               diag/mech_saturated: 0.0508
+               diag/mode_saturated: 0.2520
+               diag/exec_ang_speed: 0.3140
+               diag/exec_lin_speed: 0.0586
+                 diag/pad_tilt_deg: 1.0305
+              diag/anchor_distance: 0.0054
+                      diag/shaping: -0.0105
+                       diag/failed: 0.0000
+                     diag/finished: 0.0020
+--------------------------------------------------------------------------------
+                   Total timesteps: 704512
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:20
+                               ETA: 00:02:03
+
+################################################################################
+                       [1m Learning iteration 43/80 [0m                       
+
+                       Computation: 5108 steps/s (collection: 1.282s, learning 1.926s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 53.9571
+               Mean surrogate loss: 0.0023
+                 Mean entropy loss: -1.9226
+                       Mean reward: 66.94
+               Mean episode length: 92.40
+                     reward/effect: 0.0000
+                     reward/region: 0.4723
+                       reward/mode: -0.2931
+                       reward/mech: -0.2333
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0527
+             reward/mode_saturated: 0.2383
+                     diag/touching: 0.6328
+             diag/contact_required: 0.9277
+          diag/inside_region_share: 0.5525
+               diag/contact_points: 0.6582
+            diag/peak_normal_force: 0.8472
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0117
+                     diag/slip_max: 0.0135
+               diag/mech_saturated: 0.0527
+               diag/mode_saturated: 0.2383
+               diag/exec_ang_speed: 0.3247
+               diag/exec_lin_speed: 0.0636
+                 diag/pad_tilt_deg: 1.2710
+              diag/anchor_distance: 0.0064
+                      diag/shaping: -0.0123
+                       diag/failed: 0.0000
+                     diag/finished: 0.0195
+--------------------------------------------------------------------------------
+                   Total timesteps: 720896
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:23
+                               ETA: 00:02:00
+
+################################################################################
+                       [1m Learning iteration 44/80 [0m                       
+
+                       Computation: 5094 steps/s (collection: 1.289s, learning 1.927s)
+             Mean action noise std: 0.20
+          Mean value_function loss: 42.0659
+               Mean surrogate loss: 0.0004
+                 Mean entropy loss: -1.9433
+                       Mean reward: 64.31
+               Mean episode length: 96.02
+                     reward/effect: 0.0000
+                     reward/region: 0.3695
+                       reward/mode: -0.2425
+                       reward/mech: -0.1966
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0469
+             reward/mode_saturated: 0.1699
+                     diag/touching: 0.5234
+             diag/contact_required: 0.9238
+          diag/inside_region_share: 0.4465
+               diag/contact_points: 0.5391
+            diag/peak_normal_force: 0.6770
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0083
+                     diag/slip_max: 0.0100
+               diag/mech_saturated: 0.0469
+               diag/mode_saturated: 0.1699
+               diag/exec_ang_speed: 0.3119
+               diag/exec_lin_speed: 0.0621
+                 diag/pad_tilt_deg: 1.0704
+              diag/anchor_distance: 0.0070
+                      diag/shaping: -0.0135
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 737280
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:26
+                               ETA: 00:01:57
+
+################################################################################
+                       [1m Learning iteration 45/80 [0m                       
+
+                       Computation: 5092 steps/s (collection: 1.289s, learning 1.928s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 48.1350
+               Mean surrogate loss: -0.0015
+                 Mean entropy loss: -1.9523
+                       Mean reward: 63.40
+               Mean episode length: 99.24
+                     reward/effect: 0.0000
+                     reward/region: 0.3960
+                       reward/mode: -0.2478
+                       reward/mech: -0.2026
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0371
+             reward/mode_saturated: 0.1855
+                     diag/touching: 0.5605
+             diag/contact_required: 0.9414
+          diag/inside_region_share: 0.4783
+               diag/contact_points: 0.5801
+            diag/peak_normal_force: 0.7024
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0089
+                     diag/slip_max: 0.0108
+               diag/mech_saturated: 0.0371
+               diag/mode_saturated: 0.1855
+               diag/exec_ang_speed: 0.3301
+               diag/exec_lin_speed: 0.0555
+                 diag/pad_tilt_deg: 1.1951
+              diag/anchor_distance: 0.0075
+                      diag/shaping: -0.0144
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 753664
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:29
+                               ETA: 00:01:54
+
+################################################################################
+                       [1m Learning iteration 46/80 [0m                       
+
+                       Computation: 5096 steps/s (collection: 1.288s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 42.5033
+               Mean surrogate loss: 0.0007
+                 Mean entropy loss: -1.9501
+                       Mean reward: 66.84
+               Mean episode length: 105.29
+                     reward/effect: 0.0000
+                     reward/region: 0.3638
+                       reward/mode: -0.2114
+                       reward/mech: -0.1837
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0469
+             reward/mode_saturated: 0.1680
+                     diag/touching: 0.5234
+             diag/contact_required: 0.9043
+          diag/inside_region_share: 0.4436
+               diag/contact_points: 0.5645
+            diag/peak_normal_force: 0.7199
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0090
+                     diag/slip_max: 0.0108
+               diag/mech_saturated: 0.0469
+               diag/mode_saturated: 0.1680
+               diag/exec_ang_speed: 0.3140
+               diag/exec_lin_speed: 0.0697
+                 diag/pad_tilt_deg: 0.9818
+              diag/anchor_distance: 0.0090
+                      diag/shaping: -0.0174
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 770048
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:33
+                               ETA: 00:01:50
+
+################################################################################
+                       [1m Learning iteration 47/80 [0m                       
+
+                       Computation: 5080 steps/s (collection: 1.298s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 43.6823
+               Mean surrogate loss: 0.0020
+                 Mean entropy loss: -1.9616
+                       Mean reward: 65.25
+               Mean episode length: 108.36
+                     reward/effect: 0.0000
+                     reward/region: 0.4062
+                       reward/mode: -0.2110
+                       reward/mech: -0.1850
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0430
+             reward/mode_saturated: 0.1621
+                     diag/touching: 0.4941
+             diag/contact_required: 0.9355
+          diag/inside_region_share: 0.4502
+               diag/contact_points: 0.5254
+            diag/peak_normal_force: 0.6570
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0081
+                     diag/slip_max: 0.0090
+               diag/mech_saturated: 0.0430
+               diag/mode_saturated: 0.1621
+               diag/exec_ang_speed: 0.3071
+               diag/exec_lin_speed: 0.0532
+                 diag/pad_tilt_deg: 0.8200
+              diag/anchor_distance: 0.0077
+                      diag/shaping: -0.0147
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 786432
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:36
+                               ETA: 00:01:47
+
+################################################################################
+                       [1m Learning iteration 48/80 [0m                       
+
+                       Computation: 5096 steps/s (collection: 1.289s, learning 1.925s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 54.4173
+               Mean surrogate loss: -0.0028
+                 Mean entropy loss: -1.9752
+                       Mean reward: 65.76
+               Mean episode length: 113.73
+                     reward/effect: 0.0000
+                     reward/region: 0.4870
+                       reward/mode: -0.2087
+                       reward/mech: -0.2472
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0527
+             reward/mode_saturated: 0.1602
+                     diag/touching: 0.6035
+             diag/contact_required: 0.9121
+          diag/inside_region_share: 0.5452
+               diag/contact_points: 0.6406
+            diag/peak_normal_force: 0.9221
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0084
+                     diag/slip_max: 0.0098
+               diag/mech_saturated: 0.0527
+               diag/mode_saturated: 0.1602
+               diag/exec_ang_speed: 0.3335
+               diag/exec_lin_speed: 0.0690
+                 diag/pad_tilt_deg: 1.1384
+              diag/anchor_distance: 0.0082
+                      diag/shaping: -0.0158
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 802816
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:39
+                               ETA: 00:01:44
+
+################################################################################
+                       [1m Learning iteration 49/80 [0m                       
+
+                       Computation: 5100 steps/s (collection: 1.286s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 43.2264
+               Mean surrogate loss: 0.0016
+                 Mean entropy loss: -1.9956
+                       Mean reward: 66.85
+               Mean episode length: 99.96
+                     reward/effect: 0.0000
+                     reward/region: 0.4231
+                       reward/mode: -0.2072
+                       reward/mech: -0.2069
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0605
+             reward/mode_saturated: 0.1484
+                     diag/touching: 0.5527
+             diag/contact_required: 0.8926
+          diag/inside_region_share: 0.4879
+               diag/contact_points: 0.5840
+            diag/peak_normal_force: 0.8033
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0078
+                     diag/slip_max: 0.0095
+               diag/mech_saturated: 0.0605
+               diag/mode_saturated: 0.1484
+               diag/exec_ang_speed: 0.3103
+               diag/exec_lin_speed: 0.0712
+                 diag/pad_tilt_deg: 0.8879
+              diag/anchor_distance: 0.0079
+                      diag/shaping: -0.0152
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 819200
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:42
+                               ETA: 00:01:40
+
+################################################################################
+                       [1m Learning iteration 50/80 [0m                       
+
+                       Computation: 5097 steps/s (collection: 1.287s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 51.7105
+               Mean surrogate loss: 0.0098
+                 Mean entropy loss: -2.0195
+                       Mean reward: 67.50
+               Mean episode length: 113.84
+                     reward/effect: 0.0000
+                     reward/region: 0.5294
+                       reward/mode: -0.2561
+                       reward/mech: -0.2486
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0723
+             reward/mode_saturated: 0.1895
+                     diag/touching: 0.6680
+             diag/contact_required: 0.9258
+          diag/inside_region_share: 0.5987
+               diag/contact_points: 0.7051
+            diag/peak_normal_force: 0.9383
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0097
+                     diag/slip_max: 0.0111
+               diag/mech_saturated: 0.0723
+               diag/mode_saturated: 0.1895
+               diag/exec_ang_speed: 0.3037
+               diag/exec_lin_speed: 0.0621
+                 diag/pad_tilt_deg: 1.0714
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0113
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 835584
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:45
+                               ETA: 00:01:37
+
+################################################################################
+                       [1m Learning iteration 51/80 [0m                       
+
+                       Computation: 5099 steps/s (collection: 1.287s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 55.4324
+               Mean surrogate loss: -0.0004
+                 Mean entropy loss: -2.0338
+                       Mean reward: 72.19
+               Mean episode length: 100.57
+                     reward/effect: 0.0000
+                     reward/region: 0.5642
+                       reward/mode: -0.2211
+                       reward/mech: -0.2899
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0879
+             reward/mode_saturated: 0.1621
+                     diag/touching: 0.6777
+             diag/contact_required: 0.9277
+          diag/inside_region_share: 0.6210
+               diag/contact_points: 0.7168
+            diag/peak_normal_force: 1.0365
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0088
+                     diag/slip_max: 0.0097
+               diag/mech_saturated: 0.0879
+               diag/mode_saturated: 0.1621
+               diag/exec_ang_speed: 0.3095
+               diag/exec_lin_speed: 0.0649
+                 diag/pad_tilt_deg: 1.1634
+              diag/anchor_distance: 0.0060
+                      diag/shaping: -0.0116
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 851968
+                    Iteration time: 3.21s
+                      Time elapsed: 00:02:49
+                               ETA: 00:01:34
+
+################################################################################
+                       [1m Learning iteration 52/80 [0m                       
+
+                       Computation: 5095 steps/s (collection: 1.288s, learning 1.928s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 47.0205
+               Mean surrogate loss: 0.0005
+                 Mean entropy loss: -2.0519
+                       Mean reward: 72.00
+               Mean episode length: 89.51
+                     reward/effect: 0.0000
+                     reward/region: 0.4815
+                       reward/mode: -0.2045
+                       reward/mech: -0.2143
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0527
+             reward/mode_saturated: 0.1699
+                     diag/touching: 0.5723
+             diag/contact_required: 0.9160
+          diag/inside_region_share: 0.5269
+               diag/contact_points: 0.5938
+            diag/peak_normal_force: 0.8068
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0087
+                     diag/slip_max: 0.0096
+               diag/mech_saturated: 0.0527
+               diag/mode_saturated: 0.1699
+               diag/exec_ang_speed: 0.3013
+               diag/exec_lin_speed: 0.0705
+                 diag/pad_tilt_deg: 0.9677
+              diag/anchor_distance: 0.0065
+                      diag/shaping: -0.0125
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 868352
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:52
+                               ETA: 00:01:31
+
+################################################################################
+                       [1m Learning iteration 53/80 [0m                       
+
+                       Computation: 5089 steps/s (collection: 1.293s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 53.2819
+               Mean surrogate loss: 0.0153
+                 Mean entropy loss: -2.0692
+                       Mean reward: 75.55
+               Mean episode length: 94.57
+                     reward/effect: 0.0000
+                     reward/region: 0.5298
+                       reward/mode: -0.2134
+                       reward/mech: -0.2372
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0488
+             reward/mode_saturated: 0.1758
+                     diag/touching: 0.6328
+             diag/contact_required: 0.9219
+          diag/inside_region_share: 0.5813
+               diag/contact_points: 0.6602
+            diag/peak_normal_force: 0.9378
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0087
+                     diag/slip_max: 0.0097
+               diag/mech_saturated: 0.0488
+               diag/mode_saturated: 0.1758
+               diag/exec_ang_speed: 0.3042
+               diag/exec_lin_speed: 0.0638
+                 diag/pad_tilt_deg: 1.0864
+              diag/anchor_distance: 0.0059
+                      diag/shaping: -0.0114
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 884736
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:55
+                               ETA: 00:01:27
+
+################################################################################
+                       [1m Learning iteration 54/80 [0m                       
+
+                       Computation: 5095 steps/s (collection: 1.288s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 48.3786
+               Mean surrogate loss: 0.0032
+                 Mean entropy loss: -2.0723
+                       Mean reward: 74.50
+               Mean episode length: 95.56
+                     reward/effect: 0.0000
+                     reward/region: 0.5381
+                       reward/mode: -0.2197
+                       reward/mech: -0.2618
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0645
+             reward/mode_saturated: 0.1797
+                     diag/touching: 0.6504
+             diag/contact_required: 0.9023
+          diag/inside_region_share: 0.5942
+               diag/contact_points: 0.6934
+            diag/peak_normal_force: 0.9926
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0085
+                     diag/slip_max: 0.0101
+               diag/mech_saturated: 0.0645
+               diag/mode_saturated: 0.1797
+               diag/exec_ang_speed: 0.3118
+               diag/exec_lin_speed: 0.0637
+                 diag/pad_tilt_deg: 1.1705
+              diag/anchor_distance: 0.0056
+                      diag/shaping: -0.0108
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 901120
+                    Iteration time: 3.22s
+                      Time elapsed: 00:02:58
+                               ETA: 00:01:24
+
+################################################################################
+                       [1m Learning iteration 55/80 [0m                       
+
+                       Computation: 5090 steps/s (collection: 1.292s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 47.4741
+               Mean surrogate loss: 0.0125
+                 Mean entropy loss: -2.0849
+                       Mean reward: 74.23
+               Mean episode length: 93.84
+                     reward/effect: 0.0000
+                     reward/region: 0.5495
+                       reward/mode: -0.2357
+                       reward/mech: -0.2871
+                     reward/safety: -0.0015
+             reward/mech_saturated: 0.0781
+             reward/mode_saturated: 0.1777
+                     diag/touching: 0.6758
+             diag/contact_required: 0.8965
+          diag/inside_region_share: 0.6127
+               diag/contact_points: 0.7207
+            diag/peak_normal_force: 1.0586
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0095
+                     diag/slip_max: 0.0109
+               diag/mech_saturated: 0.0781
+               diag/mode_saturated: 0.1777
+               diag/exec_ang_speed: 0.3089
+               diag/exec_lin_speed: 0.0636
+                 diag/pad_tilt_deg: 1.1698
+              diag/anchor_distance: 0.0055
+                      diag/shaping: -0.0105
+                       diag/failed: 0.0000
+                     diag/finished: 0.0215
+--------------------------------------------------------------------------------
+                   Total timesteps: 917504
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:02
+                               ETA: 00:01:21
+
+################################################################################
+                       [1m Learning iteration 56/80 [0m                       
+
+                       Computation: 5091 steps/s (collection: 1.290s, learning 1.928s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 50.8057
+               Mean surrogate loss: 0.0101
+                 Mean entropy loss: -2.0900
+                       Mean reward: 74.30
+               Mean episode length: 92.53
+                     reward/effect: 0.0000
+                     reward/region: 0.5763
+                       reward/mode: -0.1618
+                       reward/mech: -0.3072
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0938
+             reward/mode_saturated: 0.1191
+                     diag/touching: 0.7090
+             diag/contact_required: 0.9102
+          diag/inside_region_share: 0.6426
+               diag/contact_points: 0.7539
+            diag/peak_normal_force: 1.2139
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0061
+                     diag/slip_max: 0.0074
+               diag/mech_saturated: 0.0938
+               diag/mode_saturated: 0.1191
+               diag/exec_ang_speed: 0.3044
+               diag/exec_lin_speed: 0.0739
+                 diag/pad_tilt_deg: 1.2264
+              diag/anchor_distance: 0.0062
+                      diag/shaping: -0.0119
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 933888
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:05
+                               ETA: 00:01:17
+
+################################################################################
+                       [1m Learning iteration 57/80 [0m                       
+
+                       Computation: 5096 steps/s (collection: 1.287s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 46.7502
+               Mean surrogate loss: 0.0007
+                 Mean entropy loss: -2.0922
+                       Mean reward: 73.50
+               Mean episode length: 84.38
+                     reward/effect: 0.0000
+                     reward/region: 0.5560
+                       reward/mode: -0.2024
+                       reward/mech: -0.2785
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0781
+             reward/mode_saturated: 0.1484
+                     diag/touching: 0.7051
+             diag/contact_required: 0.9082
+          diag/inside_region_share: 0.6305
+               diag/contact_points: 0.7500
+            diag/peak_normal_force: 1.1324
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0081
+                     diag/slip_max: 0.0098
+               diag/mech_saturated: 0.0781
+               diag/mode_saturated: 0.1484
+               diag/exec_ang_speed: 0.2977
+               diag/exec_lin_speed: 0.0676
+                 diag/pad_tilt_deg: 1.1436
+              diag/anchor_distance: 0.0057
+                      diag/shaping: -0.0109
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 950272
+                    Iteration time: 3.21s
+                      Time elapsed: 00:03:08
+                               ETA: 00:01:14
+
+################################################################################
+                       [1m Learning iteration 58/80 [0m                       
+
+                       Computation: 4930 steps/s (collection: 1.391s, learning 1.932s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 46.2199
+               Mean surrogate loss: 0.0002
+                 Mean entropy loss: -2.1092
+                       Mean reward: 73.21
+               Mean episode length: 83.33
+                     reward/effect: 0.0000
+                     reward/region: 0.5743
+                       reward/mode: -0.1787
+                       reward/mech: -0.2964
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0820
+             reward/mode_saturated: 0.1348
+                     diag/touching: 0.7148
+             diag/contact_required: 0.9121
+          diag/inside_region_share: 0.6446
+               diag/contact_points: 0.7539
+            diag/peak_normal_force: 1.1993
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0069
+                     diag/slip_max: 0.0081
+               diag/mech_saturated: 0.0820
+               diag/mode_saturated: 0.1348
+               diag/exec_ang_speed: 0.3101
+               diag/exec_lin_speed: 0.0652
+                 diag/pad_tilt_deg: 1.1210
+              diag/anchor_distance: 0.0057
+                      diag/shaping: -0.0109
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 966656
+                    Iteration time: 3.32s
+                      Time elapsed: 00:03:11
+                               ETA: 00:01:11
+
+################################################################################
+                       [1m Learning iteration 59/80 [0m                       
+
+                       Computation: 4926 steps/s (collection: 1.393s, learning 1.933s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 45.3731
+               Mean surrogate loss: 0.0016
+                 Mean entropy loss: -2.1365
+                       Mean reward: 75.56
+               Mean episode length: 84.76
+                     reward/effect: 0.0000
+                     reward/region: 0.5769
+                       reward/mode: -0.1602
+                       reward/mech: -0.2942
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0801
+             reward/mode_saturated: 0.1289
+                     diag/touching: 0.6953
+             diag/contact_required: 0.8984
+          diag/inside_region_share: 0.6361
+               diag/contact_points: 0.7402
+            diag/peak_normal_force: 1.1908
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0061
+                     diag/slip_max: 0.0074
+               diag/mech_saturated: 0.0801
+               diag/mode_saturated: 0.1289
+               diag/exec_ang_speed: 0.3128
+               diag/exec_lin_speed: 0.0655
+                 diag/pad_tilt_deg: 1.1061
+              diag/anchor_distance: 0.0057
+                      diag/shaping: -0.0109
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 983040
+                    Iteration time: 3.33s
+                      Time elapsed: 00:03:15
+                               ETA: 00:01:08
+
+################################################################################
+                       [1m Learning iteration 60/80 [0m                       
+
+                       Computation: 5080 steps/s (collection: 1.299s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 39.5748
+               Mean surrogate loss: 0.0177
+                 Mean entropy loss: -2.1533
+                       Mean reward: 74.07
+               Mean episode length: 85.10
+                     reward/effect: 0.0000
+                     reward/region: 0.5778
+                       reward/mode: -0.2060
+                       reward/mech: -0.2803
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0801
+             reward/mode_saturated: 0.1504
+                     diag/touching: 0.6836
+             diag/contact_required: 0.9102
+          diag/inside_region_share: 0.6307
+               diag/contact_points: 0.7129
+            diag/peak_normal_force: 1.0469
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0083
+                     diag/slip_max: 0.0092
+               diag/mech_saturated: 0.0801
+               diag/mode_saturated: 0.1504
+               diag/exec_ang_speed: 0.3084
+               diag/exec_lin_speed: 0.0671
+                 diag/pad_tilt_deg: 1.1460
+              diag/anchor_distance: 0.0056
+                      diag/shaping: -0.0108
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 999424
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:18
+                               ETA: 00:01:05
+
+################################################################################
+                       [1m Learning iteration 61/80 [0m                       
+
+                       Computation: 5094 steps/s (collection: 1.291s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 39.4107
+               Mean surrogate loss: 0.0037
+                 Mean entropy loss: -2.1563
+                       Mean reward: 75.90
+               Mean episode length: 85.70
+                     reward/effect: 0.0000
+                     reward/region: 0.5784
+                       reward/mode: -0.1613
+                       reward/mech: -0.2682
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0742
+             reward/mode_saturated: 0.1172
+                     diag/touching: 0.6895
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.6339
+               diag/contact_points: 0.7363
+            diag/peak_normal_force: 1.1276
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0060
+                     diag/slip_max: 0.0069
+               diag/mech_saturated: 0.0742
+               diag/mode_saturated: 0.1172
+               diag/exec_ang_speed: 0.3095
+               diag/exec_lin_speed: 0.0607
+                 diag/pad_tilt_deg: 1.2354
+              diag/anchor_distance: 0.0054
+                      diag/shaping: -0.0104
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 1015808
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:21
+                               ETA: 00:01:01
+
+################################################################################
+                       [1m Learning iteration 62/80 [0m                       
+
+                       Computation: 5090 steps/s (collection: 1.293s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 34.6492
+               Mean surrogate loss: 0.0048
+                 Mean entropy loss: -2.1596
+                       Mean reward: 76.39
+               Mean episode length: 86.22
+                     reward/effect: 0.0000
+                     reward/region: 0.5265
+                       reward/mode: -0.2176
+                       reward/mech: -0.2599
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0625
+             reward/mode_saturated: 0.1797
+                     diag/touching: 0.6426
+             diag/contact_required: 0.9004
+          diag/inside_region_share: 0.5846
+               diag/contact_points: 0.6758
+            diag/peak_normal_force: 0.9897
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0082
+                     diag/slip_max: 0.0097
+               diag/mech_saturated: 0.0625
+               diag/mode_saturated: 0.1797
+               diag/exec_ang_speed: 0.3085
+               diag/exec_lin_speed: 0.0764
+                 diag/pad_tilt_deg: 1.1139
+              diag/anchor_distance: 0.0068
+                      diag/shaping: -0.0131
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 1032192
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:24
+                               ETA: 00:00:58
+
+################################################################################
+                       [1m Learning iteration 63/80 [0m                       
+
+                       Computation: 5080 steps/s (collection: 1.298s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 36.0259
+               Mean surrogate loss: 0.0004
+                 Mean entropy loss: -2.1734
+                       Mean reward: 74.52
+               Mean episode length: 91.29
+                     reward/effect: 0.0000
+                     reward/region: 0.5379
+                       reward/mode: -0.1623
+                       reward/mech: -0.2734
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0840
+             reward/mode_saturated: 0.1133
+                     diag/touching: 0.6504
+             diag/contact_required: 0.8926
+          diag/inside_region_share: 0.5941
+               diag/contact_points: 0.6953
+            diag/peak_normal_force: 1.0765
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0062
+                     diag/slip_max: 0.0073
+               diag/mech_saturated: 0.0840
+               diag/mode_saturated: 0.1133
+               diag/exec_ang_speed: 0.3005
+               diag/exec_lin_speed: 0.0709
+                 diag/pad_tilt_deg: 0.9333
+              diag/anchor_distance: 0.0066
+                      diag/shaping: -0.0127
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 1048576
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:27
+                               ETA: 00:00:55
+
+################################################################################
+                       [1m Learning iteration 64/80 [0m                       
+
+                       Computation: 5093 steps/s (collection: 1.290s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 36.5887
+               Mean surrogate loss: 0.0044
+                 Mean entropy loss: -2.2009
+                       Mean reward: 76.63
+               Mean episode length: 91.61
+                     reward/effect: 0.0000
+                     reward/region: 0.6010
+                       reward/mode: -0.1385
+                       reward/mech: -0.2993
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0840
+             reward/mode_saturated: 0.1094
+                     diag/touching: 0.7031
+             diag/contact_required: 0.9004
+          diag/inside_region_share: 0.6521
+               diag/contact_points: 0.7656
+            diag/peak_normal_force: 1.2274
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0056
+                     diag/slip_max: 0.0064
+               diag/mech_saturated: 0.0840
+               diag/mode_saturated: 0.1094
+               diag/exec_ang_speed: 0.3102
+               diag/exec_lin_speed: 0.0686
+                 diag/pad_tilt_deg: 1.1035
+              diag/anchor_distance: 0.0062
+                      diag/shaping: -0.0120
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 1064960
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:31
+                               ETA: 00:00:51
+
+################################################################################
+                       [1m Learning iteration 65/80 [0m                       
+
+                       Computation: 5086 steps/s (collection: 1.292s, learning 1.929s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 30.3419
+               Mean surrogate loss: 0.0048
+                 Mean entropy loss: -2.2233
+                       Mean reward: 77.13
+               Mean episode length: 86.95
+                     reward/effect: 0.0000
+                     reward/region: 0.5698
+                       reward/mode: -0.1436
+                       reward/mech: -0.2971
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0977
+             reward/mode_saturated: 0.1035
+                     diag/touching: 0.6484
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.6091
+               diag/contact_points: 0.6895
+            diag/peak_normal_force: 1.1240
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0054
+                     diag/slip_max: 0.0060
+               diag/mech_saturated: 0.0977
+               diag/mode_saturated: 0.1035
+               diag/exec_ang_speed: 0.2959
+               diag/exec_lin_speed: 0.0662
+                 diag/pad_tilt_deg: 0.9506
+              diag/anchor_distance: 0.0061
+                      diag/shaping: -0.0117
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 1081344
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:34
+                               ETA: 00:00:48
+
+################################################################################
+                       [1m Learning iteration 66/80 [0m                       
+
+                       Computation: 5089 steps/s (collection: 1.293s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 27.2674
+               Mean surrogate loss: -0.0000
+                 Mean entropy loss: -2.2319
+                       Mean reward: 76.42
+               Mean episode length: 86.37
+                     reward/effect: 0.0000
+                     reward/region: 0.5857
+                       reward/mode: -0.1555
+                       reward/mech: -0.3138
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0918
+             reward/mode_saturated: 0.1094
+                     diag/touching: 0.6797
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.6327
+               diag/contact_points: 0.7324
+            diag/peak_normal_force: 1.2223
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0056
+                     diag/slip_max: 0.0064
+               diag/mech_saturated: 0.0918
+               diag/mode_saturated: 0.1094
+               diag/exec_ang_speed: 0.3141
+               diag/exec_lin_speed: 0.0595
+                 diag/pad_tilt_deg: 1.1110
+              diag/anchor_distance: 0.0054
+                      diag/shaping: -0.0103
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 1097728
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:37
+                               ETA: 00:00:45
+
+################################################################################
+                       [1m Learning iteration 67/80 [0m                       
+
+                       Computation: 5089 steps/s (collection: 1.291s, learning 1.928s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 22.1454
+               Mean surrogate loss: 0.0076
+                 Mean entropy loss: -2.2477
+                       Mean reward: 76.38
+               Mean episode length: 88.67
+                     reward/effect: 0.0000
+                     reward/region: 0.5565
+                       reward/mode: -0.1299
+                       reward/mech: -0.2740
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0645
+             reward/mode_saturated: 0.0918
+                     diag/touching: 0.6621
+             diag/contact_required: 0.8926
+          diag/inside_region_share: 0.6093
+               diag/contact_points: 0.7148
+            diag/peak_normal_force: 1.1118
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0052
+                     diag/slip_max: 0.0065
+               diag/mech_saturated: 0.0645
+               diag/mode_saturated: 0.0918
+               diag/exec_ang_speed: 0.2970
+               diag/exec_lin_speed: 0.0567
+                 diag/pad_tilt_deg: 1.1739
+              diag/anchor_distance: 0.0054
+                      diag/shaping: -0.0103
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 1114112
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:40
+                               ETA: 00:00:42
+
+################################################################################
+                       [1m Learning iteration 68/80 [0m                       
+
+                       Computation: 5085 steps/s (collection: 1.295s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 18.3932
+               Mean surrogate loss: 0.0003
+                 Mean entropy loss: -2.2554
+                       Mean reward: 77.06
+               Mean episode length: 87.02
+                     reward/effect: 0.0000
+                     reward/region: 0.5619
+                       reward/mode: -0.1385
+                       reward/mech: -0.2843
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0684
+             reward/mode_saturated: 0.0996
+                     diag/touching: 0.6582
+             diag/contact_required: 0.8887
+          diag/inside_region_share: 0.6101
+               diag/contact_points: 0.6914
+            diag/peak_normal_force: 1.1491
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0056
+                     diag/slip_max: 0.0066
+               diag/mech_saturated: 0.0684
+               diag/mode_saturated: 0.0996
+               diag/exec_ang_speed: 0.3091
+               diag/exec_lin_speed: 0.0626
+                 diag/pad_tilt_deg: 1.2510
+              diag/anchor_distance: 0.0058
+                      diag/shaping: -0.0112
+                       diag/failed: 0.0000
+                     diag/finished: 0.0156
+--------------------------------------------------------------------------------
+                   Total timesteps: 1130496
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:44
+                               ETA: 00:00:38
+
+################################################################################
+                       [1m Learning iteration 69/80 [0m                       
+
+                       Computation: 5069 steps/s (collection: 1.305s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 19.4463
+               Mean surrogate loss: 0.0038
+                 Mean entropy loss: -2.2702
+                       Mean reward: 76.04
+               Mean episode length: 87.84
+                     reward/effect: 0.0000
+                     reward/region: 0.5935
+                       reward/mode: -0.1254
+                       reward/mech: -0.3046
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0938
+             reward/mode_saturated: 0.0996
+                     diag/touching: 0.6777
+             diag/contact_required: 0.9199
+          diag/inside_region_share: 0.6356
+               diag/contact_points: 0.7227
+            diag/peak_normal_force: 1.2532
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0048
+                     diag/slip_max: 0.0055
+               diag/mech_saturated: 0.0938
+               diag/mode_saturated: 0.0996
+               diag/exec_ang_speed: 0.3052
+               diag/exec_lin_speed: 0.0661
+                 diag/pad_tilt_deg: 1.3452
+              diag/anchor_distance: 0.0063
+                      diag/shaping: -0.0121
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 1146880
+                    Iteration time: 3.23s
+                      Time elapsed: 00:03:47
+                               ETA: 00:00:35
+
+################################################################################
+                       [1m Learning iteration 70/80 [0m                       
+
+                       Computation: 5091 steps/s (collection: 1.293s, learning 1.925s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 16.8723
+               Mean surrogate loss: 0.0050
+                 Mean entropy loss: -2.2779
+                       Mean reward: 77.39
+               Mean episode length: 89.33
+                     reward/effect: 0.0000
+                     reward/region: 0.5511
+                       reward/mode: -0.1197
+                       reward/mech: -0.2703
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0762
+             reward/mode_saturated: 0.0859
+                     diag/touching: 0.6367
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.5939
+               diag/contact_points: 0.6895
+            diag/peak_normal_force: 1.1428
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0044
+                     diag/slip_max: 0.0052
+               diag/mech_saturated: 0.0762
+               diag/mode_saturated: 0.0859
+               diag/exec_ang_speed: 0.3102
+               diag/exec_lin_speed: 0.0574
+                 diag/pad_tilt_deg: 1.3426
+              diag/anchor_distance: 0.0057
+                      diag/shaping: -0.0109
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 1163264
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:50
+                               ETA: 00:00:32
+
+################################################################################
+                       [1m Learning iteration 71/80 [0m                       
+
+                       Computation: 5087 steps/s (collection: 1.294s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 15.8847
+               Mean surrogate loss: -0.0015
+                 Mean entropy loss: -2.2867
+                       Mean reward: 78.11
+               Mean episode length: 88.43
+                     reward/effect: 0.0000
+                     reward/region: 0.5742
+                       reward/mode: -0.1065
+                       reward/mech: -0.2908
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0859
+             reward/mode_saturated: 0.0781
+                     diag/touching: 0.6367
+             diag/contact_required: 0.9199
+          diag/inside_region_share: 0.6054
+               diag/contact_points: 0.6660
+            diag/peak_normal_force: 1.2289
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0042
+                     diag/slip_max: 0.0045
+               diag/mech_saturated: 0.0859
+               diag/mode_saturated: 0.0781
+               diag/exec_ang_speed: 0.2953
+               diag/exec_lin_speed: 0.0623
+                 diag/pad_tilt_deg: 1.4003
+              diag/anchor_distance: 0.0067
+                      diag/shaping: -0.0128
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 1179648
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:53
+                               ETA: 00:00:29
+
+################################################################################
+                       [1m Learning iteration 72/80 [0m                       
+
+                       Computation: 5091 steps/s (collection: 1.292s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 16.6734
+               Mean surrogate loss: 0.0012
+                 Mean entropy loss: -2.3115
+                       Mean reward: 78.89
+               Mean episode length: 92.53
+                     reward/effect: 0.0000
+                     reward/region: 0.5464
+                       reward/mode: -0.0976
+                       reward/mech: -0.2905
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0840
+             reward/mode_saturated: 0.0723
+                     diag/touching: 0.6387
+             diag/contact_required: 0.8965
+          diag/inside_region_share: 0.5926
+               diag/contact_points: 0.7031
+            diag/peak_normal_force: 1.2116
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0039
+                     diag/slip_max: 0.0046
+               diag/mech_saturated: 0.0840
+               diag/mode_saturated: 0.0723
+               diag/exec_ang_speed: 0.3085
+               diag/exec_lin_speed: 0.0590
+                 diag/pad_tilt_deg: 1.3585
+              diag/anchor_distance: 0.0062
+                      diag/shaping: -0.0119
+                       diag/failed: 0.0000
+                     diag/finished: 0.0098
+--------------------------------------------------------------------------------
+                   Total timesteps: 1196032
+                    Iteration time: 3.22s
+                      Time elapsed: 00:03:56
+                               ETA: 00:00:25
+
+################################################################################
+                       [1m Learning iteration 73/80 [0m                       
+
+                       Computation: 5089 steps/s (collection: 1.294s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 11.1148
+               Mean surrogate loss: 0.0065
+                 Mean entropy loss: -2.3378
+                       Mean reward: 78.15
+               Mean episode length: 89.65
+                     reward/effect: 0.0000
+                     reward/region: 0.5935
+                       reward/mode: -0.1094
+                       reward/mech: -0.3216
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.1152
+             reward/mode_saturated: 0.0781
+                     diag/touching: 0.6855
+             diag/contact_required: 0.9062
+          diag/inside_region_share: 0.6395
+               diag/contact_points: 0.7246
+            diag/peak_normal_force: 1.3512
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0036
+                     diag/slip_max: 0.0043
+               diag/mech_saturated: 0.1152
+               diag/mode_saturated: 0.0781
+               diag/exec_ang_speed: 0.3094
+               diag/exec_lin_speed: 0.0591
+                 diag/pad_tilt_deg: 1.4458
+              diag/anchor_distance: 0.0060
+                      diag/shaping: -0.0115
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 1212416
+                    Iteration time: 3.22s
+                      Time elapsed: 00:04:00
+                               ETA: 00:00:22
+
+################################################################################
+                       [1m Learning iteration 74/80 [0m                       
+
+                       Computation: 5083 steps/s (collection: 1.298s, learning 1.926s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 7.7913
+               Mean surrogate loss: 0.0131
+                 Mean entropy loss: -2.3426
+                       Mean reward: 78.43
+               Mean episode length: 92.89
+                     reward/effect: 0.0000
+                     reward/region: 0.6000
+                       reward/mode: -0.1121
+                       reward/mech: -0.3085
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0957
+             reward/mode_saturated: 0.0859
+                     diag/touching: 0.6699
+             diag/contact_required: 0.9180
+          diag/inside_region_share: 0.6350
+               diag/contact_points: 0.7344
+            diag/peak_normal_force: 1.2450
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0042
+                     diag/slip_max: 0.0049
+               diag/mech_saturated: 0.0957
+               diag/mode_saturated: 0.0859
+               diag/exec_ang_speed: 0.2973
+               diag/exec_lin_speed: 0.0644
+                 diag/pad_tilt_deg: 1.3760
+              diag/anchor_distance: 0.0060
+                      diag/shaping: -0.0115
+                       diag/failed: 0.0000
+                     diag/finished: 0.0039
+--------------------------------------------------------------------------------
+                   Total timesteps: 1228800
+                    Iteration time: 3.22s
+                      Time elapsed: 00:04:03
+                               ETA: 00:00:19
+
+################################################################################
+                       [1m Learning iteration 75/80 [0m                       
+
+                       Computation: 5076 steps/s (collection: 1.300s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 6.6740
+               Mean surrogate loss: 0.0041
+                 Mean entropy loss: -2.3443
+                       Mean reward: 80.16
+               Mean episode length: 87.33
+                     reward/effect: 0.0000
+                     reward/region: 0.5967
+                       reward/mode: -0.0974
+                       reward/mech: -0.2869
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0898
+             reward/mode_saturated: 0.0703
+                     diag/touching: 0.6445
+             diag/contact_required: 0.9336
+          diag/inside_region_share: 0.6206
+               diag/contact_points: 0.6934
+            diag/peak_normal_force: 1.1849
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0040
+                     diag/slip_max: 0.0043
+               diag/mech_saturated: 0.0898
+               diag/mode_saturated: 0.0703
+               diag/exec_ang_speed: 0.3020
+               diag/exec_lin_speed: 0.0579
+                 diag/pad_tilt_deg: 1.3557
+              diag/anchor_distance: 0.0057
+                      diag/shaping: -0.0109
+                       diag/failed: 0.0000
+                     diag/finished: 0.0059
+--------------------------------------------------------------------------------
+                   Total timesteps: 1245184
+                    Iteration time: 3.23s
+                      Time elapsed: 00:04:06
+                               ETA: 00:00:16
+
+################################################################################
+                       [1m Learning iteration 76/80 [0m                       
+
+                       Computation: 5066 steps/s (collection: 1.297s, learning 1.936s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 6.3223
+               Mean surrogate loss: 0.0024
+                 Mean entropy loss: -2.3508
+                       Mean reward: 81.67
+               Mean episode length: 92.70
+                     reward/effect: 0.0000
+                     reward/region: 0.5278
+                       reward/mode: -0.1173
+                       reward/mech: -0.2602
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0566
+             reward/mode_saturated: 0.0957
+                     diag/touching: 0.5938
+             diag/contact_required: 0.9297
+          diag/inside_region_share: 0.5608
+               diag/contact_points: 0.6426
+            diag/peak_normal_force: 1.1006
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0046
+                     diag/slip_max: 0.0049
+               diag/mech_saturated: 0.0566
+               diag/mode_saturated: 0.0957
+               diag/exec_ang_speed: 0.3047
+               diag/exec_lin_speed: 0.0548
+                 diag/pad_tilt_deg: 1.4844
+              diag/anchor_distance: 0.0062
+                      diag/shaping: -0.0119
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 1261568
+                    Iteration time: 3.23s
+                      Time elapsed: 00:04:09
+                               ETA: 00:00:12
+
+################################################################################
+                       [1m Learning iteration 77/80 [0m                       
+
+                       Computation: 5056 steps/s (collection: 1.313s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 6.2909
+               Mean surrogate loss: 0.0042
+                 Mean entropy loss: -2.3739
+                       Mean reward: 80.46
+               Mean episode length: 97.14
+                     reward/effect: 0.0000
+                     reward/region: 0.4917
+                       reward/mode: -0.1125
+                       reward/mech: -0.2569
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0703
+             reward/mode_saturated: 0.0898
+                     diag/touching: 0.5527
+             diag/contact_required: 0.9121
+          diag/inside_region_share: 0.5222
+               diag/contact_points: 0.5781
+            diag/peak_normal_force: 1.0328
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0047
+                     diag/slip_max: 0.0052
+               diag/mech_saturated: 0.0703
+               diag/mode_saturated: 0.0898
+               diag/exec_ang_speed: 0.3079
+               diag/exec_lin_speed: 0.0604
+                 diag/pad_tilt_deg: 1.3083
+              diag/anchor_distance: 0.0077
+                      diag/shaping: -0.0148
+                       diag/failed: 0.0000
+                     diag/finished: 0.0117
+--------------------------------------------------------------------------------
+                   Total timesteps: 1277952
+                    Iteration time: 3.24s
+                      Time elapsed: 00:04:13
+                               ETA: 00:00:09
+
+################################################################################
+                       [1m Learning iteration 78/80 [0m                       
+
+                       Computation: 5057 steps/s (collection: 1.313s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 5.3389
+               Mean surrogate loss: -0.0003
+                 Mean entropy loss: -2.3956
+                       Mean reward: 79.75
+               Mean episode length: 101.69
+                     reward/effect: 0.0000
+                     reward/region: 0.5395
+                       reward/mode: -0.1124
+                       reward/mech: -0.2618
+                     reward/safety: -0.0014
+             reward/mech_saturated: 0.0723
+             reward/mode_saturated: 0.0820
+                     diag/touching: 0.5996
+             diag/contact_required: 0.9277
+          diag/inside_region_share: 0.5695
+               diag/contact_points: 0.6387
+            diag/peak_normal_force: 1.1244
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0043
+                     diag/slip_max: 0.0048
+               diag/mech_saturated: 0.0723
+               diag/mode_saturated: 0.0820
+               diag/exec_ang_speed: 0.3020
+               diag/exec_lin_speed: 0.0548
+                 diag/pad_tilt_deg: 1.5512
+              diag/anchor_distance: 0.0065
+                      diag/shaping: -0.0125
+                       diag/failed: 0.0000
+                     diag/finished: 0.0078
+--------------------------------------------------------------------------------
+                   Total timesteps: 1294336
+                    Iteration time: 3.24s
+                      Time elapsed: 00:04:16
+                               ETA: 00:00:06
+
+################################################################################
+                       [1m Learning iteration 79/80 [0m                       
+
+                       Computation: 5072 steps/s (collection: 1.303s, learning 1.927s)
+             Mean action noise std: 0.19
+          Mean value_function loss: 5.5139
+               Mean surrogate loss: -0.0017
+                 Mean entropy loss: -2.4126
+                       Mean reward: 77.45
+               Mean episode length: 101.61
+                     reward/effect: 0.0000
+                     reward/region: 0.5515
+                       reward/mode: -0.0823
+                       reward/mech: -0.2659
+                     reward/safety: -0.0013
+             reward/mech_saturated: 0.0801
+             reward/mode_saturated: 0.0586
+                     diag/touching: 0.6172
+             diag/contact_required: 0.8945
+          diag/inside_region_share: 0.5843
+               diag/contact_points: 0.6621
+            diag/peak_normal_force: 1.2125
+             diag/object_off_table: 0.0000
+               diag/slip_in_region: 0.0031
+                     diag/slip_max: 0.0037
+               diag/mech_saturated: 0.0801
+               diag/mode_saturated: 0.0586
+               diag/exec_ang_speed: 0.2931
+               diag/exec_lin_speed: 0.0738
+                 diag/pad_tilt_deg: 1.5508
+              diag/anchor_distance: 0.0074
+                      diag/shaping: -0.0143
+                       diag/failed: 0.0000
+                     diag/finished: 0.0137
+--------------------------------------------------------------------------------
+                   Total timesteps: 1310720
+                    Iteration time: 3.23s
+                      Time elapsed: 00:04:19
+                               ETA: 00:00:03
+
+[S6] 训练结束
+                   |        |     |            | 56        |            |
+|---------------------------------------------------------------------------------------------|
+| 7   | NVIDIA GeForce RTX 4090          |        |     | 24810   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | 0dc21a2c.. |
+|     |                                  |        |     |            | 57        |            |
+|=============================================================================================|
+| OS: 24.04.2 LTS (Noble Numbat) ubuntu, Version: 24.04.2, Kernel: 5.15.0-60-generic
+| Processor: Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz
+| Bare Metal Cores: 64 | Bare Metal Logical Cores: 128
+| Core Usage Quota: 48
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 385024 | Free Memory: 376167
+| Total Page/Swap (MB): 0 | Free Page/Swap: 0
+|---------------------------------------------------------------------------------------------|
+2026-08-31T06:15:39Z [12,212ms] [Warning] [isaaclab.envs.direct_rl_env] Seed not set for the environment. The environment creation may not be deterministic.
