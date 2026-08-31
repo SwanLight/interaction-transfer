@@ -44,7 +44,7 @@ class FloatingPD:
 
     def __init__(self, asset, kp_pos=400.0, kd_pos=40.0, kp_rot=20.0, kd_rot=4.0,
                  max_force=200.0, max_torque=20.0, compensate_gravity=True, g=9.81,
-                 kd_force=30.0):
+                 kd_force=30.0, rot_gain_basis="mass"):
         self.a = asset
         self.kp_pos, self.kd_pos = kp_pos, kd_pos
         self.kp_rot, self.kd_rot = kp_rot, kd_rot
@@ -53,6 +53,12 @@ class FloatingPD:
         self.g = g
         self.kd_force = kd_force
         self.mass = asset.data.default_mass.sum(dim=-1).to(asset.device)
+        self.rot_gain_basis = rot_gain_basis
+        self.inertia = None
+        if rot_gain_basis == "inertia":
+            # (N, 9) 行主序的惯量张量，在**本体系**里、相对质心（Isaac Lab 的约定）。
+            inertia = asset.data.default_inertia.to(asset.device).reshape(-1, 3, 3)
+            self.inertia = inertia
 
     def compute(self, target_pos_w, target_quat_w=None, ff_force=None, ff_torque=None,
                 force_mask=None, force_dir=None):
@@ -85,9 +91,10 @@ class FloatingPD:
 
         if target_quat_w is not None:
             e_r = _quat_err(d.root_quat_w, target_quat_w)
-            tq = self.kp_rot * m * e_r - self.kd_rot * m * d.root_ang_vel_w
+            alpha = self.kp_rot * e_r - self.kd_rot * d.root_ang_vel_w
         else:
-            tq = -self.kd_rot * m * d.root_ang_vel_w
+            alpha = -self.kd_rot * d.root_ang_vel_w
+        tq = self._torque(alpha, m)
 
         if ff_force is not None and force_dir is not None:
             n = force_dir / force_dir.norm(dim=-1, keepdim=True).clamp_min(1e-9)
@@ -119,3 +126,28 @@ class FloatingPD:
         f = f.clamp(-self.max_force, self.max_force).unsqueeze(1)
         tq = tq.clamp(-self.max_torque, self.max_torque).unsqueeze(1)
         return f, tq
+
+    def _torque(self, alpha, m):
+        """把期望角加速度换成力矩。
+
+        ``rot_gain_basis="mass"`` 是历史行为（``τ = kp·m·e``）：**量纲上是错的**，
+        力矩需要的是转动惯量而不是质量。双板执行器上它碰巧能用——板的三个主惯量
+        量级相近。换成杆类执行器就不行了：垫头杆绕**自身轴**的惯量比横向小两个数量级，
+        同一组增益给出的有效 ω_n ≈ 424 rad/s，而物理步长是 1/150 s
+        （``ω_n·dt ≈ 2.8 ≫ 2``），显式积分直接发散。实测 E-I 的冒烟里
+        **杆的角速度 76 rad/s**，接触点线速度随之虚高，`r_mode` 报到 −31.6。
+        这与 P-52（板角速度顶在 PhysX 的 100 rad/s 上限）是同一族问题。
+
+        ``rot_gain_basis="inertia"``：``τ = R·I_body·Rᵀ·α``，增益因此读作
+        "每弧度多少 rad/s²"，与执行器的形状无关——**跨形态是这个项目的主线**，
+        增益不该跟着形态重调。新代码一律用这一档；默认留 ``"mass"`` 是因为
+        S1/S2/S3 的脚本与已冻结的结论都建立在旧行为上（D-21）。
+        """
+        if self.rot_gain_basis != "inertia":
+            return m * alpha                       # 历史行为，与旧版逐位相同
+        from isaaclab.utils.math import matrix_from_quat
+
+        rot = matrix_from_quat(self.a.data.root_quat_w)
+        body = torch.einsum("nji,nj->ni", rot, alpha)          # 世界 -> 本体
+        body = torch.einsum("nij,nj->ni", self.inertia, body)
+        return torch.einsum("nij,nj->ni", rot, body)           # 本体 -> 世界

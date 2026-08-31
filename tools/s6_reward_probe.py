@@ -19,9 +19,17 @@
     **这一条不通过，后面的一切都没有意义。**
 
 **三、各项的量级配比。**
-    D-31 第 2 个洞：量纲失衡时最优解是"不动"。权重必须在**成功轨迹**上标定，
-    不许拍。本节报每一项在成功示教上的分布，并输出可直接喂给
-    `ei_reward.RewardWeights` 的 ``scale``。
+    D-31 第 2 个洞：量纲失衡时最优解是"不动"。本节报每一项在成功示教上的分布。
+
+    ⚠️ **D-84 之后 ``scale`` 不再用于归一化。** 四项跟踪 reward 现在自己就在
+    [−1, 1] 里（region 是带符号占比，两个 hinge 项按允许集合的宽度封顶），
+    `RewardTerms.total` 直接加权求和。除以"成功示教上的典型值"那一版会把分布外的
+    越界量用同一个小分母放大成天文数字——实测 `mech` 的标定值 0.0138，
+    而一次开环压的越界量 3.5 个盒宽，相除得 −254，而悬停只有 −0.43（P-77）。
+    这一节现在只用来**看配比**，以及作为"开训前跑过体检"的凭证。
+
+**四、本格的 `demand` 与示教在这一格里实际累计发生的 effect，是同一个量吗？**
+    见该节自己的说明与 P-84 / D-91。
 
 用法::
 
@@ -199,6 +207,71 @@ def score_episode(record, surface, transfer, budget, n_bins, n_surface):
     return {k: float(v.mean()) for k, v in terms.__dict__.items()}
 
 
+DEMAND_RATIO_LO, DEMAND_RATIO_HI = 0.5, 2.0
+
+
+def section_demand(records, surface, budget, transfer, n_bins, n_surface):
+    """本格 `demand` 与示教在这一格里**实际累计发生**的 effect，是同一个量吗？
+
+    `WindowTracker.demand()` 现在直接读取 ``effect/bin_demand``。旧 v4 实现取
+    ``effect/rigid/median[b, 0]``——未来 0.1 s 的局部变化——却拿它与整格累计的
+    `achieved` 比，时间基准不一致；本节保留从原始记录独立重算的路径，防止新字段
+    虽存在却构造错误或没有接入执行器。
+
+    命令格是按"相分段 + 段内累计交互活动量"切的（D-65），一格的时长本来就不固定，
+    所以"0.1 s 的位移"和"这一格总共要发生多少"没有理由相等。两者恰好可比是
+    **巧合还是设计**，只能测。
+
+    做法：同一条示教上，把每一帧的 effect 速率折算成逐帧增量
+    （``effect/rigid[t,0] / stride``，与 demand 同一个数组、同一套刻度、
+    同一个 `effect_magnitude` 公式），按命令格累加，再与该格的 `demand` 比。
+
+    判据：中位比值 ∈ [0.5, 2.0]，且四分位比 p75/p25 < 10。
+
+    ⚠️ 散布**不能**用 p90/p10：`bin_demand` 是该格上**跨 episode 的中位数**，
+    而单条示教在某一格里贡献接近 0 是正常的（它在那一格停住了）。p10 因此会
+    合法地取到 0，把比值撑成 1.2e9——那是统计量选错了，不是数据坏了。
+
+    ⚠️ **v5 之后这一节的性质变了，要说清楚。** `effect/bin_demand`（D-91）就是按这个
+    定义在 build 时算出来的，所以这一节**不再是对"定义对不对"的独立检验**——
+    它检的是**两份实现**（`transfer.py` 的 build 路径 vs 本工具从 S4 记录现算）
+    是否一致，也就是 P-72 那条"同一个量的两份实现必须对拍"。
+    定义本身对不对，靠的是 v4 时代这一节测出的 0.408 / 8.233 / 0.590（P-84）。
+    """
+    from it.interaction import FUTURE_HORIZON_S, FUTURE_SAMPLES
+
+    metric = torch.as_tensor(np.asarray(transfer.arrays["effect/rigid/metric"],
+                                        dtype=np.float32))[None]
+    scale_r = torch.as_tensor(np.asarray(transfer.arrays["effect/rigid/scale_m"],
+                                         dtype=np.float32)).reshape(1)
+    scale_s = torch.as_tensor(np.asarray(transfer.arrays["effect/surface_state/scale"],
+                                         dtype=np.float32)).reshape(1)
+    demand = np.asarray(transfer.arrays["effect/bin_demand"], dtype=np.float64)
+
+    ratios, per_bin = [], {b: [] for b in range(n_bins)}
+    for record in records:
+        index = bin_index(record, surface, budget=budget)
+        hz = float(record.meta.get("control_hz", 50.0))
+        stride = max(1, int(round(FUTURE_HORIZON_S * hz / FUTURE_SAMPLES)))
+        rigid = torch.as_tensor(np.asarray(record.arrays["effect/rigid"],
+                                           dtype=np.float32)[:, 0, :]) / stride
+        state = torch.as_tensor(np.asarray(record.arrays["effect/surface_state"],
+                                           dtype=np.float32)[:, 0, :]) / stride
+        t = rigid.shape[0]
+        step = effect_magnitude(rigid, state, metric=metric.expand(t, -1, -1),
+                                scale_rigid=scale_r.expand(t),
+                                scale_state=scale_s.expand(t)).numpy()
+        for b in range(n_bins):
+            rows = index == b
+            if not rows.any() or demand[b] <= 1e-9:
+                continue
+            achieved = float(step[rows].sum())
+            per_bin[b].append(achieved)
+            ratios.append(achieved / demand[b])
+    lengths = [len(v) for v in per_bin.values() if v]
+    return np.asarray(ratios), int(np.median(lengths)) if lengths else 0
+
+
 def _auc(positive: np.ndarray, negative: np.ndarray) -> float:
     if not len(positive) or not len(negative):
         return float("nan")
@@ -345,12 +418,49 @@ def main() -> None:
               "      " + json.dumps({k: round(v, 6) for k, v in scales.items()},
                                     ensure_ascii=False), ""]
 
+    lines += ["四、本格的 demand 与示教在这一格里**实际累计发生**的 effect，是同一个量吗？",
+              "-" * 88,
+              "  怎么读：`WindowTracker.demand()` 读取 `effect/bin_demand`；这里从原始记录",
+              "        把 0.1 s 预见量除以 stride 估计逐帧增量、应用同一 0.5 mm 物理死区，",
+              "        再按命令格累计。它与 transfer build 是两份实现，必须在真实记录上对拍；",
+              "        否则字段即使存在，时间基准或静态抖动处理仍可能与在线 achieved 不一致。",
+              f"  判据：中位比值 ∈ [{DEMAND_RATIO_LO}, {DEMAND_RATIO_HI}]，"
+              "且四分位比 p75/p25 < 10。",
+              "  ⚠️ 散布不用 p90/p10：`bin_demand` 是该格跨 episode 的中位数，",
+              "     单条示教在某一格贡献接近 0 是正常的（它在那一格停住了），",
+              "     p10 会合法地取到 0 —— 那是统计量选错了，不是数据坏了。",
+              ""]
+    lines.append("      " + f"{'任务':<8s}{'中位比值':>11s}{'p25':>10s}{'p75':>10s}"
+                 f"{'p75/p25':>10s}{'近零占比':>10s}{'样本':>8s}{'格均帧':>8s}{'判定':>7s}")
+    demand_rows = {}
+    for item in loaded:
+        ratios, frames = section_demand(item["records"][:args.limit], item["surface"],
+                                        item["budget"], item["transfer"],
+                                        args.n_bins, item["n_surface"])
+        if not len(ratios):
+            lines.append("      " + f"{item['name']:<8s}" + "  没有要求物体变化的格")
+            continue
+        med = float(np.median(ratios))
+        p25, p75 = (float(np.percentile(ratios, 25)), float(np.percentile(ratios, 75)))
+        spread = p75 / max(p25, 1e-9)
+        zero = float((ratios < 0.1).mean())
+        ok = DEMAND_RATIO_LO <= med <= DEMAND_RATIO_HI and spread < 10.0
+        failures += 0 if ok else 1
+        demand_rows[item["name"]] = {"median": med, "p25": p25, "p75": p75,
+                                     "spread": spread, "near_zero": zero,
+                                     "n": int(len(ratios))}
+        lines.append("      " + f"{item['name']:<8s}{med:11.3f}{p25:10.3f}{p75:10.3f}"
+                     f"{spread:10.2f}{zero:10.3f}{len(ratios):8d}{frames:8d}"
+                     f"{'PASS' if ok else 'FAIL':>7s}")
+    lines.append("")
+
     lines += ["=" * 88, f"FAIL {failures} 项" if failures else "全部通过"]
     text = "\n".join(lines)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text + "\n", encoding="utf-8")
     args.out.with_suffix(".json").write_text(json.dumps(
-        {"traction": per_task_traction, "auc": auc_all, "scale": scales},
+        {"traction": per_task_traction, "auc": auc_all, "scale": scales,
+         "demand": demand_rows},
         ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(text)
     sys.exit(1 if failures else 0)

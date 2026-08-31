@@ -46,11 +46,16 @@ class PointNetRegion(nn.Module):
 
     def __init__(self, in_dim: int = SPATIAL_DIM, hidden: int = 64, out: int = 128):
         super().__init__()
+        # 指令通道混合 m、m²、m/s 与 Pa。traction 实测约 2e4~7e4，而 xyz 约 1e-1；
+        # rsl_rl 的 observation normalizer 又不能直接包住含整数下标的外层观测。
+        # 在**拆出连续张量之后**做 LayerNorm，既不碰 command/bin index，也不让 Pa
+        # 一项独占第一层梯度。每个 actor/critic 各自有参数，不共享统计。
+        self.input_norm = nn.LayerNorm(in_dim)
         self.net = _mlp([in_dim, hidden, out, out])
         self.out_dim = 2 * out
 
     def forward(self, cells: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-        feature = self.net(cells)                              # (N, S, out)
+        feature = self.net(self.input_norm(cells))             # (N, S, out)
         total = weight.sum(-1, keepdim=True).clamp_min(1e-6)
         mean = torch.einsum("ns,nso->no", weight / total, feature)
         return torch.cat([feature.amax(dim=1), mean], dim=-1)
@@ -64,13 +69,17 @@ class InteractionPolicy(nn.Module):
                  hidden: int = 128, trunk: int = 256, init_noise_std: float = 1.0):
         super().__init__()
         self.point = PointNetRegion(spatial_dim, out=hidden)
+        self.window_norm = nn.LayerNorm(temporal_dim)
         self.gru = nn.GRU(temporal_dim, hidden, num_layers=2, batch_first=True)
+        self.proprio_norm = nn.LayerNorm(proprio_dim)
         self.proprio = _mlp([proprio_dim, hidden, hidden])
         fused = self.point.out_dim + hidden + hidden
         self.actor_trunk = _mlp([fused, trunk, trunk])
         self.actor_head = nn.Linear(trunk, action_dim)
         self.critic_point = PointNetRegion(spatial_dim, out=hidden)
+        self.critic_window_norm = nn.LayerNorm(temporal_dim)
         self.critic_gru = nn.GRU(temporal_dim, hidden, num_layers=2, batch_first=True)
+        self.critic_proprio_norm = nn.LayerNorm(proprio_dim + privileged_dim)
         self.critic_proprio = _mlp([proprio_dim + privileged_dim, hidden, hidden])
         self.critic_trunk = _mlp([fused, trunk, trunk])
         self.critic_head = nn.Linear(trunk, 1)
@@ -79,15 +88,18 @@ class InteractionPolicy(nn.Module):
         self.privileged_dim = privileged_dim
 
     @staticmethod
-    def _encode(point: PointNetRegion, gru: nn.GRU, proprio: nn.Sequential,
+    def _encode(point: PointNetRegion, window_norm: nn.LayerNorm, gru: nn.GRU,
+                proprio_norm: nn.LayerNorm, proprio: nn.Sequential,
                 cells, weight, window, state) -> torch.Tensor:
         # GRU 只取最后一步的 hidden：窗口本身已经是"从现在起的未来"，
         # 不需要跨控制步保持隐状态——那会让同一份指令因为历史不同而被读成不同的要求。
-        _, hidden = gru(window)
-        return torch.cat([point(cells, weight), hidden[-1], proprio(state)], dim=-1)
+        _, hidden = gru(window_norm(window))
+        return torch.cat([point(cells, weight), hidden[-1],
+                          proprio(proprio_norm(state))], dim=-1)
 
     def act(self, cells, weight, window, proprio) -> torch.distributions.Normal:
-        feature = self._encode(self.point, self.gru, self.proprio,
+        feature = self._encode(self.point, self.window_norm, self.gru,
+                               self.proprio_norm, self.proprio,
                                cells, weight, window, proprio)
         mean = self.actor_head(self.actor_trunk(feature))
         return torch.distributions.Normal(mean, self.log_std.exp().expand_as(mean))
@@ -97,13 +109,26 @@ class InteractionPolicy(nn.Module):
             if privileged is None:
                 raise ValueError("critic 声明了特权维度但没收到 privileged")
             proprio = torch.cat([proprio, privileged], dim=-1)
-        feature = self._encode(self.critic_point, self.critic_gru, self.critic_proprio,
+        feature = self._encode(self.critic_point, self.critic_window_norm,
+                               self.critic_gru, self.critic_proprio_norm,
+                               self.critic_proprio,
                                cells, weight, window, proprio)
-        return self.critic_head(self.critic_trunk(feature)).squeeze(-1)
+        # **(N, 1)，不要 squeeze。** rsl_rl 的 RolloutStorage 把 values 存成
+        # (T, N, 1)，`PPO.process_env_step` 里的 time-out bootstrap 又要
+        # `values * time_outs.unsqueeze(1)`。返回 (N,) 会被广播成 (N, N)，
+        # 报 "output with shape [1024] doesn't match the broadcast shape [1024, 1024]"
+        # ——错在离用它的地方很远，值得在这里写一行。
+        return self.critic_head(self.critic_trunk(feature))
 
 
 class InteractionActorCritic(nn.Module):
-    """rsl_rl 要的 ActorCritic 外壳：从**扁平观测**里解出指令下标，再去指令库取特征。
+    """rsl_rl 的 ActorCritic 外壳：从**扁平观测**里解出指令下标，再去指令库取特征。
+
+    构造签名与 `rsl_rl.modules.ActorCritic` 一致
+    ``(obs, obs_groups, num_actions, **policy_cfg)``，因为
+    `OnPolicyRunner._construct_algorithm` 是这样调的；``bank`` 经 ``policy_cfg``
+    传进来。维度全部**从 obs 推**，不在这里再写一遍常量——两处各写一遍正是
+    P-72 的形状。
 
     为什么观测里放的是下标而不是指令张量本身：逐格空间场是 256×34，PPO 的 rollout
     buffer 是 (horizon 32 × envs 2048 × obs)，直接放会到几个 GB。而**指令在一条
@@ -111,28 +136,51 @@ class InteractionActorCritic(nn.Module):
 
     观测布局（由 `envs/interaction.py` 保证）::
 
-        [ proprio | command_index | bin_index | object_quat(w,x,y,z) ]
+        policy: [ proprio | command_index | bin_index | object_quat(w,x,y,z) ]
+        critic: [ 上面那些 | privileged ]
 
-    `object_quat` 用来把表面点与所有向量场一起转进执行器的参考系。**必须整组一起转**
-    （P-53/P-54：那三次都是逐帧数值全部正常、只有结论错）。
+    `object_quat` 用来把表面点与所有向量场一起转进**世界系**（执行器所在的系）。
+    **必须整组一起转**（P-53/P-54：那三次都是逐帧数值全部正常、只有结论错）。
     """
 
     is_recurrent = False
+    #: 观测里 proprio 之后跟着的固定字段数：command_index + bin_index + quat(4)。
+    INDEX_FIELDS = 2 + 4
 
-    def __init__(self, bank, *, action_dim: int, proprio_dim: int,
-                 privileged_dim: int = 0, enabled: dict[str, bool] | None = None,
-                 horizon: int | None = None, **kwargs):
+    def __init__(self, obs, obs_groups, num_actions, *, bank,
+                 enabled: dict[str, bool] | None = None, horizon: int | None = None,
+                 actor_obs_normalization: bool = False,
+                 critic_obs_normalization: bool = False, **kwargs):
         super().__init__()
         from it.ei_command import HORIZON
+        if actor_obs_normalization or critic_obs_normalization:
+            raise ValueError(
+                "E-I 的观测里有 command_index / bin_index 两个**整数下标**，"
+                "EmpiricalNormalization 会把它们按均值方差抹掉，指令通道当场失效。"
+                "两个归一化开关都必须是 False")
+        self.obs_groups = obs_groups
+        policy_dim = sum(int(obs[g].shape[-1]) for g in obs_groups["policy"])
+        critic_dim = sum(int(obs[g].shape[-1]) for g in obs_groups["critic"])
+        self.proprio_dim = policy_dim - self.INDEX_FIELDS
+        privileged_dim = critic_dim - policy_dim
+        if self.proprio_dim <= 0 or privileged_dim < 0:
+            raise ValueError(
+                f"观测维度不对：policy={policy_dim}, critic={critic_dim}。"
+                f"critic 必须是 policy 再拼上特权段")
         self.bank = bank
-        self.proprio_dim = int(proprio_dim)
         self.horizon = int(horizon or HORIZON)
         self.enabled = dict(enabled or {})
-        self.net = InteractionPolicy(proprio_dim=proprio_dim, action_dim=action_dim,
+        self.net = InteractionPolicy(proprio_dim=self.proprio_dim,
+                                     action_dim=num_actions,
                                      privileged_dim=privileged_dim, **kwargs)
         self.distribution: torch.distributions.Normal | None = None
 
     # -------------------------------------------------- 观测拆包
+
+    def _group(self, obs, name: str) -> torch.Tensor:
+        if isinstance(obs, torch.Tensor):      # 单测里直接喂扁平张量
+            return obs
+        return torch.cat([obs[g] for g in self.obs_groups[name]], dim=-1)
 
     def _unpack(self, obs: torch.Tensor):
         from it.ei_command import spatial_features, temporal_features
@@ -140,7 +188,14 @@ class InteractionActorCritic(nn.Module):
         command = obs[:, self.proprio_dim].long().clamp(0, len(self.bank) - 1)
         bins = obs[:, self.proprio_dim + 1].long().clamp(0, self.bank.n_bins - 1)
         quat = obs[:, self.proprio_dim + 2:self.proprio_dim + 6]
-        rotation = _quat_to_matrix(quat).transpose(1, 2)      # 世界→物体 的逆 = 物体→世界
+        # `quat` 是物体在**世界系**里的姿态，所以 `_quat_to_matrix(quat)` 就是
+        # `R_obj→world`——artifact 里的一切都在物体系，乘上它才落到执行器所在的世界系。
+        #
+        # ⚠️ 这里原来多了一次 `.transpose(1, 2)`，那是 `R_world→obj`，拿它去乘物体系
+        # 的数组，结果落在一个**不存在的参考系**里。它不报错、也测不出来：方块平放时
+        # `q≈(1,0,0,0)`、`R = Rᵀ = I`，两种写法逐位相同，而三条已有的 wrapper 测试
+        # 只检查形状。`test_command_fields_land_in_the_world_frame` 是补上的那条。
+        rotation = _quat_to_matrix(quat)
         cells = spatial_features(self.bank, command, bins, rotation=rotation,
                                  enabled=self.enabled)
         window = temporal_features(self.bank, command, bins, horizon=self.horizon,
@@ -152,16 +207,17 @@ class InteractionActorCritic(nn.Module):
     # -------------------------------------------------- rsl_rl 接口
 
     def act(self, obs, **_):
-        cells, weight, window, proprio, _ = self._unpack(obs)
+        cells, weight, window, proprio, _p = self._unpack(self._group(obs, "policy"))
         self.distribution = self.net.act(cells, weight, window, proprio)
         return self.distribution.sample()
 
     def act_inference(self, obs):
-        cells, weight, window, proprio, _ = self._unpack(obs)
+        cells, weight, window, proprio, _p = self._unpack(self._group(obs, "policy"))
         return self.net.act(cells, weight, window, proprio).mean
 
-    def evaluate(self, critic_obs, **_):
-        cells, weight, window, proprio, privileged = self._unpack(critic_obs)
+    def evaluate(self, obs, **_):
+        cells, weight, window, proprio, privileged = self._unpack(
+            self._group(obs, "critic"))
         return self.net.value(cells, weight, window, proprio,
                               privileged if self.net.privileged_dim else None)
 
@@ -183,8 +239,16 @@ class InteractionActorCritic(nn.Module):
     def update_distribution(self, obs):
         self.act(obs)
 
+    def update_normalization(self, obs):
+        """本类拒绝观测归一化（见 `__init__`），所以这里什么都不做。"""
+
     def reset(self, dones=None):
         pass
+
+    def load_state_dict(self, state_dict, strict=True):
+        """rsl_rl 的 `OnPolicyRunner.load` 用返回值判"是不是续训"。"""
+        super().load_state_dict(state_dict, strict=strict)
+        return True
 
 
 def _quat_to_matrix(quat: torch.Tensor) -> torch.Tensor:

@@ -85,10 +85,16 @@ from typing import Any, Iterable
 
 import numpy as np
 
+from it.interaction import FUTURE_HORIZON_S, FUTURE_SAMPLES
 from it.records import EpisodeRecord, META_KEY
 from it.surfaces import SCATTER_K, SCATTER_SIGMA, Surface, surface_for
 
-TRANSFER_SCHEMA_VERSION = "interaction-transfer-v4"
+TRANSFER_SCHEMA_VERSION = "interaction-transfer-v5"
+# 离线 `effect/bin_demand` 与在线累计 effect 必须共享同一物理死区。
+# 静压任务只有 1e-7~1e-9 m 数值抖动；不截掉再除以同样微小的 scale，会制造
+# 几十到几百的虚假 demand，而在线端永远不可能完成。
+EFFECT_RIGID_DEADBAND_M = 5e-4
+EFFECT_SCALE_EPS = 1e-9
 MODE_COUNT = 4
 N_PHASES = 4
 #: 每个**有帧**的 phase 至少分到的命令格数。松开段的活动量恰好是 0，若按活动量
@@ -104,6 +110,7 @@ EXECUTOR_ARRAYS = frozenset({
     "surface/normals_obj",
     "surface/area",
     "surface/part",
+    "effect/bin_demand",
     "effect/rigid/median",
     "effect/rigid/q10",
     "effect/rigid/q90",
@@ -381,6 +388,10 @@ class InteractionTransfer:
                 continue
             if arrays[name].shape[0] != bins:
                 raise TransferError(f"{name} 的首维必须是时间格数 {bins}")
+        demand = arrays["effect/bin_demand"]
+        if demand.ndim != 1 or np.any(demand < 0) or not np.all(np.isfinite(demand)):
+            raise TransferError(
+                "effect/bin_demand 必须是一维、非负、有限——它是 WindowTracker 的分母")
         if arrays["command/valid"].shape != (bins,) or arrays["command/valid"].dtype != np.bool_:
             raise TransferError("command/valid 必须是一维 bool")
         if not np.array_equal(arrays["command/valid"], arrays["support/episodes"] > 0):
@@ -864,6 +875,33 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
         effect[name] = summed
         effect[f"{name}_count"] = count
 
+    # 本格**累计**发生了多少 effect（两路各自的原始单位，刻度留到 build 里除）。
+    #
+    # ⚠️ 这是 `WindowTracker.demand()` 真正需要的量。原来它取的是
+    # `effect/rigid/median[b, 0]`——按 `interaction._effect_interface`，那是**未来
+    # 0.1 s（stride 帧）的位移**，也就是一个**速率**；而 `WindowTracker.achieved`
+    # 是整格逐步累加。D-80 说改成了"累计量对累计量"，实际只有分子改成了累计。
+    # 实测两者的比值：抽屉 0.408、旋钮 0.590、**擦拭 8.233**（且跨格散 13 倍）——
+    # 在抽屉/旋钮上碰巧同量级是巧合，主任务擦拭上差一个数量级（P-84 / D-91）。
+    #
+    # 逐帧增量用 `rigid[t, 0] / stride` 估计（`rigid[t,0]` 是 stride 帧的位移）。
+    # **这是一个估计量，不是恒等式**：一个 stride 窗口内来回往复的运动会被低估。
+    # 取路径长度而不是首末净位移，是为了与在线的 `achieved`（逐步累加幅度）同口径。
+    stride = max(1, int(round(FUTURE_HORIZON_S
+                              * float(record.meta.get("control_hz", 50.0))
+                              / FUTURE_SAMPLES)))
+    step_rigid = rigid[:, 0, :] / stride
+    step_state = state[:, 0, :] / stride
+    live_effect = valid & future_valid[:, 0]
+    rows = np.flatnonzero(live_effect)
+    bin_rigid = np.zeros(n_bins)
+    bin_state = np.zeros(n_bins)
+    if len(rows):
+        magnitude = rigid_surface_displacement(step_rigid[rows], surface_metric(surface))
+        magnitude = np.where(magnitude >= EFFECT_RIGID_DEADBAND_M, magnitude, 0.0)
+        np.add.at(bin_rigid, index[rows], magnitude)
+        np.add.at(bin_state, index[rows], np.abs(step_state[rows]).sum(axis=-1))
+
     summary = {
         "present": present,
         "region": region,
@@ -874,6 +912,8 @@ def _episode_summary(record: EpisodeRecord, surface: Surface, *, budget: tuple[i
         "slip": slip_mean,
         "traction": traction,
         "moment_density": moment_density,
+        "bin_rigid": bin_rigid,
+        "bin_state": bin_state,
         "rigid": effect["rigid"],
         "rigid_count": effect["rigid_count"],
         "state": effect["state"],
@@ -1178,7 +1218,22 @@ def build_transfer(records: Iterable[EpisodeRecord], *, n_bins: int = 32,
     effect_state_scale = _positive_scale(
         np.abs(np.nan_to_num(state_median)).sum(axis=-1))
 
+    # 本格要求的 effect（无量纲）：两路各自跨 episode 取中位数，再各除各自的刻度，
+    # 与 `ei_reward.effect_magnitude` / `WindowTracker.demand()` 逐字同一个口径。
+    # 只在**该格出现过**的 episode 上取中位数——没走到这一格的 episode 不该被当成 0。
+    bin_demand = np.zeros(n_bins, dtype=np.float64)
+    for b in range(n_bins):
+        rows = present[:, b]
+        if not rows.any():
+            continue
+        bin_demand[b] = (
+            float(np.median(stack("bin_rigid")[rows, b]))
+            / max(effect_rigid_scale, EFFECT_RIGID_DEADBAND_M)
+            + float(np.median(stack("bin_state")[rows, b]))
+            / max(effect_state_scale, EFFECT_SCALE_EPS))
+
     arrays = {
+        "effect/bin_demand": bin_demand.astype(np.float32),
         "command/fraction": ((np.arange(n_bins, dtype=np.float32) + 0.5) / n_bins),
         "command/valid": present.any(axis=0),
         "support/episodes": present.sum(axis=0).astype(np.int32),

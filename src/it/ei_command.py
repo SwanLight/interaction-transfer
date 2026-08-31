@@ -138,6 +138,43 @@ class CommandBank:
         self.n_bins, self.n_surface, self.horizon = shapes.pop()
         self._stack = {name: torch.stack([s.arrays[name] for s in self.specs])
                        for name in EXECUTOR_ARRAYS}
+        self.anchor_pos, self.anchor_normal = self._contact_anchor()
+
+    def _contact_anchor(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """每份指令的**接触锚点**：(C,3) 物体系位置 + (C,3) 物体系外法向。
+
+        取整条指令上 ``region/mass/mean`` 加权的表面点质心与平均法向——也就是
+        "这份指令主要要求在物体的哪一片、从哪个方向作用"。
+
+        它**只读指令**，不读任务、不读环境配置，所以拿它初始化执行器的站位不会
+        把任务信息漏进来；S7 零样本评估照用同一条规则即可（`plan/04` §5.4）。
+
+        为什么需要它：跟踪 reward 在没有接触时 ``r_region`` 按设计恒为 0
+        （`ei_reward.interaction_reward` 的 ``touching`` 分支），``r_effect`` 的缺口
+        在接近段与距离无关地恒为 1。**接近段没有任何稠密梯度**，把执行器丢在
+        0.25 m 外等于要求随机游走先撞上物体。采集侧的双板也是直接生成在位点附近的。
+
+        全零质量（整条指令都不要求接触）时退回表面质心 + ``+Z``，不让它变成 NaN。
+        """
+        mass = self._stack["region/mass/mean"].sum(dim=1)            # (C, S)
+        points = self._stack["surface/points_obj"]                   # (C, S, 3)
+        normals = self._stack["surface/normals_obj"]
+        total = mass.sum(dim=-1, keepdim=True)                       # (C, 1)
+        has_mass = total.squeeze(-1) > 0
+        weight = torch.where(total > 0, mass / total.clamp_min(1e-12),
+                             torch.full_like(mass, 1.0 / max(self.n_surface, 1)))
+        pos = torch.einsum("cs,csd->cd", weight, points)
+        nrm = torch.einsum("cs,csd->cd", weight, normals)
+        norm = nrm.norm(dim=-1, keepdim=True)
+        fallback = torch.zeros_like(nrm)
+        fallback[:, 2] = 1.0
+        nrm = torch.where(norm > 1e-6, nrm / norm.clamp_min(1e-12), fallback)
+        if not bool(has_mass.all()):
+            missing = [self.ids[i] for i in (~has_mass).nonzero().flatten().tolist()]
+            raise CommandError(
+                f"这些 artifact 的 region/mass/mean 全为零，无法定出接触锚点：{missing}。"
+                "整条指令都不要求接触的 artifact 不该进 E-I 的训练集")
+        return pos, nrm
 
     def __len__(self) -> int:
         return len(self.specs)
@@ -191,6 +228,7 @@ class WindowTracker:
         self.bin_index = z(torch.long)
         self.dwell = z(torch.long)
         self.achieved = z(torch.float32)      # 本格累计的 effect 完成量（米）
+        self.last_deficit = z(torch.float32)  # 本步切格**之前**结算的完成缺口
         self.finished = z(torch.bool)
 
     def reset(self, env_ids: torch.Tensor, command_index: torch.Tensor) -> None:
@@ -198,25 +236,18 @@ class WindowTracker:
         self.bin_index[env_ids] = 0
         self.dwell[env_ids] = 0
         self.achieved[env_ids] = 0.0
+        self.last_deficit[env_ids] = 0.0
         self.finished[env_ids] = False
 
     def demand(self) -> torch.Tensor:
         """本格要求的 effect 幅度，**无量纲**。0 表示这一格不要求物体发生变化。
 
-        两路各自除以自己的刻度再相加，与 `ei_reward` 和 `plan/04` §5.1 的 `r_effect`
-        用的是同一个口径（D-74）。**不能对 6 维取 L2**：那是把米和弧度当成同一种
-        东西加起来，D-31 第 2 个洞藏在"统一接口"里面。
+        直接消费 artifact 的 ``effect/bin_demand``：它是在同一命令格内累计逐步 effect、
+        再跨 episode 聚合的量。不能从 ``effect/rigid/median[b,0]`` 重算；后者是未来
+        0.1 s 的局部变化，与这里的整格累计量时间基准不同（P-84 / D-91）。
         """
-        rigid = self.bank.gather_bin("effect/rigid/median", self.command_index,
-                                     self.bin_index)[:, 0, :]
-        metric = self.bank.gather("effect/rigid/metric", self.command_index)
-        scale_rigid = self.bank.gather("effect/rigid/scale_m", self.command_index)
-        quad = torch.einsum("ni,nij,nj->n", rigid, metric, rigid).clamp_min(0).sqrt()
-        state = self.bank.gather_bin("effect/surface_state/median", self.command_index,
-                                     self.bin_index)[:, 0, :].abs().sum(-1)
-        scale_state = self.bank.gather("effect/surface_state/scale", self.command_index)
-        return (quad / scale_rigid.clamp_min(1e-12)
-                + state / scale_state.clamp_min(1e-12))
+        return self.bank.gather_bin("effect/bin_demand", self.command_index,
+                                    self.bin_index)
 
     def step(self, *, effect_increment: torch.Tensor,
              region_normal_force: torch.Tensor) -> dict[str, torch.Tensor]:
@@ -239,6 +270,10 @@ class WindowTracker:
         # 那些格永远只能靠 max_dwell 超时才前进，等于把接近段变成一段固定的空转。
         ratio = torch.where(needs_effect, self.achieved / demand.clamp_min(1e-9),
                             torch.ones_like(demand))
+        # 必须在修改 bin_index / 清零 achieved **之前**结算。旧实现由环境在 step()
+        # 之后读取 tracker.achieved/demand；恰好推进的 env 已跳到下一格且 achieved=0，
+        # 因而“完成得越快”越频繁收到下一格的满缺口。
+        self.last_deficit = (1.0 - ratio.clamp(0.0, 1.0)) * needs_effect.float()
         established = region_normal_force.to(self.device) >= self.contact_threshold
         # 这一格若整格不要求接触（允许区域上没有力的要求），接触条件自动满足。
         wants_contact = self.bank.gather_bin(
